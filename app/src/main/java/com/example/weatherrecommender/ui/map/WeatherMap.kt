@@ -1,15 +1,9 @@
 package com.example.weatherrecommender.ui.map
 
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,7 +12,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
@@ -43,11 +36,15 @@ import org.maplibre.spatialk.geojson.Position
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Square map section fixed at the top of [com.example.weatherrecommender.ui.WeatherScreenContent].
+ * MapLibre map used as the collapsing AppBar background in
+ * [com.example.weatherrecommender.ui.WeatherScreenContent].
  *
- * Camera and pin come from the ViewModel; keeping this outside the home/detail Crossfade avoids
- * remount flash when selecting a city or going back. Under Paparazzi / inspection mode, renders
- * a lightweight placeholder.
+ * Height is owned by the parent (expanded 3:2, collapsing to a compact toolbar). Keeping this
+ * outside the home/detail Crossfade avoids remount flash when selecting a city or going back.
+ * Under Paparazzi / inspection mode, renders a lightweight placeholder.
+ *
+ * Legal tile attribution is via MapLibre's built-in logo ornament plus README / discreet footer —
+ * no on-map overlay text.
  */
 @Composable
 fun WeatherMapSection(
@@ -55,56 +52,41 @@ fun WeatherMapSection(
     pin: Location?,
     isResolvingTap: Boolean,
     onMapTap: (latitude: Double, longitude: Double) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    interactive: Boolean = true
 ) {
     val mapCd = stringResource(R.string.map_content_description)
-    val attribution = stringResource(R.string.map_attribution)
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .animateContentSize(animationSpec = tween(durationMillis = 280))
+            .semantics { contentDescription = mapCd }
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(16.dp))
-                .semantics { contentDescription = mapCd }
-        ) {
-            if (LocalInspectionMode.current) {
-                MapPlaceholder(pin = pin)
-            } else {
-                WeatherMapLibre(
-                    camera = camera,
-                    pin = pin,
-                    onMapTap = onMapTap
+        if (LocalInspectionMode.current) {
+            MapPlaceholder(pin = pin)
+        } else {
+            WeatherMapLibre(
+                camera = camera,
+                pin = pin,
+                onMapTap = onMapTap,
+                interactive = interactive
+            )
+        }
+
+        if (isResolvingTap) {
+            val resolvingCd = stringResource(R.string.map_resolving_location)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.25f)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.semantics { contentDescription = resolvingCd }
                 )
             }
-
-            if (isResolvingTap) {
-                val resolvingCd = stringResource(R.string.map_resolving_location)
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.25f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.semantics { contentDescription = resolvingCd }
-                    )
-                }
-            }
         }
-        Text(
-            text = attribution,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-            modifier = Modifier
-                .padding(horizontal = 4.dp, vertical = 4.dp)
-                .semantics { contentDescription = attribution }
-        )
     }
 }
 
@@ -112,7 +94,8 @@ fun WeatherMapSection(
 private fun WeatherMapLibre(
     camera: MapCameraPosition,
     pin: Location?,
-    onMapTap: (latitude: Double, longitude: Double) -> Unit
+    onMapTap: (latitude: Double, longitude: Double) -> Unit,
+    interactive: Boolean
 ) {
     val cameraState = rememberCameraState(
         firstPosition = CameraPosition(
@@ -146,17 +129,19 @@ private fun WeatherMapLibre(
         options = MapOptions(
             gestureOptions = GestureOptions(
                 isTiltEnabled = false,
-                isZoomEnabled = true,
+                isZoomEnabled = interactive,
                 isRotateEnabled = false,
-                isScrollEnabled = true
+                isScrollEnabled = interactive
             ),
             ornamentOptions = OrnamentOptions.OnlyLogo
         ),
         onMapClick = { position, _ ->
+            if (!interactive) return@MaplibreMap ClickResult.Pass
             onMapTap(position.latitude, position.longitude)
             ClickResult.Consume
         },
         onMapLongClick = { position, _ ->
+            if (!interactive) return@MaplibreMap ClickResult.Pass
             onMapTap(position.latitude, position.longitude)
             ClickResult.Consume
         }

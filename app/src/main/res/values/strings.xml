@@ -37,6 +37,9 @@
     <string name="chip_coastal">Coastal</string>
     <string name="chip_inland">Inland</string>
     <string name="chip_elevation">%1$d m elevation</string>
+    <string name="detail_city_stamp_cd">Postcard photo of %1$s</string>
+    <string name="detail_about_city">About %1$s</string>
+    <string name="detail_wikipedia_attribution">Text and image from Wikipedia · %1$s · CC BY-SA</string>
     <string name="temp_degrees">%1$d°</string>
     <string name="share_weather">Share weather</string>
     <string name="share_weather_failed">Couldn\'t share the weather card. Please try again.</string>
@@ -51,7 +54,7 @@
     <string name="share_card_hero_conditions">%1$s · low %2$d°</string>
     <string name="share_card_footer">Concierge Weather · Weather data by Open-Meteo</string>
 
-    <!-- Persistent header map -->
+    <!-- Collapsing map AppBar (attribution also in README / MapLibre logo) -->
     <string name="map_content_description">Map for choosing a city. Tap or long-press to select a location.</string>
     <string name="map_attribution">© OpenStreetMap · © OpenFreeMap · Nominatim</string>
     <string name="map_placeholder_label">Map</string>
