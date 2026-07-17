@@ -31,9 +31,13 @@ fun LocationEntity.toDomain(): Location {
  * Prepares the location for persistent offline storage.
  *
  * @param lastUpdated Timestamp of the last successful network synchronization. Defaults to current system time.
+ * @param lastViewedAt Timestamp of the last explicit user selection. Defaults to 0 (never viewed).
  * @return The database entity representation of this location.
  */
-fun Location.toEntity(lastUpdated: Long = System.currentTimeMillis()): LocationEntity {
+fun Location.toEntity(
+    lastUpdated: Long = System.currentTimeMillis(),
+    lastViewedAt: Long = 0L
+): LocationEntity {
     return LocationEntity(
         id = this.id,
         name = this.name,
@@ -45,7 +49,8 @@ fun Location.toEntity(lastUpdated: Long = System.currentTimeMillis()): LocationE
         elevation = this.elevation,
         population = this.population,
         featureCode = this.featureCode,
-        hasSeaAccess = this.hasSeaAccess
+        hasSeaAccess = this.hasSeaAccess,
+        lastViewedAt = lastViewedAt
     )
 }
 

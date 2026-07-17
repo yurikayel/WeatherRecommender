@@ -12,7 +12,7 @@ import com.example.weatherrecommender.data.local.entity.LocationEntity
  * The Room database for the application.
  * Contains tables for locations and daily forecasts.
  */
-@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 3, exportSchema = true)
+@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 4, exportSchema = true)
 abstract class WeatherDatabase : RoomDatabase() {
     abstract fun weatherDao(): WeatherDao
 
@@ -44,6 +44,18 @@ abstract class WeatherDatabase : RoomDatabase() {
                     "ALTER TABLE location_entity ADD COLUMN hasSeaAccess INTEGER NOT NULL DEFAULT 0"
                 )
                 db.execSQL("ALTER TABLE daily_forecast_entity ADD COLUMN waveHeightMax REAL")
+            }
+        }
+
+        /**
+         * v4 adds [LocationEntity.lastViewedAt] so the home History section can order cities by
+         * explicit user selection, independent of forecast [LocationEntity.lastUpdated] sync age.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE location_entity ADD COLUMN lastViewedAt INTEGER NOT NULL DEFAULT 0"
+                )
             }
         }
     }

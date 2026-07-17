@@ -49,6 +49,23 @@ interface WeatherDao {
     @Query("SELECT id FROM location_entity ORDER BY lastUpdated ASC LIMIT :count")
     suspend fun getOldestLocationIds(count: Int): List<Long>
 
+    /**
+     * Streams the most recently viewed locations for the home History section.
+     * Rows with [LocationEntity.lastViewedAt] == 0 were never explicitly opened by the user.
+     */
+    @Query(
+        """
+        SELECT * FROM location_entity
+        WHERE lastViewedAt > 0
+        ORDER BY lastViewedAt DESC
+        LIMIT :limit
+        """
+    )
+    fun getRecentLocationsFlow(limit: Int): Flow<List<LocationEntity>>
+
+    @Query("UPDATE location_entity SET lastViewedAt = :timestamp WHERE id = :locationId")
+    suspend fun updateLastViewedAt(locationId: Long, timestamp: Long)
+
     @Transaction
     suspend fun deleteLocationWithForecasts(locationId: Long) {
         deleteForecastsForLocation(locationId)

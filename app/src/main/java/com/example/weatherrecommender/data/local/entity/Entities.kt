@@ -19,7 +19,9 @@ data class LocationEntity(
     val elevation: Double? = null,
     val population: Long? = null,
     val featureCode: String? = null,
-    val hasSeaAccess: Boolean = false
+    val hasSeaAccess: Boolean = false,
+    /** Epoch millis when the user last opened this location; 0 means never viewed. */
+    val lastViewedAt: Long = 0L
 )
 
 /**
