@@ -9,14 +9,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -25,21 +27,33 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,11 +91,10 @@ fun WeatherScreen(
 /**
  * Stateless, testable root of the Weather screen.
  *
- * A single [WeatherMapSection] stays fixed above a Crossfade that swaps home vs detail
- * body content — no full-screen slide, and the map instance is not remounted on select/back.
- * Modes are derived from [WeatherUiState.selectedLocation].
+ * A collapsing map AppBar (3:2 expanded → compact toolbar) stays mounted while a surface sheet
+ * below Crossfades home vs detail body content — no full-screen slide, and the map instance is
+ * not remounted on select/back. Modes are derived from [WeatherUiState.selectedLocation].
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeatherScreenContent(
     uiState: WeatherUiState,
@@ -115,18 +128,74 @@ fun WeatherScreenContent(
         shareInProgress = true
     }
 
+    RequestLocationPermissionEffect(onLocationPermissionResult)
+
+    // Leaving detail (e.g. back while a permission dialog was up) must cancel a pending share;
+    // otherwise the stranded flag would auto-trigger a capture on the next city opened.
+    LaunchedEffect(inDetail) {
+        if (!inDetail) shareInProgress = false
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { padding ->
+        if (inDetail) {
+            BackHandler(onBack = onBack)
+        }
+        CollapsingMapScaffold(
+            uiState = uiState,
+            inDetail = inDetail,
+            canShare = canShare,
+            shareInProgress = shareInProgress,
+            isDarkTheme = isDarkTheme,
+            onToggleTheme = onToggleTheme,
+            onBack = onBack,
+            onShare = {
+                if (needsLegacyWritePermission(context)) {
+                    writeStorageLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                } else {
+                    shareInProgress = true
+                }
+            },
+            onMapTapped = onMapTapped,
+            onQueryChanged = onQueryChanged,
+            onLocationSelected = onLocationSelected,
+            onDaySelected = onDaySelected,
+            onRefresh = onRefresh,
+            onCurrentLocationClick = onCurrentLocationClick,
+            modifier = Modifier.padding(padding)
+        )
+    }
+
+    PendingShareCapture(
+        shareInProgress = shareInProgress,
+        uiState = uiState,
+        onFinished = { outcome ->
+            shareInProgress = false
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    shareOutcomeMessage(
+                        outcome = outcome,
+                        failed = shareFailedMessage,
+                        saved = shareSavedMessage,
+                        saveFailed = shareSaveFailedMessage
+                    )
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun RequestLocationPermissionEffect(onLocationPermissionResult: (Boolean) -> Unit) {
+    val context = LocalContext.current
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         val granted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         onLocationPermissionResult(granted)
-    }
-
-    // Leaving detail (e.g. back while a permission dialog was up) must cancel a pending share;
-    // otherwise the stranded flag would auto-trigger a capture on the next city opened.
-    LaunchedEffect(inDetail) {
-        if (!inDetail) shareInProgress = false
     }
 
     LaunchedEffect(Unit) {
@@ -140,50 +209,99 @@ fun WeatherScreenContent(
             )
         }
     }
+}
 
-    Scaffold(
-        topBar = {
-            WeatherTopBar(
-                title = uiState.selectedLocation?.name
-                    ?: stringResource(R.string.app_title),
-                inDetail = inDetail,
-                canShare = canShare,
-                shareInProgress = shareInProgress,
-                onBack = onBack,
-                onShare = {
-                    if (needsLegacyWritePermission(context)) {
-                        writeStorageLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    } else {
-                        shareInProgress = true
-                    }
-                }
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { padding ->
-        if (inDetail) {
-            BackHandler(onBack = onBack)
-        }
-        Column(
+@Composable
+private fun PendingShareCapture(
+    shareInProgress: Boolean,
+    uiState: WeatherUiState,
+    onFinished: (ShareWeatherOutcome) -> Unit
+) {
+    val location = uiState.selectedLocation
+    val forecast = uiState.forecast
+    if (shareInProgress && location != null && forecast != null) {
+        ShareWeatherCapture(
+            location = location,
+            days = forecast.dailyForecasts,
+            selectedDayIndex = uiState.selectedDayIndex,
+            rankedActivities = uiState.rankedActivities,
+            onComplete = onFinished
+        )
+    }
+}
+
+/**
+ * Collapsing map header (3:2) + rounded sheet that nested-scrolls over it.
+ * Map height is animated via [MapCollapseState]; the MapLibre instance is not remounted.
+ */
+@Composable
+private fun CollapsingMapScaffold(
+    uiState: WeatherUiState,
+    inDetail: Boolean,
+    canShare: Boolean,
+    shareInProgress: Boolean,
+    isDarkTheme: Boolean,
+    onToggleTheme: () -> Unit,
+    onBack: () -> Unit,
+    onShare: () -> Unit,
+    onMapTapped: (Double, Double) -> Unit,
+    onQueryChanged: (String) -> Unit,
+    onLocationSelected: (Location) -> Unit,
+    onDaySelected: (Int) -> Unit,
+    onRefresh: () -> Unit,
+    onCurrentLocationClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val collapse = rememberMapCollapseState(resetKey = inDetail)
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .nestedScroll(collapse.nestedScrollConnection)
+    ) {
+        WeatherMapSection(
+            camera = uiState.mapCamera,
+            pin = uiState.mapPin,
+            isResolvingTap = uiState.isResolvingMapTap,
+            onMapTap = onMapTapped,
+            interactive = collapse.mapInteractive,
             modifier = Modifier
-                .padding(padding)
+                .fillMaxWidth()
+                .height(collapse.headerHeight)
+                .align(Alignment.TopCenter)
+                .graphicsLayer { alpha = 1f - collapse.fraction * 0.35f }
+        )
+
+        WeatherCollapsingTopBar(
+            title = uiState.selectedLocation?.name
+                ?: stringResource(R.string.app_title),
+            inDetail = inDetail,
+            canShare = canShare,
+            shareInProgress = shareInProgress,
+            collapseFraction = collapse.fraction,
+            isDarkTheme = isDarkTheme,
+            onToggleTheme = onToggleTheme,
+            onBack = onBack,
+            onShare = onShare,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(CollapsedAppBarHeight)
+                .align(Alignment.TopCenter)
+        )
+
+        Surface(
+            modifier = Modifier
                 .fillMaxSize()
+                .padding(top = collapse.sheetTop),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp,
+            shadowElevation = 6.dp
         ) {
-            Spacer(Modifier.height(4.dp))
-            WeatherMapSection(
-                camera = uiState.mapCamera,
-                pin = uiState.mapPin,
-                isResolvingTap = uiState.isResolvingMapTap,
-                onMapTap = onMapTapped,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
             Crossfade(
                 targetState = inDetail,
                 animationSpec = tween(BODY_CROSSFADE_MS, easing = FastOutSlowInEasing),
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxSize(),
                 label = "home_detail_crossfade"
             ) { detail ->
                 if (detail) {
@@ -198,53 +316,117 @@ fun WeatherScreenContent(
                         onQueryChanged = onQueryChanged,
                         onLocationSelected = onLocationSelected,
                         onRefresh = onRefresh,
-                        onCurrentLocationClick = onCurrentLocationClick,
-                        isDarkTheme = isDarkTheme,
-                        onToggleTheme = onToggleTheme
+                        onCurrentLocationClick = onCurrentLocationClick
                     )
                 }
             }
         }
     }
+}
 
-    val location = uiState.selectedLocation
-    val forecast = uiState.forecast
-    if (shareInProgress && location != null && forecast != null) {
-        ShareWeatherCapture(
-            location = location,
-            days = forecast.dailyForecasts,
-            selectedDayIndex = uiState.selectedDayIndex,
-            rankedActivities = uiState.rankedActivities,
-            onComplete = { outcome ->
-                shareInProgress = false
-                scope.launch {
-                    snackbarHostState.showSnackbar(
-                        shareOutcomeMessage(
-                            outcome = outcome,
-                            failed = shareFailedMessage,
-                            saved = shareSavedMessage,
-                            saveFailed = shareSaveFailedMessage
-                        )
-                    )
-                }
-            }
-        )
+private class MapCollapseState(
+    val nestedScrollConnection: NestedScrollConnection,
+    val headerHeight: Dp,
+    val sheetTop: Dp,
+    val fraction: Float,
+    val mapInteractive: Boolean
+)
+
+@Composable
+private fun rememberMapCollapseState(resetKey: Any): MapCollapseState {
+    val density = LocalDensity.current
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
+    val expandedMapHeight = screenWidthDp * MAP_ASPECT_HEIGHT / MAP_ASPECT_WIDTH
+    val expandedPx = with(density) { expandedMapHeight.toPx() }
+    val collapsedPx = with(density) { CollapsedAppBarHeight.toPx() }
+    val maxCollapsePx = (expandedPx - collapsedPx).coerceAtLeast(1f)
+
+    var toolbarOffsetPx by remember { mutableFloatStateOf(0f) }
+
+    // Expand the map again when switching home ↔ detail so the new mode starts with the header open.
+    LaunchedEffect(resetKey) {
+        toolbarOffsetPx = 0f
     }
+
+    val nestedScrollConnection = remember(maxCollapsePx) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                // Scroll up: collapse the map before the sheet content scrolls.
+                if (delta < 0f) {
+                    val previous = toolbarOffsetPx
+                    toolbarOffsetPx = (toolbarOffsetPx + delta).coerceIn(-maxCollapsePx, 0f)
+                    return Offset(0f, toolbarOffsetPx - previous)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                val delta = available.y
+                // Scroll down: expand the map after the sheet has scrolled to its top.
+                if (delta > 0f) {
+                    val previous = toolbarOffsetPx
+                    toolbarOffsetPx = (toolbarOffsetPx + delta).coerceIn(-maxCollapsePx, 0f)
+                    return Offset(0f, toolbarOffsetPx - previous)
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    val headerHeight = with(density) { (expandedPx + toolbarOffsetPx).toDp() }
+    val fraction = (-toolbarOffsetPx / maxCollapsePx).coerceIn(0f, 1f)
+    val sheetTop = (headerHeight - MapSheetOverlap).coerceAtLeast(CollapsedAppBarHeight)
+
+    return MapCollapseState(
+        nestedScrollConnection = nestedScrollConnection,
+        headerHeight = headerHeight,
+        sheetTop = sheetTop,
+        fraction = fraction,
+        mapInteractive = fraction < MAP_INTERACTIVE_COLLAPSE_THRESHOLD
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WeatherTopBar(
+private fun WeatherCollapsingTopBar(
     title: String,
     inDetail: Boolean,
     canShare: Boolean,
     shareInProgress: Boolean,
+    collapseFraction: Float,
+    isDarkTheme: Boolean,
+    onToggleTheme: () -> Unit,
     onBack: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val surface = MaterialTheme.colorScheme.surface
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    // Expanded: light scrim over the map for icon contrast; collapsed: solid AppBar surface.
+    val barColor = lerp(
+        start = Color.Black.copy(alpha = 0.22f),
+        stop = surface,
+        fraction = collapseFraction
+    )
+    val contentColor = lerp(
+        start = Color.White,
+        stop = onSurface,
+        fraction = collapseFraction
+    )
+
     TopAppBar(
+        modifier = modifier,
         title = {
-            Text(text = title, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = title,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.graphicsLayer { alpha = 0.35f + collapseFraction * 0.65f }
+            )
         },
         navigationIcon = {
             if (inDetail) {
@@ -265,12 +447,24 @@ private fun WeatherTopBar(
                     )
                 }
             }
+            IconButton(onClick = onToggleTheme) {
+                Icon(
+                    imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                    contentDescription = stringResource(
+                        if (isDarkTheme) {
+                            R.string.theme_switch_to_light
+                        } else {
+                            R.string.theme_switch_to_dark
+                        }
+                    )
+                )
+            }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = Color.Transparent,
-            titleContentColor = MaterialTheme.colorScheme.onBackground,
-            navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
-            actionIconContentColor = MaterialTheme.colorScheme.onBackground
+            containerColor = barColor,
+            titleContentColor = contentColor,
+            navigationIconContentColor = contentColor,
+            actionIconContentColor = contentColor
         )
     )
 }
@@ -307,3 +501,9 @@ private fun shareOutcomeMessage(
 }
 
 private const val BODY_CROSSFADE_MS = 280
+/** Width:height = 3:2 when the collapsing map header is fully expanded. */
+private const val MAP_ASPECT_WIDTH = 3f
+private const val MAP_ASPECT_HEIGHT = 2f
+private val CollapsedAppBarHeight: Dp = 64.dp
+private val MapSheetOverlap: Dp = 28.dp
+private const val MAP_INTERACTIVE_COLLAPSE_THRESHOLD = 0.72f
