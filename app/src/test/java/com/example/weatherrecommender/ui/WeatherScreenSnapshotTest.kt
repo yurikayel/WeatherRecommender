@@ -1,8 +1,13 @@
 ﻿package com.example.weatherrecommender.ui
 
+import androidx.activity.compose.LocalActivityResultRegistryOwner
+import androidx.activity.result.ActivityResultRegistry
+import androidx.activity.result.ActivityResultRegistryOwner
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.core.app.ActivityOptionsCompat
 import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
 import com.example.weatherrecommender.domain.model.DailyForecast
@@ -27,12 +32,28 @@ class WeatherScreenSnapshotTest {
         maxPercentDifference = 0.5
     )
 
+    /** Satisfies [rememberLauncherForActivityResult] used by share-permission UX under layoutlib. */
+    private val activityResultOwner = object : ActivityResultRegistryOwner {
+        override val activityResultRegistry: ActivityResultRegistry =
+            object : ActivityResultRegistry() {
+                override fun <I, O> onLaunch(
+                    requestCode: Int,
+                    contract: ActivityResultContract<I, O>,
+                    input: I,
+                    options: ActivityOptionsCompat?
+                ) = Unit
+            }
+    }
+
     private fun content(state: WeatherUiState, darkTheme: Boolean = false) {
         paparazzi.snapshot {
             // Default typography uses downloadable Google Fonts, which spawns an Android-only
             // fetcher thread that crashes under layoutlib; system fonts render deterministically.
             // Inspection mode keeps MapLibre off the snapshot path (native libs are unavailable).
-            CompositionLocalProvider(LocalInspectionMode provides true) {
+            CompositionLocalProvider(
+                LocalInspectionMode provides true,
+                LocalActivityResultRegistryOwner provides activityResultOwner
+            ) {
                 WeatherRecommenderTheme(darkTheme = darkTheme, typography = Typography()) {
                     WeatherScreenContent(
                         uiState = state,

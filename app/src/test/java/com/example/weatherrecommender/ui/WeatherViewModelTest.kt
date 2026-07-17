@@ -14,6 +14,7 @@ import com.example.weatherrecommender.domain.usecase.GetRankedActivitiesUseCase
 import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
 import com.example.weatherrecommender.domain.util.ConnectivityObserver
 import com.example.weatherrecommender.domain.util.ConnectivityStatus
+import com.example.weatherrecommender.ui.map.MapCameraPosition
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -361,7 +362,7 @@ class WeatherViewModelTest {
     }
 
     @Test
-    fun `onBack keeps map camera centered on last city`() = runTest {
+    fun `onBack resets map camera to London overview`() = runTest {
         every { repository.getForecastFlow(location) } returns flowOf(forecast)
         coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
         every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
@@ -375,8 +376,10 @@ class WeatherViewModelTest {
 
         val state = viewModel.uiState.value
         assertNull(state.selectedLocation)
-        assertEquals(location, state.mapPin)
-        assertEquals(location.latitude, state.mapCamera.latitude, 0.0)
+        assertNull(state.mapPin)
+        assertEquals(MapCameraPosition.LONDON_LAT, state.mapCamera.latitude, 0.0)
+        assertEquals(MapCameraPosition.LONDON_LNG, state.mapCamera.longitude, 0.0)
+        assertEquals(MapCameraPosition.HOME_DEFAULT_ZOOM, state.mapCamera.zoom, 0.0)
     }
 
     @Test

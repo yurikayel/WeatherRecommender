@@ -1,13 +1,13 @@
 package com.example.weatherrecommender.ui.map
 
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -15,7 +15,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,38 +43,31 @@ import org.maplibre.spatialk.geojson.Position
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Persistent header map for city discovery and display.
+ * Square map section embedded at the top of home/detail scroll content.
  *
- * Lives above home/detail content so the composable (and its MapLibre surface) is not torn down
- * when navigating between those screens. Camera and pin come from the ViewModel.
- *
- * Under Paparazzi / inspection mode, renders a lightweight placeholder (native map views are
- * unsupported in layoutlib).
+ * Camera and pin come from the ViewModel so state survives navigation even when this composable
+ * is recreated per screen. Under Paparazzi / inspection mode, renders a lightweight placeholder.
  */
 @Composable
-fun WeatherMapHeader(
+fun WeatherMapSection(
     camera: MapCameraPosition,
     pin: Location?,
-    collapsed: Boolean,
     isResolvingTap: Boolean,
     onMapTap: (latitude: Double, longitude: Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val targetHeight = if (collapsed) MAP_HEIGHT_DETAIL else MAP_HEIGHT_HOME
-    val height by animateDpAsState(
-        targetValue = targetHeight,
-        animationSpec = tween(durationMillis = 280),
-        label = "map_header_height"
-    )
     val mapCd = stringResource(R.string.map_content_description)
     val attribution = stringResource(R.string.map_attribution)
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize(animationSpec = tween(durationMillis = 280))
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(height)
-                .padding(horizontal = 16.dp)
+                .aspectRatio(1f)
                 .clip(RoundedCornerShape(16.dp))
                 .semantics { contentDescription = mapCd }
         ) {
@@ -109,7 +101,7 @@ fun WeatherMapHeader(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
             modifier = Modifier
-                .padding(horizontal = 20.dp, vertical = 4.dp)
+                .padding(horizontal = 4.dp, vertical = 4.dp)
                 .semantics { contentDescription = attribution }
         )
     }
@@ -199,6 +191,4 @@ private fun MapPlaceholder(pin: Location?) {
 private const val OPENFREEMAP_LIBERTY = "https://tiles.openfreemap.org/styles/liberty"
 private const val EMPTY_FEATURE_COLLECTION =
     """{"type":"FeatureCollection","features":[]}"""
-private val MAP_HEIGHT_HOME = 200.dp
-private val MAP_HEIGHT_DETAIL = 140.dp
 private val PIN_COLOR = Color(0xFF1A73E8)

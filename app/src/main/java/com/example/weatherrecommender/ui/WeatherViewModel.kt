@@ -33,7 +33,8 @@ import com.example.weatherrecommender.ui.util.asUiText
  *  - **Detail** (`selectedLocation != null`): the forecast with a per-day selector; [rankedActivities]
  *    always reflects [selectedDayIndex].
  *
- * The header map is driven by [mapCamera] / [mapPin] and lives outside home↔detail transitions.
+ * The map is driven by [mapCamera] / [mapPin]; each screen embeds it at the top of its scroll
+ * content while this state keeps camera/pin continuous across home↔detail.
  *
  * @property query The current search query.
  * @property isSearching True if a search request is in-flight.
@@ -47,7 +48,7 @@ import com.example.weatherrecommender.ui.util.asUiText
  * @property isLoadingTopPicks True while the home suggestions are loading (initial skeleton).
  * @property isRefreshingTopPicks True while pull-to-refresh is force-refreshing top picks.
  * @property recentHistory The 10 most recently viewed cities, newest first (empty when none).
- * @property mapCamera Camera target for the persistent header map.
+ * @property mapCamera Camera target for the in-screen map.
  * @property mapPin Marker shown on the map (selected city or search preview).
  * @property isResolvingMapTap True while reverse-geocoding a map tap.
  * @property error The main UI error, usually blocking or prominent.
@@ -310,7 +311,7 @@ class WeatherViewModel @Inject constructor(
         }
     }
 
-    /** Returns from the detail view to the home screen. Map camera/pin stay put. */
+    /** Returns from the detail view to the home screen and resets the map to London overview. */
     fun onBack() {
         forecastJob?.cancel()
         _uiState.update {
@@ -323,7 +324,10 @@ class WeatherViewModel @Inject constructor(
                 searchResults = emptyList(),
                 isLoadingForecast = false,
                 error = null,
-                syncError = null
+                syncError = null,
+                mapCamera = MapCameraPosition.DEFAULT,
+                mapPin = null,
+                isResolvingMapTap = false
             )
         }
     }

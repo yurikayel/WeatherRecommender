@@ -7,14 +7,15 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -45,7 +46,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.Location
-import com.example.weatherrecommender.ui.map.WeatherMapHeader
 import kotlinx.coroutines.launch
 
 /**
@@ -75,7 +75,8 @@ fun WeatherScreen(
 /**
  * Stateless, testable root of the Weather screen.
  *
- * Renders a **persistent map header** above home/detail content so the map survives navigation.
+ * Home and detail each embed a square map as the first section of their scroll content
+ * (not a sticky overlay). Map camera/pin still come from [WeatherUiState] for continuity.
  * Modes are derived from [WeatherUiState.selectedLocation].
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -110,116 +111,55 @@ fun WeatherScreenContent(
         shareInProgress = true
     }
 
-    fun startShare() {
-        val needsLegacyWrite = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
-        val hasWrite = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
-        ) == PackageManager.PERMISSION_GRANTED
-        if (needsLegacyWrite && !hasWrite) {
-            writeStorageLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        } else {
-            shareInProgress = true
-        }
-    }
-
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = uiState.selectedLocation?.name
-                            ?: stringResource(R.string.app_title),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                },
-                navigationIcon = {
-                    if (inDetail) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.detail_back)
-                            )
-                        }
+            WeatherTopBar(
+                title = uiState.selectedLocation?.name
+                    ?: stringResource(R.string.app_title),
+                inDetail = inDetail,
+                canShare = canShare,
+                shareInProgress = shareInProgress,
+                onBack = onBack,
+                onShare = {
+                    if (needsLegacyWritePermission(context)) {
+                        writeStorageLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    } else {
+                        shareInProgress = true
                     }
-                },
-                actions = {
-                    if (canShare) {
-                        IconButton(
-                            onClick = { startShare() },
-                            enabled = !shareInProgress
-                        ) {
-                            Icon(
-                                Icons.Filled.Share,
-                                contentDescription = stringResource(R.string.share_weather)
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
-                    actionIconContentColor = MaterialTheme.colorScheme.onBackground
-                )
+                }
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        Column(
+        if (inDetail) {
+            BackHandler(onBack = onBack)
+        }
+        AnimatedContent(
+            targetState = inDetail,
+            transitionSpec = { homeDetailTransition() },
             modifier = Modifier
                 .padding(padding)
-                .fillMaxSize()
-        ) {
-            // Persistent across home ↔ detail: not inside AnimatedContent.
-            WeatherMapHeader(
-                camera = uiState.mapCamera,
-                pin = uiState.mapPin,
-                collapsed = inDetail,
-                isResolvingTap = uiState.isResolvingMapTap,
-                onMapTap = onMapTapped
-            )
-
-            Box(modifier = Modifier.weight(1f)) {
-                if (inDetail) {
-                    BackHandler(onBack = onBack)
-                }
-                AnimatedContent(
-                    targetState = inDetail,
-                    transitionSpec = {
-                        if (targetState) {
-                            (slideInHorizontally(tween(TRANSITION_MS)) { it / 4 } + fadeIn(tween(TRANSITION_MS)))
-                                .togetherWith(
-                                    slideOutHorizontally(tween(TRANSITION_MS)) { -it / 4 } + fadeOut(tween(TRANSITION_MS))
-                                )
-                        } else {
-                            (slideInHorizontally(tween(TRANSITION_MS)) { -it / 4 } + fadeIn(tween(TRANSITION_MS)))
-                                .togetherWith(
-                                    slideOutHorizontally(tween(TRANSITION_MS)) { it / 4 } + fadeOut(tween(TRANSITION_MS))
-                                )
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                    label = "home_detail_transition"
-                ) { detail ->
-                    if (detail) {
-                        DetailContent(
-                            uiState = uiState,
-                            onDaySelected = onDaySelected,
-                            onRefresh = onRefresh
-                        )
-                    } else {
-                        HomeContent(
-                            uiState = uiState,
-                            onQueryChanged = onQueryChanged,
-                            onLocationSelected = onLocationSelected,
-                            onRefresh = onRefresh,
-                            isDarkTheme = isDarkTheme,
-                            onToggleTheme = onToggleTheme
-                        )
-                    }
-                }
+                .fillMaxSize(),
+            label = "home_detail_transition"
+        ) { detail ->
+            if (detail) {
+                DetailContent(
+                    uiState = uiState,
+                    onDaySelected = onDaySelected,
+                    onRefresh = onRefresh,
+                    onMapTapped = onMapTapped
+                )
+            } else {
+                HomeContent(
+                    uiState = uiState,
+                    onQueryChanged = onQueryChanged,
+                    onLocationSelected = onLocationSelected,
+                    onRefresh = onRefresh,
+                    onMapTapped = onMapTapped,
+                    isDarkTheme = isDarkTheme,
+                    onToggleTheme = onToggleTheme
+                )
             }
         }
     }
@@ -234,16 +174,111 @@ fun WeatherScreenContent(
             onComplete = { outcome ->
                 shareInProgress = false
                 scope.launch {
-                    when {
-                        !outcome.shared -> snackbarHostState.showSnackbar(shareFailedMessage)
-                        outcome.savedToDownloads ->
-                            snackbarHostState.showSnackbar(shareSavedMessage)
-                        else -> snackbarHostState.showSnackbar(shareSaveFailedMessage)
-                    }
+                    snackbarHostState.showSnackbar(
+                        shareOutcomeMessage(
+                            outcome = outcome,
+                            failed = shareFailedMessage,
+                            saved = shareSavedMessage,
+                            saveFailed = shareSaveFailedMessage
+                        )
+                    )
                 }
             }
         )
     }
 }
 
-private const val TRANSITION_MS = 300
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WeatherTopBar(
+    title: String,
+    inDetail: Boolean,
+    canShare: Boolean,
+    shareInProgress: Boolean,
+    onBack: () -> Unit,
+    onShare: () -> Unit
+) {
+    TopAppBar(
+        title = {
+            Text(text = title, fontWeight = FontWeight.SemiBold)
+        },
+        navigationIcon = {
+            if (inDetail) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.detail_back)
+                    )
+                }
+            }
+        },
+        actions = {
+            if (canShare) {
+                IconButton(onClick = onShare, enabled = !shareInProgress) {
+                    Icon(
+                        Icons.Filled.Share,
+                        contentDescription = stringResource(R.string.share_weather)
+                    )
+                }
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color.Transparent,
+            titleContentColor = MaterialTheme.colorScheme.onBackground,
+            navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+            actionIconContentColor = MaterialTheme.colorScheme.onBackground
+        )
+    )
+}
+
+private fun needsLegacyWritePermission(context: android.content.Context): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return false
+    return ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.WRITE_EXTERNAL_STORAGE
+    ) != PackageManager.PERMISSION_GRANTED
+}
+
+private fun shareOutcomeMessage(
+    outcome: ShareWeatherOutcome,
+    failed: String,
+    saved: String,
+    saveFailed: String
+): String = when {
+    !outcome.shared -> failed
+    outcome.savedToDownloads -> saved
+    else -> saveFailed
+}
+
+private fun AnimatedContentTransitionScope<Boolean>.homeDetailTransition(): ContentTransform {
+    val enterSlide = { width: Int -> width / 5 }
+    val exitSlide = { width: Int -> width / 5 }
+    val easing = FastOutSlowInEasing
+    return if (targetState) {
+        (
+            slideInHorizontally(
+                animationSpec = tween(TRANSITION_MS, easing = easing),
+                initialOffsetX = enterSlide
+            ) + fadeIn(tween(TRANSITION_MS, easing = easing))
+            ).togetherWith(
+            slideOutHorizontally(
+                animationSpec = tween(TRANSITION_MS, easing = easing),
+                targetOffsetX = { -exitSlide(it) }
+            ) + fadeOut(tween(TRANSITION_MS, easing = easing))
+        )
+    } else {
+        (
+            slideInHorizontally(
+                animationSpec = tween(TRANSITION_MS, easing = easing),
+                initialOffsetX = { -enterSlide(it) }
+            ) + fadeIn(tween(TRANSITION_MS, easing = easing))
+            ).togetherWith(
+            slideOutHorizontally(
+                animationSpec = tween(TRANSITION_MS, easing = easing),
+                targetOffsetX = exitSlide
+            ) + fadeOut(tween(TRANSITION_MS, easing = easing))
+        )
+    }
+}
+
+private const val TRANSITION_MS = 380
