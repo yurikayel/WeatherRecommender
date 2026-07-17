@@ -40,6 +40,7 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
 /** Result of capturing and sharing the weather card image. */
 internal data class ShareWeatherOutcome(
@@ -99,7 +100,7 @@ internal fun ShareWeatherCapture(
     LaunchedEffect(laidOut) {
         if (laidOut == 0 || finished > 0) return@LaunchedEffect
         // Let Compose finish recording into the graphics layer.
-        delay(64)
+        delay(64.milliseconds)
         val outcome = try {
             val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
             withContext(Dispatchers.IO) {
