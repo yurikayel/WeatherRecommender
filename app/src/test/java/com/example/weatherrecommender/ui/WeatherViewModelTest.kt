@@ -66,7 +66,7 @@ class WeatherViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Available)
-        coEvery { getTopPicksUseCase(any()) } returns emptyList()
+        coEvery { getTopPicksUseCase(any(), any()) } returns emptyList()
         viewModel = WeatherViewModel(
             repository,
             getRankedActivitiesUseCase,
@@ -222,13 +222,13 @@ class WeatherViewModelTest {
     fun `top picks are loaded on init`() = runTest {
         val picks = listOf(
             com.example.weatherrecommender.domain.model.TopPick(
-                location = Location(2, "Lisbon", 38.7, -9.1, "Portugal", null, hasSeaAccess = true),
+                location = Location(-4, "Lisbon", 38.7, -9.1, "Portugal", null, hasSeaAccess = true),
                 topActivity = RankedActivity(RecommendedActivity.SURFING, 88, ReasonKey.SURF_IDEAL, listOf(90, 10)),
                 weatherCode = 0,
                 maxTemp = 26.0
             )
         )
-        coEvery { getTopPicksUseCase(any()) } returns picks
+        coEvery { getTopPicksUseCase(any(), any()) } returns picks
         viewModel = WeatherViewModel(
             repository,
             getRankedActivitiesUseCase,
@@ -241,5 +241,45 @@ class WeatherViewModelTest {
         advanceUntilIdle()
 
         assertEquals(picks, viewModel.uiState.value.topPicks)
+    }
+
+    @Test
+    fun `home refresh force-refreshes top picks`() = runTest {
+        val initial = listOf(
+            com.example.weatherrecommender.domain.model.TopPick(
+                location = Location(-4, "Lisbon", 38.7, -9.1, "Portugal", null, hasSeaAccess = true),
+                topActivity = RankedActivity(RecommendedActivity.SURFING, 88, ReasonKey.SURF_IDEAL, listOf(90, 10)),
+                weatherCode = 0,
+                maxTemp = 26.0
+            )
+        )
+        val refreshed = listOf(
+            com.example.weatherrecommender.domain.model.TopPick(
+                location = Location(-2, "Sydney", -33.8, 151.2, "Australia", null, hasSeaAccess = true),
+                topActivity = RankedActivity(RecommendedActivity.OUTDOOR_SIGHTSEEING, 80, ReasonKey.OUTDOOR_MILD, listOf(22)),
+                weatherCode = 1,
+                maxTemp = 24.0
+            )
+        )
+        coEvery { getTopPicksUseCase(any(), forceRefresh = false) } returns initial
+        coEvery { getTopPicksUseCase(any(), forceRefresh = true) } returns refreshed
+        viewModel = WeatherViewModel(
+            repository,
+            getRankedActivitiesUseCase,
+            getTopPicksUseCase,
+            connectivityObserver
+        )
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceTimeBy(500)
+        advanceUntilIdle()
+        assertEquals(initial, viewModel.uiState.value.topPicks)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertEquals(refreshed, viewModel.uiState.value.topPicks)
+        assertEquals(false, viewModel.uiState.value.isRefreshingTopPicks)
+        io.mockk.coVerify { getTopPicksUseCase(any(), forceRefresh = true) }
     }
 }

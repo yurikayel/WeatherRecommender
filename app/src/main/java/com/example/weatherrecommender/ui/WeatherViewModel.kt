@@ -41,7 +41,8 @@ import com.example.weatherrecommender.ui.util.asUiText
  * @property selectedDayIndex Index of the day whose activities are currently shown.
  * @property rankedActivities Applicable activities for [selectedDayIndex], sorted by score.
  * @property topPicks Population-weighted featured suggestions shown on the home screen.
- * @property isLoadingTopPicks True while the home suggestions are loading.
+ * @property isLoadingTopPicks True while the home suggestions are loading (initial skeleton).
+ * @property isRefreshingTopPicks True while pull-to-refresh is force-refreshing top picks.
  * @property error The main UI error, usually blocking or prominent.
  * @property syncError A background sync error for offline scenarios.
  */
@@ -56,6 +57,7 @@ data class WeatherUiState(
     val rankedActivities: List<RankedActivity> = emptyList(),
     val topPicks: List<TopPick> = emptyList(),
     val isLoadingTopPicks: Boolean = false,
+    val isRefreshingTopPicks: Boolean = false,
     val error: UiText? = null,
     val syncError: UiText? = null
 )
@@ -131,13 +133,30 @@ class WeatherViewModel @Inject constructor(
         loadTopPicks()
     }
 
-    /** Loads the population-weighted featured suggestions for the home screen. */
-    fun loadTopPicks() {
-        _uiState.update { it.copy(isLoadingTopPicks = true) }
+    /**
+     * Loads the population-weighted featured suggestions for the home screen.
+     * Pass [forceRefresh] = true (e.g. pull-to-refresh) to bypass the in-memory TTL cache.
+     */
+    fun loadTopPicks(forceRefresh: Boolean = false) {
+        _uiState.update { state ->
+            if (forceRefresh) {
+                state.copy(isRefreshingTopPicks = true, error = null)
+            } else {
+                state.copy(isLoadingTopPicks = true)
+            }
+        }
         viewModelScope.launch {
-            delay(TOP_PICKS_LOAD_DEFER_MS.milliseconds)
-            val picks = getTopPicks()
-            _uiState.update { it.copy(topPicks = picks, isLoadingTopPicks = false) }
+            if (!forceRefresh) {
+                delay(TOP_PICKS_LOAD_DEFER_MS.milliseconds)
+            }
+            val picks = getTopPicks(forceRefresh = forceRefresh)
+            _uiState.update {
+                it.copy(
+                    topPicks = picks,
+                    isLoadingTopPicks = false,
+                    isRefreshingTopPicks = false
+                )
+            }
         }
     }
 
@@ -175,7 +194,8 @@ class WeatherViewModel @Inject constructor(
             repository.getForecastFlow(location).collect { forecast ->
                 if (forecast != null) {
                     _uiState.update { state ->
-                        val dayIndex = state.selectedDayIndex.coerceIn(0, forecast.dailyForecasts.lastIndex)
+                        val maxIndex = maxOf(0, forecast.dailyForecasts.lastIndex)
+                        val dayIndex = state.selectedDayIndex.coerceIn(0, maxIndex)
                         state.copy(
                             forecast = forecast,
                             rankedActivities = getRankedActivities(forecast, dayIndex),
@@ -235,19 +255,30 @@ class WeatherViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Pull-to-refresh: on home, force-refreshes top picks (bypassing TTL);
+     * on detail, refreshes the selected city's forecast into Room.
+     */
     fun refresh() {
-        val location = _uiState.value.selectedLocation ?: return
-
-        if (currentConnectivityStatus != ConnectivityStatus.Available) {
-            _uiState.update { it.copy(syncError = AppError.NetworkError.NoConnectivity.asUiText()) }
+        val location = _uiState.value.selectedLocation
+        if (location == null) {
+            if (currentConnectivityStatus != ConnectivityStatus.Available) {
+                _uiState.update { it.copy(error = AppError.NetworkError.NoConnectivity.asUiText()) }
+            } else {
+                loadTopPicks(forceRefresh = true)
+            }
             return
         }
 
-        viewModelScope.launch {
-            repository.refreshForecast(location).fold(
-                onSuccess = { _uiState.update { it.copy(syncError = null, error = null) } },
-                onError = { err -> _uiState.update { it.copy(syncError = err.asUiText()) } }
-            )
+        if (currentConnectivityStatus != ConnectivityStatus.Available) {
+            _uiState.update { it.copy(syncError = AppError.NetworkError.NoConnectivity.asUiText()) }
+        } else {
+            viewModelScope.launch {
+                repository.refreshForecast(location).fold(
+                    onSuccess = { _uiState.update { it.copy(syncError = null, error = null) } },
+                    onError = { err -> _uiState.update { it.copy(syncError = err.asUiText()) } }
+                )
+            }
         }
     }
 }

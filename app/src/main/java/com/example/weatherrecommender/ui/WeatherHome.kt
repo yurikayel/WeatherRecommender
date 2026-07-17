@@ -29,12 +29,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -58,73 +60,82 @@ import kotlin.math.roundToInt
 
 /**
  * The home screen: a friendly greeting, search field, and a feed of population-weighted "top picks".
+ * Pull-to-refresh force-refreshes top picks (bypasses the in-memory TTL cache).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun HomeContent(
     uiState: WeatherUiState,
     onQueryChanged: (String) -> Unit,
-    onLocationSelected: (Location) -> Unit
+    onLocationSelected: (Location) -> Unit,
+    onRefresh: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
+    PullToRefreshBox(
+        isRefreshing = uiState.isRefreshingTopPicks,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize()
     ) {
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.home_greeting_title),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Text(
-            text = stringResource(R.string.home_greeting_subtitle),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-        )
-
-        Spacer(Modifier.height(16.dp))
-        CustomSearchBar(
-            query = uiState.query,
-            onQueryChange = onQueryChanged,
-            isSearching = uiState.isSearching,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        uiState.error?.let { error ->
-            Spacer(Modifier.height(12.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+        ) {
+            Spacer(Modifier.height(8.dp))
             Text(
-                text = stringResource(R.string.error_prefix, error.asString()),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium
+                text = stringResource(R.string.home_greeting_title),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
             )
-        }
-
-        AnimatedVisibility(visible = uiState.searchResults.isNotEmpty()) {
-            SearchResultsList(
-                results = uiState.searchResults,
-                onLocationSelected = onLocationSelected
-            )
-        }
-
-        if (uiState.searchResults.isEmpty()) {
-            Spacer(Modifier.height(28.dp))
             Text(
-                text = stringResource(R.string.home_top_picks_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
-                modifier = Modifier.semantics { heading() }
+                text = stringResource(R.string.home_greeting_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
             )
-            Spacer(Modifier.height(12.dp))
-            TopPicksSection(
-                topPicks = uiState.topPicks,
-                isLoading = uiState.isLoadingTopPicks,
-                onLocationSelected = onLocationSelected
-            )
-        }
 
-        Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
+            CustomSearchBar(
+                query = uiState.query,
+                onQueryChange = onQueryChanged,
+                isSearching = uiState.isSearching,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            uiState.error?.let { error ->
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.error_prefix, error.asString()),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            AnimatedVisibility(visible = uiState.searchResults.isNotEmpty()) {
+                SearchResultsList(
+                    results = uiState.searchResults,
+                    onLocationSelected = onLocationSelected
+                )
+            }
+
+            if (uiState.searchResults.isEmpty()) {
+                Spacer(Modifier.height(28.dp))
+                Text(
+                    text = stringResource(R.string.home_top_picks_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                    modifier = Modifier.semantics { heading() }
+                )
+                Spacer(Modifier.height(12.dp))
+                TopPicksSection(
+                    topPicks = uiState.topPicks,
+                    isLoading = uiState.isLoadingTopPicks,
+                    onLocationSelected = onLocationSelected
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
+        }
     }
 }
 

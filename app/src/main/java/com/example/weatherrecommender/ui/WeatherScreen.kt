@@ -129,7 +129,8 @@ fun WeatherScreenContent(
                     HomeContent(
                         uiState = uiState,
                         onQueryChanged = onQueryChanged,
-                        onLocationSelected = onLocationSelected
+                        onLocationSelected = onLocationSelected,
+                        onRefresh = onRefresh
                     )
                 }
             }
