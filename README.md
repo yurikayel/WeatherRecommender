@@ -53,7 +53,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 - **Lint**: `./gradlew lintDebug`
 - **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify`
 - **Static analysis**: `./gradlew detekt`
-- **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (19 Compose UI tests for key flows, plus 5 Room migration tests; also run on CI emulator)
+- **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (22 Compose UI tests for key flows, plus 5 Room migration tests; also run on CI emulator)
 
 **Testing Strategy**:
 - **Domain Layer**: Activity scorers and `GetRankedActivitiesUseCase` are pure Kotlin, unit-tested with JUnit.
