@@ -119,6 +119,16 @@ class WeatherScreenSnapshotTest {
     }
 
     @Test
+    fun homeWithCurrentLocationChip() {
+        content(
+            WeatherUiState(
+                topPicks = topPicks,
+                deviceLocation = lisbon
+            )
+        )
+    }
+
+    @Test
     fun homeWithTopPicksAndHistory() {
         content(
             WeatherUiState(

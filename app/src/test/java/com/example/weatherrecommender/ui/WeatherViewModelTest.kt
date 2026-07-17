@@ -1,6 +1,8 @@
 package com.example.weatherrecommender.ui
 
 import app.cash.turbine.test
+import com.example.weatherrecommender.domain.location.DeviceLocationProvider
+import com.example.weatherrecommender.domain.location.GeoCoordinates
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
@@ -12,6 +14,7 @@ import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
 import com.example.weatherrecommender.domain.usecase.GetRankedActivitiesUseCase
 import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
+import com.example.weatherrecommender.domain.usecase.WorldCapitals
 import com.example.weatherrecommender.domain.util.ConnectivityObserver
 import com.example.weatherrecommender.domain.util.ConnectivityStatus
 import com.example.weatherrecommender.ui.map.MapCameraPosition
@@ -21,13 +24,13 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -35,6 +38,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import kotlin.random.Random
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WeatherViewModelTest {
@@ -45,9 +49,17 @@ class WeatherViewModelTest {
     private val getRankedActivitiesUseCase: GetRankedActivitiesUseCase = mockk()
     private val getTopPicksUseCase: GetTopPicksUseCase = mockk()
     private val connectivityObserver: ConnectivityObserver = mockk()
+    private val worldCapitals: WorldCapitals = mockk()
+    private val deviceLocationProvider: DeviceLocationProvider = mockk()
 
     private lateinit var viewModel: WeatherViewModel
 
+    private val tokyo = Location(
+        -134, "Tokyo", 35.6895, 139.6917, "Japan", "Tokyo", featureCode = "PPLC"
+    )
+    private val paris = Location(
+        -101, "Paris", 48.8566, 2.3522, "France", "Île-de-France", featureCode = "PPLC"
+    )
     private val location = Location(1, "London", 51.5, -0.1, "UK", "England")
     private val forecast = WeatherForecast(
         location = location,
@@ -70,18 +82,26 @@ class WeatherViewModelTest {
         every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
         coEvery { repository.markLocationViewed(any()) } returns Unit
         coEvery { getTopPicksUseCase(any(), any()) } returns emptyList()
-        viewModel = WeatherViewModel(
-            repository,
-            getRankedActivitiesUseCase,
-            getTopPicksUseCase,
-            connectivityObserver
-        )
+        every { worldCapitals.random(any()) } returnsMany listOf(tokyo, paris, tokyo, paris)
+        every { deviceLocationProvider.hasLocationPermission() } returns false
+        coEvery { deviceLocationProvider.getLastKnownLocation() } returns null
+        viewModel = createViewModel()
     }
 
     @After
     fun tearDown() {
         Dispatchers.resetMain()
     }
+
+    private fun createViewModel(): WeatherViewModel = WeatherViewModel(
+        repository,
+        getRankedActivitiesUseCase,
+        getTopPicksUseCase,
+        connectivityObserver,
+        worldCapitals,
+        deviceLocationProvider,
+        Random(0)
+    )
 
     @Test
     fun `when search fails with NoConnectivity emit error state`() = runTest {
@@ -201,12 +221,8 @@ class WeatherViewModelTest {
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Unavailable)
         every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
         coEvery { repository.markLocationViewed(any()) } returns Unit
-        viewModel = WeatherViewModel(
-            repository,
-            getRankedActivitiesUseCase,
-            getTopPicksUseCase,
-            connectivityObserver
-        )
+        every { worldCapitals.random(any()) } returns tokyo
+        viewModel = createViewModel()
         backgroundScope.launch { viewModel.uiState.collect {} }
         advanceUntilIdle()
 
@@ -235,12 +251,8 @@ class WeatherViewModelTest {
         )
         coEvery { getTopPicksUseCase(any(), any()) } returns picks
         every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
-        viewModel = WeatherViewModel(
-            repository,
-            getRankedActivitiesUseCase,
-            getTopPicksUseCase,
-            connectivityObserver
-        )
+        every { worldCapitals.random(any()) } returns tokyo
+        viewModel = createViewModel()
 
         backgroundScope.launch { viewModel.uiState.collect {} }
         advanceTimeBy(500)
@@ -270,12 +282,8 @@ class WeatherViewModelTest {
         coEvery { getTopPicksUseCase(any(), forceRefresh = false) } returns initial
         coEvery { getTopPicksUseCase(any(), forceRefresh = true) } returns refreshed
         every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
-        viewModel = WeatherViewModel(
-            repository,
-            getRankedActivitiesUseCase,
-            getTopPicksUseCase,
-            connectivityObserver
-        )
+        every { worldCapitals.random(any()) } returns tokyo
+        viewModel = createViewModel()
 
         backgroundScope.launch { viewModel.uiState.collect {} }
         advanceTimeBy(500)
@@ -297,12 +305,8 @@ class WeatherViewModelTest {
             Location(1, "London", 51.5, -0.1, "UK", "England")
         )
         every { repository.observeRecentLocations(10) } returns flowOf(history)
-        viewModel = WeatherViewModel(
-            repository,
-            getRankedActivitiesUseCase,
-            getTopPicksUseCase,
-            connectivityObserver
-        )
+        every { worldCapitals.random(any()) } returns tokyo
+        viewModel = createViewModel()
 
         backgroundScope.launch { viewModel.uiState.collect {} }
         advanceUntilIdle()
@@ -362,7 +366,20 @@ class WeatherViewModelTest {
     }
 
     @Test
-    fun `onBack resets map camera to London overview`() = runTest {
+    fun `init centers map on a random capital at home zoom`() = runTest {
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(tokyo.latitude, state.mapCamera.latitude, 0.0)
+        assertEquals(tokyo.longitude, state.mapCamera.longitude, 0.0)
+        assertEquals(MapCameraPosition.HOME_DEFAULT_ZOOM, state.mapCamera.zoom, 0.0)
+        assertNull(state.mapPin)
+        assertNull(state.deviceLocation)
+    }
+
+    @Test
+    fun `onBack centers map on a new random capital at home zoom`() = runTest {
         every { repository.getForecastFlow(location) } returns flowOf(forecast)
         coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
         every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
@@ -377,8 +394,8 @@ class WeatherViewModelTest {
         val state = viewModel.uiState.value
         assertNull(state.selectedLocation)
         assertNull(state.mapPin)
-        assertEquals(MapCameraPosition.LONDON_LAT, state.mapCamera.latitude, 0.0)
-        assertEquals(MapCameraPosition.LONDON_LNG, state.mapCamera.longitude, 0.0)
+        assertEquals(paris.latitude, state.mapCamera.latitude, 0.0)
+        assertEquals(paris.longitude, state.mapCamera.longitude, 0.0)
         assertEquals(MapCameraPosition.HOME_DEFAULT_ZOOM, state.mapCamera.zoom, 0.0)
     }
 
@@ -400,5 +417,77 @@ class WeatherViewModelTest {
         assertEquals(false, state.isResolvingMapTap)
         assertEquals(pinned, state.mapPin)
         io.mockk.coVerify { repository.reverseGeocode(51.5, -0.1) }
+    }
+
+    @Test
+    fun `granted location permission with fix auto-selects device city`() = runTest {
+        val deviceCity = Location(-1_000_001, "Lisbon", 38.7, -9.1, "Portugal", "Lisbon")
+        every { worldCapitals.random(any()) } returns tokyo
+        viewModel = createViewModel()
+
+        every { deviceLocationProvider.hasLocationPermission() } returns true
+        coEvery { deviceLocationProvider.getLastKnownLocation() } returns GeoCoordinates(38.7, -9.1)
+        coEvery { repository.reverseGeocode(38.7, -9.1) } returns Result.Success(deviceCity)
+        every { repository.getForecastFlow(deviceCity) } returns flowOf(forecast.copy(location = deviceCity))
+        coEvery { repository.refreshForecast(deviceCity) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(any(), 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationPermissionResult(granted = true)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(deviceCity, state.deviceLocation)
+        assertEquals(deviceCity, state.selectedLocation)
+        assertEquals(deviceCity, state.mapPin)
+    }
+
+    @Test
+    fun `current location click opens cached device city weather`() = runTest {
+        val deviceCity = Location(-1_000_001, "Lisbon", 38.7, -9.1, "Portugal", "Lisbon")
+        every { deviceLocationProvider.hasLocationPermission() } returns false
+        every { worldCapitals.random(any()) } returnsMany listOf(tokyo, paris)
+        viewModel = createViewModel()
+
+        every { deviceLocationProvider.hasLocationPermission() } returns true
+        coEvery { deviceLocationProvider.getLastKnownLocation() } returns GeoCoordinates(38.7, -9.1)
+        coEvery { repository.reverseGeocode(38.7, -9.1) } returns Result.Success(deviceCity)
+        every { repository.getForecastFlow(deviceCity) } returns flowOf(forecast.copy(location = deviceCity))
+        coEvery { repository.refreshForecast(deviceCity) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(any(), 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationPermissionResult(granted = true)
+        advanceUntilIdle()
+        assertEquals(deviceCity, viewModel.uiState.value.selectedLocation)
+
+        viewModel.onBack()
+        advanceUntilIdle()
+        assertNull(viewModel.uiState.value.selectedLocation)
+        assertEquals(deviceCity, viewModel.uiState.value.deviceLocation)
+
+        viewModel.onCurrentLocationClick()
+        advanceUntilIdle()
+        assertEquals(deviceCity, viewModel.uiState.value.selectedLocation)
+    }
+
+    @Test
+    fun `no device fix leaves chip hidden and keeps capital camera`() = runTest {
+        every { worldCapitals.random(any()) } returns tokyo
+        viewModel = createViewModel()
+        every { deviceLocationProvider.hasLocationPermission() } returns true
+        coEvery { deviceLocationProvider.getLastKnownLocation() } returns null
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationPermissionResult(granted = true)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertNull(state.deviceLocation)
+        assertNull(state.selectedLocation)
+        assertEquals(tokyo.latitude, state.mapCamera.latitude, 0.0)
     }
 }

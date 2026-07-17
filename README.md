@@ -73,7 +73,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Snapshot tests | Done | Paparazzi 2.0.0-alpha05, golden PNGs (home/detail + share card), verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
 | Substantial UI test coverage | Done | ~17 instrumented Compose tests for key flows (home, search, top picks, chips, day selection, back, banners, dark theme) |
 | Share weather card | Done | Detail share → branded 7-day PNG (`GraphicsLayer` + FileProvider); also best-effort save to Downloads |
-| In-screen map | Done | Square MapLibre + OpenFreeMap (no Google key); London home default; tap → Nominatim reverse; camera/pin in ViewModel |
+| In-screen map | Done | Square MapLibre + OpenFreeMap (no Google key); random capital home default (wider zoom); tap → Nominatim reverse; camera/pin in ViewModel |
 
 ## f. API usage notes ☀️
 The application interfaces with three Open-Meteo APIs (No API key required):
@@ -135,7 +135,7 @@ Honest scope note: a **strict 3–4 hour** take would likely stop at search → 
 - **Rate limiting (HTTP)**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present); other failures map to localized error strings.
 
 **Deliberately omitted**
-- Device GPS / current-location weather (brief is city search; map tap uses Nominatim reverse geocode instead).
+- Continuous GPS tracking / background location (home uses last-known fix + optional current-location chip when permission is granted).
 - Google Maps SDK / paid tile API keys (MapLibre + OpenFreeMap + Nominatim cover the stretch map UX).
 - User accounts, favourites persistence, or multi-city compare.
 - Firebase Crashlytics wiring, Play Store assets, and localization beyond English strings.
