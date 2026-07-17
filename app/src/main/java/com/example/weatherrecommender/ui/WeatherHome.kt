@@ -27,11 +27,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -69,7 +73,9 @@ internal fun HomeContent(
     uiState: WeatherUiState,
     onQueryChanged: (String) -> Unit,
     onLocationSelected: (Location) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    isDarkTheme: Boolean = false,
+    onToggleTheme: () -> Unit = {}
 ) {
     PullToRefreshBox(
         isRefreshing = uiState.isRefreshingTopPicks,
@@ -82,17 +88,10 @@ internal fun HomeContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.home_greeting_title),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = stringResource(R.string.home_greeting_subtitle),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+            Spacer(Modifier.height(4.dp))
+            HomeHeader(
+                isDarkTheme = isDarkTheme,
+                onToggleTheme = onToggleTheme
             )
 
             Spacer(Modifier.height(16.dp))
@@ -136,6 +135,52 @@ internal fun HomeContent(
             }
 
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun HomeHeader(
+    isDarkTheme: Boolean,
+    onToggleTheme: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 4.dp)) {
+            Text(
+                text = stringResource(R.string.home_brand_eyebrow),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.home_greeting_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.semantics { heading() }
+            )
+            Text(
+                text = stringResource(R.string.home_greeting_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+            )
+        }
+        IconButton(onClick = onToggleTheme) {
+            Icon(
+                imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                contentDescription = stringResource(
+                    if (isDarkTheme) {
+                        R.string.theme_switch_to_light
+                    } else {
+                        R.string.theme_switch_to_dark
+                    }
+                ),
+                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
+            )
         }
     }
 }
