@@ -6,17 +6,14 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -43,10 +40,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.Location
+import com.example.weatherrecommender.ui.map.WeatherMapSection
 import kotlinx.coroutines.launch
 
 /**
@@ -78,8 +77,8 @@ fun WeatherScreen(
 /**
  * Stateless, testable root of the Weather screen.
  *
- * Home and detail each embed a square map as the first section of their scroll content
- * (not a sticky overlay). Map camera/pin still come from [WeatherUiState] for continuity.
+ * A single [WeatherMapSection] stays fixed above a Crossfade that swaps home vs detail
+ * body content — no full-screen slide, and the map instance is not remounted on select/back.
  * Modes are derived from [WeatherUiState.selectedLocation].
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -160,32 +159,44 @@ fun WeatherScreenContent(
         if (inDetail) {
             BackHandler(onBack = onBack)
         }
-        AnimatedContent(
-            targetState = inDetail,
-            transitionSpec = { homeDetailTransition() },
+        Column(
             modifier = Modifier
                 .padding(padding)
-                .fillMaxSize(),
-            label = "home_detail_transition"
-        ) { detail ->
-            if (detail) {
-                DetailContent(
-                    uiState = uiState,
-                    onDaySelected = onDaySelected,
-                    onRefresh = onRefresh,
-                    onMapTapped = onMapTapped
-                )
-            } else {
-                HomeContent(
-                    uiState = uiState,
-                    onQueryChanged = onQueryChanged,
-                    onLocationSelected = onLocationSelected,
-                    onRefresh = onRefresh,
-                    onMapTapped = onMapTapped,
-                    onCurrentLocationClick = onCurrentLocationClick,
-                    isDarkTheme = isDarkTheme,
-                    onToggleTheme = onToggleTheme
-                )
+                .fillMaxSize()
+        ) {
+            Spacer(Modifier.height(4.dp))
+            WeatherMapSection(
+                camera = uiState.mapCamera,
+                pin = uiState.mapPin,
+                isResolvingTap = uiState.isResolvingMapTap,
+                onMapTap = onMapTapped,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+            Crossfade(
+                targetState = inDetail,
+                animationSpec = tween(BODY_CROSSFADE_MS, easing = FastOutSlowInEasing),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                label = "home_detail_crossfade"
+            ) { detail ->
+                if (detail) {
+                    DetailContent(
+                        uiState = uiState,
+                        onDaySelected = onDaySelected,
+                        onRefresh = onRefresh
+                    )
+                } else {
+                    HomeContent(
+                        uiState = uiState,
+                        onQueryChanged = onQueryChanged,
+                        onLocationSelected = onLocationSelected,
+                        onRefresh = onRefresh,
+                        onCurrentLocationClick = onCurrentLocationClick,
+                        isDarkTheme = isDarkTheme,
+                        onToggleTheme = onToggleTheme
+                    )
+                }
             }
         }
     }
@@ -288,35 +299,4 @@ private fun shareOutcomeMessage(
     else -> saveFailed
 }
 
-private fun AnimatedContentTransitionScope<Boolean>.homeDetailTransition(): ContentTransform {
-    val enterSlide = { width: Int -> width / 5 }
-    val exitSlide = { width: Int -> width / 5 }
-    val easing = FastOutSlowInEasing
-    return if (targetState) {
-        (
-            slideInHorizontally(
-                animationSpec = tween(TRANSITION_MS, easing = easing),
-                initialOffsetX = enterSlide
-            ) + fadeIn(tween(TRANSITION_MS, easing = easing))
-            ).togetherWith(
-            slideOutHorizontally(
-                animationSpec = tween(TRANSITION_MS, easing = easing),
-                targetOffsetX = { -exitSlide(it) }
-            ) + fadeOut(tween(TRANSITION_MS, easing = easing))
-        )
-    } else {
-        (
-            slideInHorizontally(
-                animationSpec = tween(TRANSITION_MS, easing = easing),
-                initialOffsetX = { -enterSlide(it) }
-            ) + fadeIn(tween(TRANSITION_MS, easing = easing))
-            ).togetherWith(
-            slideOutHorizontally(
-                animationSpec = tween(TRANSITION_MS, easing = easing),
-                targetOffsetX = exitSlide
-            ) + fadeOut(tween(TRANSITION_MS, easing = easing))
-        )
-    }
-}
-
-private const val TRANSITION_MS = 380
+private const val BODY_CROSSFADE_MS = 280

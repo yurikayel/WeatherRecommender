@@ -43,10 +43,11 @@ import org.maplibre.spatialk.geojson.Position
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Square map section embedded at the top of home/detail scroll content.
+ * Square map section fixed at the top of [com.example.weatherrecommender.ui.WeatherScreenContent].
  *
- * Camera and pin come from the ViewModel so state survives navigation even when this composable
- * is recreated per screen. Under Paparazzi / inspection mode, renders a lightweight placeholder.
+ * Camera and pin come from the ViewModel; keeping this outside the home/detail Crossfade avoids
+ * remount flash when selecting a city or going back. Under Paparazzi / inspection mode, renders
+ * a lightweight placeholder.
  */
 @Composable
 fun WeatherMapSection(

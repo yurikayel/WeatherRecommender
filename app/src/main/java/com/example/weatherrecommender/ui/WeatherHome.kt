@@ -61,16 +61,15 @@ import androidx.compose.ui.unit.dp
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.TopPick
-import com.example.weatherrecommender.ui.map.WeatherMapSection
 import com.example.weatherrecommender.ui.util.asUiText
 import com.example.weatherrecommender.ui.util.weatherCodeDescription
 import com.example.weatherrecommender.ui.util.weatherCodeIcon
 import kotlin.math.roundToInt
 
 /**
- * The home screen: square map, greeting, search, and population-weighted "top picks".
+ * Home body below the fixed map: greeting, search, and population-weighted "top picks".
  * Pull-to-refresh force-refreshes top picks (bypasses the in-memory TTL cache).
- * The map scrolls with content (not sticky).
+ * The map lives in [WeatherScreenContent] so it stays mounted across home↔detail.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,7 +78,6 @@ internal fun HomeContent(
     onQueryChanged: (String) -> Unit,
     onLocationSelected: (Location) -> Unit,
     onRefresh: () -> Unit,
-    onMapTapped: (Double, Double) -> Unit = { _, _ -> },
     onCurrentLocationClick: () -> Unit = {},
     isDarkTheme: Boolean = false,
     onToggleTheme: () -> Unit = {}
@@ -95,14 +93,7 @@ internal fun HomeContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(Modifier.height(4.dp))
-            WeatherMapSection(
-                camera = uiState.mapCamera,
-                pin = uiState.mapPin,
-                isResolvingTap = uiState.isResolvingMapTap,
-                onMapTap = onMapTapped
-            )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
             HomeHeader(
                 currentLocationCity = uiState.deviceLocation?.name,
                 onCurrentLocationClick = onCurrentLocationClick,

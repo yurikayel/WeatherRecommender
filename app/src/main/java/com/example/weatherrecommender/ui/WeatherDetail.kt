@@ -63,7 +63,6 @@ import com.example.weatherrecommender.theme.PastelSunnyDark
 import com.example.weatherrecommender.theme.PastelSunnyLight
 import com.example.weatherrecommender.theme.PastelThunderDark
 import com.example.weatherrecommender.theme.PastelThunderLight
-import com.example.weatherrecommender.ui.map.WeatherMapSection
 import com.example.weatherrecommender.ui.util.WeatherUiCategory
 import com.example.weatherrecommender.ui.util.asUiText
 import com.example.weatherrecommender.ui.util.isoDateToDayOfMonth
@@ -78,17 +77,16 @@ private val DayChipWidth = 72.dp
 private val DayChipHeight = 120.dp
 
 /**
- * The city detail screen: square map, geography chips, day selector, and ranked activities.
- * The map scrolls with content (not sticky). Tapping a day re-ranks activities
- * (handled by [WeatherViewModel.onDaySelected]).
+ * Detail body below the fixed map: geography chips, day selector, and ranked activities.
+ * The map lives in [WeatherScreenContent] so it stays mounted across home↔detail.
+ * Tapping a day re-ranks activities (handled by [WeatherViewModel.onDaySelected]).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DetailContent(
     uiState: WeatherUiState,
     onDaySelected: (Int) -> Unit,
-    onRefresh: () -> Unit,
-    onMapTapped: (Double, Double) -> Unit = { _, _ -> }
+    onRefresh: () -> Unit
 ) {
     PullToRefreshBox(
         isRefreshing = uiState.isLoadingForecast && uiState.forecast != null,
@@ -101,14 +99,7 @@ internal fun DetailContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(Modifier.height(4.dp))
-            WeatherMapSection(
-                camera = uiState.mapCamera,
-                pin = uiState.mapPin,
-                isResolvingTap = uiState.isResolvingMapTap,
-                onMapTap = onMapTapped
-            )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
             uiState.selectedLocation?.let { GeoChipsRow(it) }
 
             if (uiState.isLoadingForecast && uiState.forecast == null) {
