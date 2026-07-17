@@ -94,6 +94,8 @@ data class WeatherUiState(
  */
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
+// Map/GPS/history grew the event surface; no clean collaborator split without fragmenting UDF.
+@Suppress("TooManyFunctions")
 class WeatherViewModel @Inject constructor(
     private val repository: WeatherRepository,
     private val getRankedActivities: GetRankedActivitiesUseCase,
