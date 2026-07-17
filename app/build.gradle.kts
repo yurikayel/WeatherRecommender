@@ -1,13 +1,12 @@
 plugins {
   alias(libs.plugins.android.application)
-  alias(libs.plugins.kotlin.android)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.hilt)
   alias(libs.plugins.ksp)
   alias(libs.plugins.kover)
   alias(libs.plugins.detekt)
-  id("app.cash.paparazzi") version "1.3.4"
+  alias(libs.plugins.paparazzi)
 }
 
 android {
@@ -29,8 +28,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
     buildFeatures {
       compose = true
@@ -51,7 +50,7 @@ android {
     }
 
     sourceSets {
-        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        getByName("androidTest").assets.directories.add("$projectDir/schemas")
     }
 }
 
@@ -60,14 +59,28 @@ ksp {
 }
 
 kotlin {
-    jvmToolchain(17)
+    // Paparazzi 2.0.0-alpha05 requires Java 21+ at test runtime.
+    jvmToolchain(21)
 }
 
 kover {
     reports {
         total {
+            filters {
+                includes {
+                    packages("com.example.weatherrecommender.domain.*")
+                    packages("com.example.weatherrecommender.data.*")
+                }
+            }
             xml {
                 onCheck = true
+            }
+        }
+        verify {
+            rule("domain-data-line-coverage") {
+                bound {
+                    minValue = 65
+                }
             }
         }
     }
@@ -98,7 +111,7 @@ dependencies {
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.material.icons.core)
-  implementation("androidx.compose.material:material-icons-extended")
+  implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.ui.text.google.fonts)
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
@@ -132,11 +145,12 @@ dependencies {
   // Hilt
   implementation(libs.hilt.android)
   ksp(libs.hilt.compiler)
-  implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+  implementation(libs.androidx.hilt.navigation.compose)
 
   // Extra testing
   testImplementation(libs.turbine)
   testImplementation(libs.mockk)
+  testImplementation(libs.okhttp.mockwebserver)
 
   androidTestImplementation(libs.androidx.room.testing)
 }
@@ -145,4 +159,6 @@ tasks.withType<Test>().configureEach {
     if (!project.hasProperty("paparazzi")) {
         exclude("**/WeatherScreenSnapshotTest.class")
     }
+    // Paparazzi + Gradle 9: disable HTML test reports to avoid internal API breakage.
+    reports.html.required.set(false)
 }
