@@ -1,5 +1,6 @@
 package com.example.weatherrecommender.ui
 
+import android.Manifest
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.rule.GrantPermissionRule
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
@@ -27,6 +29,17 @@ class WeatherScreenTest {
 
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    /**
+     * WeatherScreenContent auto-requests location permission on first composition; without a
+     * prior grant the system dialog covers the compose host and every subsequent test fails
+     * with "No compose hierarchies found".
+     */
+    @get:Rule
+    val locationPermissionRule: GrantPermissionRule = GrantPermissionRule.grant(
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+    )
 
     private val london = Location(1, "London", 51.5, -0.1, "UK", "England", elevation = 25.0)
     private val lisbon = Location(
