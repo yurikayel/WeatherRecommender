@@ -35,4 +35,15 @@ interface WeatherRepository {
      * @return An [AppResult] indicating success or failure.
      */
     suspend fun refreshForecast(location: Location): AppResult<Unit>
+
+    /**
+     * Fetches a forecast for a location directly from the network without touching the cache.
+     *
+     * Used for transient, read-only needs such as building the home screen's "top picks", where
+     * persisting every previewed city would pollute the offline cache.
+     *
+     * @param location The target location.
+     * @return An [AppResult] containing the freshly fetched [WeatherForecast].
+     */
+    suspend fun getForecastRemote(location: Location): AppResult<WeatherForecast>
 }

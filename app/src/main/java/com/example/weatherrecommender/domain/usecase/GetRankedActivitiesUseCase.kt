@@ -1,32 +1,36 @@
 package com.example.weatherrecommender.domain.usecase
 
+import com.example.weatherrecommender.domain.model.ActivityContext
 import com.example.weatherrecommender.domain.model.RankedActivity
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.usecase.scorer.ActivityScorer
 import javax.inject.Inject
 
 /**
- * Evaluates and ranks all supported activities based on a 7-day weather forecast.
+ * Evaluates and ranks the activities that make sense for a location on a single day.
  *
- * Utilizes the Strategy pattern by injecting a set of [ActivityScorer]s.
- * Each scorer evaluates its specific activity independently, satisfying the Open/Closed Principle.
+ * Uses the Strategy pattern by injecting a set of [ActivityScorer]s. Each scorer decides whether
+ * it applies to the location's geography and, if so, scores the given day independently. This
+ * satisfies the Open/Closed Principle: adding a new activity means adding a new scorer.
  */
 class GetRankedActivitiesUseCase @Inject constructor(
     private val scorers: Set<@JvmSuppressWildcards ActivityScorer>
 ) {
 
     /**
-     * Executes the ranking algorithm across all injected scorers.
+     * Ranks the applicable activities for the day at [dayIndex] of the [forecast].
      *
-     * @param forecast The target 7-day forecast.
-     * @return A list of [RankedActivity] sorted by score in descending order.
+     * @param forecast The forecast whose location and days are being evaluated.
+     * @param dayIndex Index into [WeatherForecast.dailyForecasts]; defaults to the first day.
+     * @return Applicable [RankedActivity]s sorted by score descending, or empty if the day is missing.
      */
-    operator fun invoke(forecast: WeatherForecast): List<RankedActivity> {
-        val dailyForecasts = forecast.dailyForecasts
-        if (dailyForecasts.isEmpty()) return emptyList()
+    operator fun invoke(forecast: WeatherForecast, dayIndex: Int = 0): List<RankedActivity> {
+        val day = forecast.dailyForecasts.getOrNull(dayIndex) ?: return emptyList()
+        val context = ActivityContext(location = forecast.location, day = day)
 
-        return scorers.map { scorer ->
-            scorer.score(dailyForecasts)
-        }.sortedByDescending { it.score }
+        return scorers
+            .filter { it.isApplicable(context) }
+            .map { it.score(context) }
+            .sortedByDescending { it.score }
     }
 }
