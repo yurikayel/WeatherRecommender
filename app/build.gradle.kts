@@ -65,13 +65,13 @@ kotlin {
 
 kover {
     reports {
-        total {
-            filters {
-                includes {
-                    packages("com.example.weatherrecommender.domain.*")
-                    packages("com.example.weatherrecommender.data.*")
-                }
+        filters {
+            includes {
+                packages("com.example.weatherrecommender.domain.*")
+                packages("com.example.weatherrecommender.data.*")
             }
+        }
+        total {
             xml {
                 onCheck = true
             }
