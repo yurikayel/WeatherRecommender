@@ -11,6 +11,7 @@ import com.example.weatherrecommender.domain.model.Result
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
 import com.example.weatherrecommender.domain.usecase.GetRankedActivitiesUseCase
+import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
 import com.example.weatherrecommender.domain.util.ConnectivityObserver
 import com.example.weatherrecommender.domain.util.ConnectivityStatus
 import io.mockk.coEvery
@@ -41,6 +42,7 @@ class WeatherViewModelTest {
 
     private val repository: WeatherRepository = mockk()
     private val getRankedActivitiesUseCase: GetRankedActivitiesUseCase = mockk()
+    private val getTopPicksUseCase: GetTopPicksUseCase = mockk()
     private val connectivityObserver: ConnectivityObserver = mockk()
 
     private lateinit var viewModel: WeatherViewModel
@@ -49,18 +51,28 @@ class WeatherViewModelTest {
     private val forecast = WeatherForecast(
         location = location,
         dailyForecasts = listOf(
-            DailyForecast("2026-07-16", 0, 22.0, 12.0, 0.0, 0.0, 10.0)
+            DailyForecast("2026-07-16", 0, 22.0, 12.0, 0.0, 0.0, 10.0),
+            DailyForecast("2026-07-17", 61, 14.0, 9.0, 20.0, 0.0, 12.0)
         )
     )
-    private val rankedActivities = listOf(
+    private val day0Activities = listOf(
         RankedActivity(RecommendedActivity.OUTDOOR_SIGHTSEEING, 90, ReasonKey.OUTDOOR_MILD, listOf(22))
+    )
+    private val day1Activities = listOf(
+        RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 95, ReasonKey.INDOOR_BAD_WEATHER)
     )
 
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Available)
-        viewModel = WeatherViewModel(repository, getRankedActivitiesUseCase, connectivityObserver)
+        coEvery { getTopPicksUseCase(any()) } returns emptyList()
+        viewModel = WeatherViewModel(
+            repository,
+            getRankedActivitiesUseCase,
+            getTopPicksUseCase,
+            connectivityObserver
+        )
     }
 
     @After
@@ -108,10 +120,10 @@ class WeatherViewModelTest {
     }
 
     @Test
-    fun `location selection loads forecast from repository flow`() = runTest {
+    fun `location selection loads forecast and ranks the first day`() = runTest {
         every { repository.getForecastFlow(location) } returns flowOf(forecast)
         coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
-        every { getRankedActivitiesUseCase.invoke(forecast) } returns rankedActivities
+        every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
 
         backgroundScope.launch { viewModel.uiState.collect {} }
 
@@ -121,14 +133,54 @@ class WeatherViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(location, state.selectedLocation)
         assertNotNull(state.forecast)
-        assertEquals(rankedActivities, state.rankedActivities)
+        assertEquals(0, state.selectedDayIndex)
+        assertEquals(day0Activities, state.rankedActivities)
+    }
+
+    @Test
+    fun `selecting a different day re-ranks activities without network`() = runTest {
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
+        every { getRankedActivitiesUseCase.invoke(forecast, 1) } returns day1Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationSelected(location)
+        advanceUntilIdle()
+
+        viewModel.onDaySelected(1)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.selectedDayIndex)
+        assertEquals(day1Activities, state.rankedActivities)
+    }
+
+    @Test
+    fun `onBack returns to the home screen`() = runTest {
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationSelected(location)
+        advanceUntilIdle()
+        viewModel.onBack()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertNull(state.selectedLocation)
+        assertNull(state.forecast)
+        assertTrue(state.rankedActivities.isEmpty())
     }
 
     @Test
     fun `refresh failure with cached data sets syncError not blocking error`() = runTest {
         every { repository.getForecastFlow(location) } returns flowOf(forecast)
         coEvery { repository.refreshForecast(location) } returns Result.Error(AppError.NetworkError.NoConnectivity)
-        every { getRankedActivitiesUseCase.invoke(forecast) } returns rankedActivities
+        every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
 
         backgroundScope.launch { viewModel.uiState.collect {} }
 
@@ -144,13 +196,18 @@ class WeatherViewModelTest {
     @Test
     fun `refresh when offline sets syncError`() = runTest {
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Unavailable)
-        viewModel = WeatherViewModel(repository, getRankedActivitiesUseCase, connectivityObserver)
+        viewModel = WeatherViewModel(
+            repository,
+            getRankedActivitiesUseCase,
+            getTopPicksUseCase,
+            connectivityObserver
+        )
         backgroundScope.launch { viewModel.uiState.collect {} }
         advanceUntilIdle()
 
         every { repository.getForecastFlow(location) } returns flowOf(forecast)
         coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
-        every { getRankedActivitiesUseCase.invoke(forecast) } returns rankedActivities
+        every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
 
         viewModel.onLocationSelected(location)
         advanceUntilIdle()
@@ -159,5 +216,30 @@ class WeatherViewModelTest {
         advanceUntilIdle()
 
         assertNotNull(viewModel.uiState.value.syncError)
+    }
+
+    @Test
+    fun `top picks are loaded on init`() = runTest {
+        val picks = listOf(
+            com.example.weatherrecommender.domain.model.TopPick(
+                location = Location(2, "Lisbon", 38.7, -9.1, "Portugal", null, hasSeaAccess = true),
+                topActivity = RankedActivity(RecommendedActivity.SURFING, 88, ReasonKey.SURF_IDEAL, listOf(90, 10)),
+                weatherCode = 0,
+                maxTemp = 26.0
+            )
+        )
+        coEvery { getTopPicksUseCase(any()) } returns picks
+        viewModel = WeatherViewModel(
+            repository,
+            getRankedActivitiesUseCase,
+            getTopPicksUseCase,
+            connectivityObserver
+        )
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceTimeBy(500)
+        advanceUntilIdle()
+
+        assertEquals(picks, viewModel.uiState.value.topPicks)
     }
 }

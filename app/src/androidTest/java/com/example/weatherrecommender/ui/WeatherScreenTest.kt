@@ -1,18 +1,25 @@
 package com.example.weatherrecommender.ui
 
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
 import com.example.weatherrecommender.domain.model.ReasonKey
 import com.example.weatherrecommender.domain.model.RecommendedActivity
+import com.example.weatherrecommender.domain.model.TopPick
 import com.example.weatherrecommender.domain.model.WeatherForecast
+import com.example.weatherrecommender.theme.WeatherRecommenderTheme
+import com.example.weatherrecommender.ui.util.UiText
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import androidx.test.ext.junit.runners.AndroidJUnit4
 
 @RunWith(AndroidJUnit4::class)
 class WeatherScreenTest {
@@ -20,74 +27,287 @@ class WeatherScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    @Test
-    fun searchBar_isDisplayed() {
-        composeTestRule.setContent {
-            WeatherScreenContent(
-                uiState = WeatherUiState(),
-                onQueryChanged = {},
-                onLocationSelected = {},
-                onRefresh = {}
-            )
-        }
+    private val london = Location(1, "London", 51.5, -0.1, "UK", "England", elevation = 25.0)
+    private val lisbon = Location(
+        id = 2, name = "Lisbon", latitude = 38.7, longitude = -9.1,
+        country = "Portugal", admin1 = "Lisbon", elevation = 68.0, hasSeaAccess = true
+    )
 
-        composeTestRule.onNodeWithText("Search a city...").assertIsDisplayed()
+    private val twoDayForecast = WeatherForecast(
+        location = london,
+        dailyForecasts = listOf(
+            DailyForecast("2026-07-16", 0, 25.0, 15.0, 0.0, 0.0, 10.0),
+            DailyForecast("2026-07-17", 61, 14.0, 9.0, 20.0, 0.0, 12.0)
+        )
+    )
+
+    private val outdoorActivity = RankedActivity(
+        activity = RecommendedActivity.OUTDOOR_SIGHTSEEING,
+        score = 95,
+        reasonKey = ReasonKey.OUTDOOR_MILD,
+        reasonArgs = listOf(22)
+    )
+
+    private fun setContent(
+        state: WeatherUiState,
+        darkTheme: Boolean = false,
+        onQueryChanged: (String) -> Unit = {},
+        onLocationSelected: (Location) -> Unit = {},
+        onDaySelected: (Int) -> Unit = {},
+        onBack: () -> Unit = {}
+    ) {
+        composeTestRule.setContent {
+            WeatherRecommenderTheme(darkTheme = darkTheme) {
+                WeatherScreenContent(
+                    uiState = state,
+                    onQueryChanged = onQueryChanged,
+                    onLocationSelected = onLocationSelected,
+                    onDaySelected = onDaySelected,
+                    onBack = onBack,
+                    onRefresh = {}
+                )
+            }
+        }
+    }
+
+    // --- Home ---
+
+    @Test
+    fun home_showsSearchBarAndGreeting() {
+        setContent(WeatherUiState())
+
+        composeTestRule.onNodeWithText("Search a city…").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Where to next?").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Top picks for you").assertIsDisplayed()
     }
 
     @Test
-    fun searchResults_areDisplayed() {
-        val locations = listOf(
-            Location(id = 1, name = "London", latitude = 51.5, longitude = -0.1, country = "UK", admin1 = "England"),
-            Location(id = 2, name = "Paris", latitude = 48.8, longitude = 2.3, country = "France", admin1 = "Ile-de-France")
-        )
+    fun home_typingInSearchBar_invokesQueryCallback() {
+        var lastQuery = ""
+        setContent(WeatherUiState(), onQueryChanged = { lastQuery = it })
 
-        composeTestRule.setContent {
-            WeatherScreenContent(
-                uiState = WeatherUiState(searchResults = locations, query = "Lon"),
-                onQueryChanged = {},
-                onLocationSelected = {},
-                onRefresh = {}
+        composeTestRule.onNodeWithText("Search a city…").performTextInput("Lis")
+
+        assertEquals("Lis", lastQuery)
+    }
+
+    @Test
+    fun home_clearButton_shownWhenQueryPresent_andClears() {
+        var lastQuery = "unchanged"
+        setContent(WeatherUiState(query = "Lon"), onQueryChanged = { lastQuery = it })
+
+        composeTestRule.onNodeWithContentDescription("Clear search").performClick()
+
+        assertEquals("", lastQuery)
+    }
+
+    @Test
+    fun home_emptyTopPicks_showsOfflineHint() {
+        setContent(WeatherUiState(topPicks = emptyList(), isLoadingTopPicks = false))
+
+        composeTestRule
+            .onNodeWithText("Connect to the internet to see today's suggestions.")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun home_topPicks_displayCityAndBestActivity() {
+        val picks = listOf(
+            TopPick(
+                location = lisbon,
+                topActivity = RankedActivity(RecommendedActivity.SURFING, 88, ReasonKey.SURF_IDEAL, listOf(90, 8)),
+                weatherCode = 0,
+                maxTemp = 27.0
             )
-        }
+        )
+        setContent(WeatherUiState(topPicks = picks))
+
+        composeTestRule.onNodeWithText("Lisbon").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Portugal").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Surfing").assertIsDisplayed()
+        composeTestRule.onNodeWithText("27°").assertIsDisplayed()
+    }
+
+    @Test
+    fun home_tappingTopPick_invokesLocationSelected() {
+        var selected: Location? = null
+        val picks = listOf(
+            TopPick(
+                location = lisbon,
+                topActivity = RankedActivity(RecommendedActivity.SURFING, 88, ReasonKey.SURF_IDEAL, listOf(90, 8)),
+                weatherCode = 0,
+                maxTemp = 27.0
+            )
+        )
+        setContent(WeatherUiState(topPicks = picks), onLocationSelected = { selected = it })
+
+        composeTestRule.onNodeWithText("Lisbon").performClick()
+
+        assertEquals(lisbon, selected)
+    }
+
+    @Test
+    fun home_error_isDisplayed() {
+        setContent(WeatherUiState(error = UiText.DynamicString("City not found")))
+
+        composeTestRule.onNodeWithText("Error: City not found").assertIsDisplayed()
+    }
+
+    // --- Search results ---
+
+    @Test
+    fun search_results_areDisplayed() {
+        val locations = listOf(
+            london,
+            Location(3, "Paris", 48.8, 2.3, "France", "Ile-de-France")
+        )
+        setContent(WeatherUiState(searchResults = locations, query = "Lon"))
 
         composeTestRule.onNodeWithText("📍 London, England, UK").assertIsDisplayed()
         composeTestRule.onNodeWithText("📍 Paris, Ile-de-France, France").assertIsDisplayed()
     }
 
     @Test
-    fun forecast_andActivities_areDisplayed() {
-        val location = Location(id = 1, name = "London", latitude = 51.5, longitude = -0.1, country = "UK", admin1 = "England")
-        val daily = DailyForecast(
-            date = "2026-07-16",
-            weatherCode = 0,
-            maxTemp = 25.0,
-            minTemp = 15.0,
-            precipitationSum = 0.0,
-            snowfallSum = 0.0,
-            maxWindSpeed = 10.0
-        )
-        val forecast = WeatherForecast(location = location, dailyForecasts = listOf(daily))
-        val activity = RankedActivity(
-            activity = RecommendedActivity.OUTDOOR_SIGHTSEEING,
-            score = 95,
-            reasonKey = ReasonKey.OUTDOOR_MILD,
-            reasonArgs = listOf(22)
+    fun search_tappingResult_invokesLocationSelected() {
+        var selected: Location? = null
+        setContent(
+            WeatherUiState(searchResults = listOf(london), query = "Lon"),
+            onLocationSelected = { selected = it }
         )
 
-        composeTestRule.setContent {
-            WeatherScreenContent(
-                uiState = WeatherUiState(
-                    forecast = forecast,
-                    rankedActivities = listOf(activity)
-                ),
-                onQueryChanged = {},
-                onLocationSelected = {},
-                onRefresh = {}
+        composeTestRule.onNodeWithText("📍 London, England, UK").performClick()
+
+        assertEquals(london, selected)
+    }
+
+    // --- Detail ---
+
+    @Test
+    fun detail_showsCityTitleDaySelectorAndActivities() {
+        setContent(
+            WeatherUiState(
+                selectedLocation = london,
+                forecast = twoDayForecast,
+                selectedDayIndex = 0,
+                rankedActivities = listOf(outdoorActivity)
             )
-        }
+        )
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
-        composeTestRule.onNodeWithText("7-Day Forecast").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Pick a day").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Outdoor Sightseeing").assertIsDisplayed()
+        composeTestRule.onNodeWithText("95").assertIsDisplayed()
+    }
+
+    @Test
+    fun detail_showsGeographyChips() {
+        setContent(
+            WeatherUiState(
+                selectedLocation = lisbon,
+                forecast = twoDayForecast.copy(location = lisbon),
+                rankedActivities = listOf(outdoorActivity)
+            )
+        )
+
+        composeTestRule.onNodeWithText("Coastal").assertIsDisplayed()
+        composeTestRule.onNodeWithText("68 m elevation").assertIsDisplayed()
+    }
+
+    @Test
+    fun detail_inlandCity_showsInlandChip() {
+        setContent(
+            WeatherUiState(
+                selectedLocation = london,
+                forecast = twoDayForecast,
+                rankedActivities = listOf(outdoorActivity)
+            )
+        )
+
+        composeTestRule.onNodeWithText("Inland").assertIsDisplayed()
+    }
+
+    @Test
+    fun detail_tappingDay_invokesDaySelectedWithIndex() {
+        var selectedDay = -1
+        setContent(
+            WeatherUiState(
+                selectedLocation = london,
+                forecast = twoDayForecast,
+                selectedDayIndex = 0,
+                rankedActivities = listOf(outdoorActivity)
+            ),
+            onDaySelected = { selectedDay = it }
+        )
+
+        // Day-of-month "17" belongs to the second forecast day.
+        composeTestRule.onNodeWithText("17").performClick()
+
+        assertEquals(1, selectedDay)
+    }
+
+    @Test
+    fun detail_backButton_invokesOnBack() {
+        var backCalled = false
+        setContent(
+            WeatherUiState(
+                selectedLocation = london,
+                forecast = twoDayForecast,
+                rankedActivities = listOf(outdoorActivity)
+            ),
+            onBack = { backCalled = true }
+        )
+
+        composeTestRule.onNodeWithContentDescription("Back").performClick()
+
+        assertEquals(true, backCalled)
+    }
+
+    @Test
+    fun detail_syncError_showsBanner() {
+        setContent(
+            WeatherUiState(
+                selectedLocation = london,
+                forecast = twoDayForecast,
+                rankedActivities = listOf(outdoorActivity),
+                syncError = UiText.DynamicString("No internet connection. Showing offline data.")
+            )
+        )
+
+        composeTestRule
+            .onNodeWithText(
+                "⚠️ Offline Mode: No internet connection. Showing offline data.",
+                substring = true
+            )
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun detail_blockingError_isDisplayed() {
+        setContent(
+            WeatherUiState(
+                selectedLocation = london,
+                isLoadingForecast = false,
+                error = UiText.DynamicString("Server error")
+            )
+        )
+
+        composeTestRule.onNodeWithText("Error: Server error").assertIsDisplayed()
+    }
+
+    // --- Dark mode smoke ---
+
+    @Test
+    fun darkTheme_rendersHomeAndDetail() {
+        setContent(
+            WeatherUiState(
+                selectedLocation = london,
+                forecast = twoDayForecast,
+                rankedActivities = listOf(outdoorActivity)
+            ),
+            darkTheme = true
+        )
+
+        composeTestRule.onNodeWithText("London").assertIsDisplayed()
         composeTestRule.onNodeWithText("Outdoor Sightseeing").assertIsDisplayed()
     }
 }

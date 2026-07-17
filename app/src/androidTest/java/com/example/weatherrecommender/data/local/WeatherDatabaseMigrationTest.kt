@@ -81,6 +81,78 @@ class WeatherDatabaseMigrationTest {
         db.close()
     }
 
+    @Test
+    fun migrate2To3_addsGeographyAndWaveColumns() {
+        helper.createDatabase(TEST_DB, 2).apply {
+            execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS location_entity (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    latitude REAL NOT NULL,
+                    longitude REAL NOT NULL,
+                    country TEXT NOT NULL,
+                    admin1 TEXT,
+                    lastUpdated INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS daily_forecast_entity (
+                    locationId INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    maxTemp REAL NOT NULL,
+                    minTemp REAL NOT NULL,
+                    weatherCode INTEGER NOT NULL DEFAULT 0,
+                    precipitationSum REAL NOT NULL,
+                    maxWindSpeed REAL NOT NULL,
+                    snowfallSum REAL NOT NULL DEFAULT 0.0,
+                    PRIMARY KEY(locationId, date)
+                )
+                """.trimIndent()
+            )
+            execSQL(
+                """
+                INSERT INTO location_entity (id, name, latitude, longitude, country, admin1, lastUpdated)
+                VALUES (1, 'Lisbon', 38.7, -9.1, 'Portugal', 'Lisbon', 1)
+                """.trimIndent()
+            )
+            execSQL(
+                """
+                INSERT INTO daily_forecast_entity (
+                    locationId, date, maxTemp, minTemp, weatherCode, precipitationSum, maxWindSpeed, snowfallSum
+                ) VALUES (1, '2026-07-16', 27.0, 19.0, 0, 0.0, 10.0, 0.0)
+                """.trimIndent()
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB,
+            3,
+            false,
+            WeatherDatabase.MIGRATION_2_3
+        )
+
+        db.query(
+            "SELECT elevation, population, featureCode, hasSeaAccess FROM location_entity WHERE id = 1"
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertTrue(cursor.getColumnIndex("elevation") >= 0)
+            assertTrue(cursor.getColumnIndex("population") >= 0)
+            assertTrue(cursor.getColumnIndex("featureCode") >= 0)
+            assertTrue(cursor.getColumnIndex("hasSeaAccess") >= 0)
+        }
+        db.query(
+            "SELECT waveHeightMax FROM daily_forecast_entity WHERE locationId = 1"
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertTrue(cursor.getColumnIndex("waveHeightMax") >= 0)
+        }
+        db.close()
+    }
+
     private companion object {
         const val TEST_DB = "migration-test"
     }
