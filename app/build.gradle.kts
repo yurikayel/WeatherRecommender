@@ -12,11 +12,11 @@ plugins {
 
 android {
     namespace = "com.example.weatherrecommender"
-    compileSdk = 37
+    compileSdk = 36
     defaultConfig {
         applicationId = "com.weatherrecommender.concierge"
         minSdk = 24
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
