@@ -11,12 +11,12 @@ data class MapCameraPosition(
 ) {
     companion object {
         /**
-         * Home default: centered on London with zoom out enough that Paris sits near the
-         * SE corner of a square, phone-width MapLibre viewport (~980 px).
+         * Fallback home framing (London) used by Compose previews / snapshot defaults.
+         * Runtime home camera is set by [com.example.weatherrecommender.ui.WeatherViewModel]
+         * to a random capital or the device location.
          *
-         * London ≈ 51.51°N, 0.13°W; Paris ≈ 48.85°N, 2.35°E (Δlat ≈ 2.65°, Δlng ≈ 2.48°).
-         * At MapLibre zoom 7 on a ~980 px square (512 px tiles), half-span ≈ 2.7° — Paris
-         * lands near the edge. Zoom 5–6 would leave Paris mid-quadrant on a full-width square.
+         * Zoom values are ~30% further out than the previous 7.0 / 8.5 / 9.0 set
+         * (× 0.7) so the visible area grows roughly 30% at each level.
          */
         val DEFAULT = MapCameraPosition(
             latitude = LONDON_LAT,
@@ -25,13 +25,15 @@ data class MapCameraPosition(
         )
 
         /** City overview — neighboring cities stay visible (not street-level). */
-        const val CITY_ZOOM = 8.5
+        const val CITY_ZOOM = 6.0
 
         /** Slightly closer when a city is selected, still regional overview. */
-        const val DETAIL_ZOOM = 9.0
+        const val DETAIL_ZOOM = 6.3
 
         const val LONDON_LAT = 51.5074
         const val LONDON_LNG = -0.1278
-        const val HOME_DEFAULT_ZOOM = 7.0
+
+        /** Home / overview zoom (~7.0 × 0.7). */
+        const val HOME_DEFAULT_ZOOM = 4.9
     }
 }
