@@ -48,7 +48,7 @@
     <string name="share_card_hero_conditions">%1$s · low %2$d°</string>
     <string name="share_card_footer">Concierge Weather · Weather data by Open-Meteo</string>
 
-    <!-- Collapsing map AppBar (attribution also in README / MapLibre logo) -->
+    <!-- Collapsing map background (attribution also in README / MapLibre logo / home footer) -->
     <string name="map_content_description">Map for choosing a city. Tap or long-press to select a location.</string>
     <string name="map_attribution">© OpenStreetMap · © OpenFreeMap · Nominatim</string>
     <string name="map_placeholder_label">Map</string>

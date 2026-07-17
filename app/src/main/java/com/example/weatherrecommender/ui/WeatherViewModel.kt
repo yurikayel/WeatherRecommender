@@ -44,8 +44,8 @@ import kotlin.time.Duration.Companion.milliseconds
  *  - **Detail** (`selectedLocation != null`): the forecast with a per-day selector; [rankedActivities]
  *    always reflects [selectedDayIndex].
  *
- * The map is driven by [mapCamera] / [mapPin]; each screen embeds it at the top of its scroll
- * content while this state keeps camera/pin continuous across home↔detail.
+ * The map is driven by [mapCamera] / [mapPin]; [WeatherScreenContent] keeps a single map instance
+ * mounted as the collapsing background while the sheet body Crossfades home↔detail.
  *
  * @property query The current search query.
  * @property isSearching True if a search request is in-flight.

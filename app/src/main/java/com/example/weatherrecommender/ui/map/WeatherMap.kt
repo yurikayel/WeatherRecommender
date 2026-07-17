@@ -36,12 +36,13 @@ import org.maplibre.spatialk.geojson.Position
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * MapLibre map used as the collapsing AppBar background in
+ * MapLibre map used as the collapsing 1:1 background in
  * [com.example.weatherrecommender.ui.WeatherScreenContent].
  *
- * Height is owned by the parent (expanded 1:1, collapsing to a compact toolbar). Keeping this
- * outside the home/detail Crossfade avoids remount flash when selecting a city or going back.
- * Under Paparazzi / inspection mode, renders a lightweight placeholder.
+ * Height is owned by the parent (expanded square, collapsing to fully hidden). Chrome (city label,
+ * theme toggle, back, share) lives in the sheet header below — nothing is drawn over the map.
+ * Keeping this outside the home/detail Crossfade avoids remount flash when selecting a city or
+ * going back. Under Paparazzi / inspection mode, renders a lightweight placeholder.
  *
  * Legal tile attribution is via MapLibre's built-in logo ornament plus README / discreet footer —
  * no on-map overlay text.
