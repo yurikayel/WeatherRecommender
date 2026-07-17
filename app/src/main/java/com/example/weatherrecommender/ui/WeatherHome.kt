@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +40,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -78,6 +80,7 @@ internal fun HomeContent(
     onLocationSelected: (Location) -> Unit,
     onRefresh: () -> Unit,
     onMapTapped: (Double, Double) -> Unit = { _, _ -> },
+    onCurrentLocationClick: () -> Unit = {},
     isDarkTheme: Boolean = false,
     onToggleTheme: () -> Unit = {}
 ) {
@@ -101,6 +104,8 @@ internal fun HomeContent(
             )
             Spacer(Modifier.height(16.dp))
             HomeHeader(
+                currentLocationCity = uiState.deviceLocation?.name,
+                onCurrentLocationClick = onCurrentLocationClick,
                 isDarkTheme = isDarkTheme,
                 onToggleTheme = onToggleTheme
             )
@@ -167,45 +172,91 @@ internal fun HomeContent(
 
 @Composable
 private fun HomeHeader(
+    currentLocationCity: String?,
+    onCurrentLocationClick: () -> Unit,
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
-    ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 4.dp)) {
-            Text(
-                text = stringResource(R.string.home_brand_eyebrow),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.home_greeting_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.semantics { heading() }
-            )
-            Text(
-                text = stringResource(R.string.home_greeting_subtitle),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 4.dp)) {
+                Text(
+                    text = stringResource(R.string.home_brand_eyebrow),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.home_greeting_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.semantics { heading() }
+                )
+                Text(
+                    text = stringResource(R.string.home_greeting_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+            }
+            IconButton(onClick = onToggleTheme) {
+                Icon(
+                    imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                    contentDescription = stringResource(
+                        if (isDarkTheme) {
+                            R.string.theme_switch_to_light
+                        } else {
+                            R.string.theme_switch_to_dark
+                        }
+                    ),
+                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
+                )
+            }
+        }
+        if (currentLocationCity != null) {
+            Spacer(Modifier.height(10.dp))
+            CurrentLocationChip(
+                cityName = currentLocationCity,
+                onClick = onCurrentLocationClick
             )
         }
-        IconButton(onClick = onToggleTheme) {
+    }
+}
+
+@Composable
+private fun CurrentLocationChip(
+    cityName: String,
+    onClick: () -> Unit
+) {
+    val label = stringResource(R.string.home_current_location, cityName)
+    val chipCd = stringResource(R.string.home_current_location_cd, cityName)
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+        modifier = Modifier.semantics { contentDescription = chipCd }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(
-                imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                contentDescription = stringResource(
-                    if (isDarkTheme) {
-                        R.string.theme_switch_to_light
-                    } else {
-                        R.string.theme_switch_to_dark
-                    }
-                ),
-                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
+                imageVector = Icons.Filled.MyLocation,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

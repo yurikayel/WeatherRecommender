@@ -2,6 +2,7 @@ package com.example.weatherrecommender.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.weatherrecommender.domain.location.DeviceLocationProvider
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
@@ -10,20 +11,31 @@ import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
 import com.example.weatherrecommender.domain.usecase.GetRankedActivitiesUseCase
 import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
-import kotlin.time.Duration.Companion.milliseconds
-import javax.inject.Inject
+import com.example.weatherrecommender.domain.usecase.WorldCapitals
 import com.example.weatherrecommender.domain.util.ConnectivityObserver
 import com.example.weatherrecommender.domain.util.ConnectivityStatus
 import com.example.weatherrecommender.ui.map.MapCameraPosition
 import com.example.weatherrecommender.ui.util.UiText
 import com.example.weatherrecommender.ui.util.asUiText
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+import kotlin.random.Random
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Immutable state representing the entire Weather UI.
@@ -51,6 +63,7 @@ import com.example.weatherrecommender.ui.util.asUiText
  * @property mapCamera Camera target for the in-screen map.
  * @property mapPin Marker shown on the map (selected city or search preview).
  * @property isResolvingMapTap True while reverse-geocoding a map tap.
+ * @property deviceLocation Reverse-geocoded city for the device GPS fix; null hides the home chip.
  * @property error The main UI error, usually blocking or prominent.
  * @property syncError A background sync error for offline scenarios.
  */
@@ -70,6 +83,7 @@ data class WeatherUiState(
     val mapCamera: MapCameraPosition = MapCameraPosition.DEFAULT,
     val mapPin: Location? = null,
     val isResolvingMapTap: Boolean = false,
+    val deviceLocation: Location? = null,
     val error: UiText? = null,
     val syncError: UiText? = null
 )
@@ -84,18 +98,27 @@ class WeatherViewModel @Inject constructor(
     private val repository: WeatherRepository,
     private val getRankedActivities: GetRankedActivitiesUseCase,
     private val getTopPicks: GetTopPicksUseCase,
-    private val connectivityObserver: ConnectivityObserver
+    private val connectivityObserver: ConnectivityObserver,
+    private val worldCapitals: WorldCapitals,
+    private val deviceLocationProvider: DeviceLocationProvider,
+    private val random: Random
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(WeatherUiState())
+    private val initialHomeCamera = worldCapitals.random(random).toMapCamera(MapCameraPosition.HOME_DEFAULT_ZOOM)
+
+    private val _uiState = MutableStateFlow(WeatherUiState(mapCamera = initialHomeCamera))
     val uiState: StateFlow<WeatherUiState> = _uiState.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = WeatherUiState()
+        initialValue = WeatherUiState(mapCamera = initialHomeCamera)
     )
 
     private val searchQueryFlow = MutableStateFlow("")
     private var forecastJob: Job? = null
+    private var deviceLocationJob: Job? = null
+
+    /** Ensures first-launch GPS auto-select runs at most once per ViewModel lifetime. */
+    private var hasAutoSelectedDeviceLocation = false
 
     private var currentConnectivityStatus: ConnectivityStatus = ConnectivityStatus.Available
 
@@ -311,9 +334,13 @@ class WeatherViewModel @Inject constructor(
         }
     }
 
-    /** Returns from the detail view to the home screen and resets the map to London overview. */
+    /**
+     * Returns from the detail view to the home screen and centers on a new random capital.
+     * Keeps [deviceLocation] so the current-location chip stays available.
+     */
     fun onBack() {
         forecastJob?.cancel()
+        val capital = worldCapitals.random(random)
         _uiState.update {
             it.copy(
                 selectedLocation = null,
@@ -325,9 +352,46 @@ class WeatherViewModel @Inject constructor(
                 isLoadingForecast = false,
                 error = null,
                 syncError = null,
-                mapCamera = MapCameraPosition.DEFAULT,
+                mapCamera = capital.toMapCamera(MapCameraPosition.HOME_DEFAULT_ZOOM),
                 mapPin = null,
                 isResolvingMapTap = false
+            )
+        }
+    }
+
+    /**
+     * Called from the UI after the runtime location permission dialog.
+     * When granted, resolves the device city; on first success auto-opens its weather.
+     * When denied, home stays on the random capital and the chip remains hidden.
+     */
+    fun onLocationPermissionResult(granted: Boolean) {
+        if (!granted) return
+        resolveDeviceLocation(autoSelect = !hasAutoSelectedDeviceLocation)
+    }
+
+    /** Home header chip: quick-check weather for the reverse-geocoded device city. */
+    fun onCurrentLocationClick() {
+        val location = _uiState.value.deviceLocation ?: return
+        onLocationSelected(location)
+    }
+
+    private fun resolveDeviceLocation(autoSelect: Boolean) {
+        deviceLocationJob?.cancel()
+        deviceLocationJob = viewModelScope.launch {
+            val coords = deviceLocationProvider.getLastKnownLocation() ?: return@launch
+            if (currentConnectivityStatus != ConnectivityStatus.Available) return@launch
+
+            repository.reverseGeocode(coords.latitude, coords.longitude).fold(
+                onSuccess = { location ->
+                    _uiState.update { it.copy(deviceLocation = location) }
+                    if (autoSelect && !hasAutoSelectedDeviceLocation) {
+                        hasAutoSelectedDeviceLocation = true
+                        onLocationSelected(location)
+                    }
+                },
+                onError = {
+                    // Keep random capital framing; chip stays hidden without a resolved city.
+                }
             )
         }
     }

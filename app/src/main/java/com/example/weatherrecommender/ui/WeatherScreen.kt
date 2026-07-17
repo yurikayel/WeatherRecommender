@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +68,8 @@ fun WeatherScreen(
         onDaySelected = viewModel::onDaySelected,
         onBack = viewModel::onBack,
         onRefresh = viewModel::refresh,
+        onCurrentLocationClick = viewModel::onCurrentLocationClick,
+        onLocationPermissionResult = viewModel::onLocationPermissionResult,
         isDarkTheme = isDarkTheme,
         onToggleTheme = onToggleTheme
     )
@@ -89,6 +92,8 @@ fun WeatherScreenContent(
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onMapTapped: (Double, Double) -> Unit = { _, _ -> },
+    onCurrentLocationClick: () -> Unit = {},
+    onLocationPermissionResult: (Boolean) -> Unit = {},
     isDarkTheme: Boolean = false,
     onToggleTheme: () -> Unit = {}
 ) {
@@ -109,6 +114,26 @@ fun WeatherScreenContent(
     ) {
         // Proceed either way — share must not depend on Downloads permission.
         shareInProgress = true
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val granted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        onLocationPermissionResult(granted)
+    }
+
+    LaunchedEffect(Unit) {
+        when {
+            hasLocationPermission(context) -> onLocationPermissionResult(true)
+            else -> locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
     }
 
     Scaffold(
@@ -157,6 +182,7 @@ fun WeatherScreenContent(
                     onLocationSelected = onLocationSelected,
                     onRefresh = onRefresh,
                     onMapTapped = onMapTapped,
+                    onCurrentLocationClick = onCurrentLocationClick,
                     isDarkTheme = isDarkTheme,
                     onToggleTheme = onToggleTheme
                 )
@@ -237,6 +263,18 @@ private fun needsLegacyWritePermission(context: android.content.Context): Boolea
         context,
         Manifest.permission.WRITE_EXTERNAL_STORAGE
     ) != PackageManager.PERMISSION_GRANTED
+}
+
+private fun hasLocationPermission(context: android.content.Context): Boolean {
+    val fine = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+    val coarse = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+    return fine || coarse
 }
 
 private fun shareOutcomeMessage(
