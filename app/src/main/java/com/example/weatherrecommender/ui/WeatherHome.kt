@@ -39,7 +39,9 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -65,8 +67,11 @@ import com.example.weatherrecommender.ui.util.weatherCodeIcon
 import kotlin.math.roundToInt
 
 /**
- * Home body inside the collapsing-map sheet: greeting, search, and population-weighted "top picks".
- * Pull-to-refresh force-refreshes top picks (bypasses the in-memory TTL cache).
+ * Home body inside the collapsing-map sheet: optional current-location chip, search, and
+ * population-weighted "top picks".
+ * Pull-to-refresh (assignment bonus) force-refreshes top picks (bypasses the in-memory TTL cache).
+ * Gated with [Modifier.pullToRefresh] `enabled` only when the sheet is at the top **and** the
+ * collapsing map header is fully expanded — so PTR does not fight nested-scroll map collapse.
  * The map lives in [WeatherScreenContent] so it stays mounted across home↔detail.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,17 +81,27 @@ internal fun HomeContent(
     onQueryChanged: (String) -> Unit,
     onLocationSelected: (Location) -> Unit,
     onRefresh: () -> Unit,
-    onCurrentLocationClick: () -> Unit = {}
+    onCurrentLocationClick: () -> Unit = {},
+    mapFullyExpanded: Boolean = true
 ) {
-    PullToRefreshBox(
-        isRefreshing = uiState.isRefreshingTopPicks,
-        onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize()
+    val scrollState = rememberScrollState()
+    val pullToRefreshState = rememberPullToRefreshState()
+    // Material3 1.3.x PullToRefreshBox has no `enabled`; use Modifier.pullToRefresh instead.
+    val canPullToRefresh = mapFullyExpanded && scrollState.value == 0
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pullToRefresh(
+                isRefreshing = uiState.isRefreshingTopPicks,
+                state = pullToRefreshState,
+                enabled = canPullToRefresh,
+                onRefresh = onRefresh
+            )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp)
         ) {
             Spacer(Modifier.height(12.dp))
@@ -154,6 +169,11 @@ internal fun HomeContent(
             MapAttributionFooter()
             Spacer(Modifier.height(16.dp))
         }
+        PullToRefreshDefaults.Indicator(
+            state = pullToRefreshState,
+            isRefreshing = uiState.isRefreshingTopPicks,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 }
 
@@ -176,33 +196,11 @@ private fun HomeHeader(
     currentLocationCity: String?,
     onCurrentLocationClick: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = stringResource(R.string.home_brand_eyebrow),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = stringResource(R.string.home_greeting_title),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.semantics { heading() }
-        )
-        Text(
-            text = stringResource(R.string.home_greeting_subtitle),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-        )
-        if (currentLocationCity != null) {
-            Spacer(Modifier.height(10.dp))
-            CurrentLocationChip(
-                cityName = currentLocationCity,
-                onClick = onCurrentLocationClick
-            )
-        }
-    }
+    if (currentLocationCity == null) return
+    CurrentLocationChip(
+        cityName = currentLocationCity,
+        onClick = onCurrentLocationClick
+    )
 }
 
 @Composable

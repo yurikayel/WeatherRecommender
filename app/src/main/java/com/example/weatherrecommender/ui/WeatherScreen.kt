@@ -307,8 +307,7 @@ private fun CollapsingMapScaffold(
                 if (detail) {
                     DetailContent(
                         uiState = uiState,
-                        onDaySelected = onDaySelected,
-                        onRefresh = onRefresh
+                        onDaySelected = onDaySelected
                     )
                 } else {
                     HomeContent(
@@ -316,7 +315,9 @@ private fun CollapsingMapScaffold(
                         onQueryChanged = onQueryChanged,
                         onLocationSelected = onLocationSelected,
                         onRefresh = onRefresh,
-                        onCurrentLocationClick = onCurrentLocationClick
+                        onCurrentLocationClick = onCurrentLocationClick,
+                        // PTR only when the map is fully open so overscroll doesn't steal collapse.
+                        mapFullyExpanded = collapse.fraction == 0f
                     )
                 }
             }
