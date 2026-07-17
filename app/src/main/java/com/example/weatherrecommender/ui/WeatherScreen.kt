@@ -1,4 +1,4 @@
-﻿package com.example.weatherrecommender.ui
+package com.example.weatherrecommender.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -91,7 +91,7 @@ fun WeatherScreen(
 /**
  * Stateless, testable root of the Weather screen.
  *
- * A collapsing map AppBar (3:2 expanded → compact toolbar) stays mounted while a surface sheet
+ * A collapsing map AppBar (1:1 expanded → compact toolbar) stays mounted while a surface sheet
  * below Crossfades home vs detail body content — no full-screen slide, and the map instance is
  * not remounted on select/back. Modes are derived from [WeatherUiState.selectedLocation].
  */
@@ -231,7 +231,7 @@ private fun PendingShareCapture(
 }
 
 /**
- * Collapsing map header (3:2) + rounded sheet that nested-scrolls over it.
+ * Collapsing map header (1:1) + rounded sheet that nested-scrolls over it.
  * Map height is animated via [MapCollapseState]; the MapLibre instance is not remounted.
  */
 @Composable
@@ -502,9 +502,9 @@ private fun shareOutcomeMessage(
 }
 
 private const val BODY_CROSSFADE_MS = 280
-/** Width:height = 3:2 when the collapsing map header is fully expanded. */
-private const val MAP_ASPECT_WIDTH = 3f
-private const val MAP_ASPECT_HEIGHT = 2f
+/** Width:height = 1:1 when the collapsing map header is fully expanded. */
+private const val MAP_ASPECT_WIDTH = 1f
+private const val MAP_ASPECT_HEIGHT = 1f
 private val CollapsedAppBarHeight: Dp = 64.dp
 private val MapSheetOverlap: Dp = 28.dp
 private const val MAP_INTERACTIVE_COLLAPSE_THRESHOLD = 0.72f

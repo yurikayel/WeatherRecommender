@@ -39,7 +39,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * MapLibre map used as the collapsing AppBar background in
  * [com.example.weatherrecommender.ui.WeatherScreenContent].
  *
- * Height is owned by the parent (expanded 3:2, collapsing to a compact toolbar). Keeping this
+ * Height is owned by the parent (expanded 1:1, collapsing to a compact toolbar). Keeping this
  * outside the home/detail Crossfade avoids remount flash when selecting a city or going back.
  * Under Paparazzi / inspection mode, renders a lightweight placeholder.
  *
