@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">WeatherRecommender</string>
+    <string name="error_network_offline">No internet connection. Showing offline data.</string>
+    <string name="error_network_timeout">The connection timed out. Please try again.</string>
+    <string name="error_network_server">Server error occurred (Code: %1$d). Please try again later.</string>
+    <string name="error_api_rate_limit">You are searching too fast. Please slow down.</string>
+    <string name="error_api_not_found">City not found. Try a different search.</string>
+    <string name="error_unknown">An unknown error occurred. Showing offline data if available.</string>
+    
+    <string name="search_hint">Search a city...</string>
+    <string name="app_title">Concierge Weather</string>
+    <string name="weather_offline_indicator">Offline Mode</string>
+    <string name="weather_forecast_title">7-Day Forecast</string>
+    <string name="recommended_activities_title">Recommended Activities</string>
+    <string name="sync_error_prefix">Offline Mode: %1$s</string>
+    <string name="error_prefix">Error: %1$s</string>
+    <string name="location_result_format">📍 %1$s</string>
+    <string name="sync_error_with_warning">⚠️ %1$s</string>
+    <string name="clear_search">Clear search</string>
+    <string name="search">Search</string>
+
+    <!-- Activities -->
+    <string name="activity_skiing">Skiing</string>
+    <string name="activity_surfing">Surfing</string>
+    <string name="activity_outdoor_sightseeing">Outdoor Sightseeing</string>
+    <string name="activity_indoor_sightseeing">Indoor Sightseeing</string>
+
+    <!-- Activity Reasons -->
+    <string name="reason_surf_ideal">Calm winds (%1$dkm/h) and warm temps make for clean waves.</string>
+    <string name="reason_ski_ideal">Freezing temperatures (%1$d°C) and %2$dcm of snow expected.</string>
+    <string name="reason_outdoor_mild">Mild temps (%1$d°C) and low precipitation make perfect trail conditions.</string>
+    <string name="reason_indoor_bad_weather">Bad weather outside? Perfect time to catch a movie indoors.</string>
+</resources>
