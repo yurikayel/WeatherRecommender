@@ -95,8 +95,8 @@ class WeatherScreenTest {
     fun home_showsSearchBarAndTopPicks() {
         setContent(WeatherUiState())
 
-        // AppBar title stays; the old home hero copy is gone.
-        composeTestRule.onNodeWithText("Concierge Weather").assertIsDisplayed()
+        // Title lives in the sheet header below the map, not on the map overlay.
+        composeTestRule.onNodeWithText("Concierge Weather").performScrollTo().assertIsDisplayed()
         composeTestRule.onAllNodesWithText("Plan your day").assertCountEquals(0)
         composeTestRule.onNodeWithContentDescription("Switch to dark mode").assertIsDisplayed()
         // Square map leaves little sheet viewport — scroll before asserting body content.
@@ -116,6 +116,7 @@ class WeatherScreenTest {
 
         // GPS resolves the chip only — it must not auto-open detail.
         composeTestRule.onAllNodesWithContentDescription("Back").assertCountEquals(0)
+        composeTestRule.onNodeWithText("Lisbon").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Current location · Lisbon").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Search a city…").performScrollTo().assertIsDisplayed()
     }
