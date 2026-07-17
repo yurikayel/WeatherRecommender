@@ -52,6 +52,7 @@ interface WeatherDao {
     /**
      * Streams the most recently viewed locations for the home History section.
      * Rows with [LocationEntity.lastViewedAt] == 0 were never explicitly opened by the user.
+     * Callers that dedupe should request a larger [limit] so collapse still fills the UI cap.
      */
     @Query(
         """
@@ -65,6 +66,39 @@ interface WeatherDao {
 
     @Query("UPDATE location_entity SET lastViewedAt = :timestamp WHERE id = :locationId")
     suspend fun updateLastViewedAt(locationId: Long, timestamp: Long)
+
+    /**
+     * Finds cached locations near a coordinate (≈ [delta] degrees ≈ a few km).
+     * Used to merge Nominatim reverse-geocode ids with existing GeoNames rows.
+     */
+    @Query(
+        """
+        SELECT * FROM location_entity
+        WHERE ABS(latitude - :latitude) <= :delta
+          AND ABS(longitude - :longitude) <= :delta
+        """
+    )
+    suspend fun findLocationsNear(
+        latitude: Double,
+        longitude: Double,
+        delta: Double
+    ): List<LocationEntity>
+
+    /**
+     * Finds cached locations with the same normalized name and country
+     * (case-insensitive trim handled by the repository before calling).
+     */
+    @Query(
+        """
+        SELECT * FROM location_entity
+        WHERE LOWER(name) = LOWER(:name)
+          AND LOWER(country) = LOWER(:country)
+        """
+    )
+    suspend fun findLocationsByNameAndCountry(
+        name: String,
+        country: String
+    ): List<LocationEntity>
 
     @Transaction
     suspend fun deleteLocationWithForecasts(locationId: Long) {

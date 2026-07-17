@@ -254,6 +254,8 @@ class WeatherRepositoryImplTest {
     @Test
     fun `markLocationViewed inserts stub when location is new`() = runTest {
         coEvery { weatherDao.getLocation(location.id) } returns null
+        coEvery { weatherDao.findLocationsNear(any(), any(), any()) } returns emptyList()
+        coEvery { weatherDao.findLocationsByNameAndCountry(any(), any()) } returns emptyList()
 
         repository.markLocationViewed(location)
 
@@ -263,6 +265,54 @@ class WeatherRepositoryImplTest {
             )
         }
         coVerify(exactly = 0) { weatherDao.updateLastViewedAt(any(), any()) }
+    }
+
+    @Test
+    fun `markLocationViewed merges map tap onto existing GeoNames city by proximity`() = runTest {
+        val geoNames = location.toEntity(lastViewedAt = 10L)
+        val nominatim = Location(-1_000_042, "London", 51.52, -0.12, "UK", "England")
+        coEvery { weatherDao.getLocation(nominatim.id) } returns null
+        coEvery {
+            weatherDao.findLocationsNear(nominatim.latitude, nominatim.longitude, 0.05)
+        } returns listOf(geoNames)
+
+        repository.markLocationViewed(nominatim)
+
+        coVerify { weatherDao.updateLastViewedAt(geoNames.id, any()) }
+        coVerify(exactly = 0) { weatherDao.insertLocation(any()) }
+    }
+
+    @Test
+    fun `markLocationViewed replaces Nominatim stub when GeoNames id arrives`() = runTest {
+        val nominatimStub = location.copy(id = -1_000_042).toEntity(lastViewedAt = 10L)
+        coEvery { weatherDao.getLocation(location.id) } returns null
+        coEvery {
+            weatherDao.findLocationsNear(location.latitude, location.longitude, 0.05)
+        } returns listOf(nominatimStub)
+
+        repository.markLocationViewed(location)
+
+        coVerify { weatherDao.deleteLocationWithForecasts(nominatimStub.id) }
+        coVerify {
+            weatherDao.insertLocation(
+                match { it.id == location.id && it.lastViewedAt > 0L }
+            )
+        }
+    }
+
+    @Test
+    fun `observeRecentLocations collapses duplicate cities`() = runTest {
+        val geoNames = location.toEntity(lastViewedAt = 200L)
+        val nominatim = location.copy(id = -1_000_042, latitude = 51.52, longitude = -0.12)
+            .toEntity(lastViewedAt = 100L)
+        every { weatherDao.getRecentLocationsFlow(30) } returns flowOf(
+            listOf(geoNames, nominatim)
+        )
+
+        val recent = repository.observeRecentLocations(10).first()
+
+        assertEquals(1, recent.size)
+        assertEquals(location.id, recent.first().id)
     }
 
     @Test
@@ -283,7 +333,7 @@ class WeatherRepositoryImplTest {
 
     @Test
     fun `observeRecentLocations maps dao entities to domain`() = runTest {
-        every { weatherDao.getRecentLocationsFlow(10) } returns flowOf(
+        every { weatherDao.getRecentLocationsFlow(30) } returns flowOf(
             listOf(location.toEntity(lastViewedAt = 99L))
         )
 

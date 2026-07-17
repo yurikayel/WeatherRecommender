@@ -63,8 +63,9 @@ interface WeatherRepository {
     fun observeRecentLocations(limit: Int = 10): Flow<List<Location>>
 
     /**
-     * Records that the user opened [location] (search result or top pick tap).
-     * Updates [lastViewedAt] without requiring a successful forecast refresh.
+     * Records that the user opened [location] (search, top pick, or map tap).
+     * Upserts so the same city is one history row even when Nominatim and GeoNames
+     * assign different ids (matched by id, ~0.05° proximity, or name+country).
      */
     suspend fun markLocationViewed(location: Location)
 }

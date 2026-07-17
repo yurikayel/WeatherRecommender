@@ -2,6 +2,7 @@ package com.example.weatherrecommender.data.repository
 
 import com.example.weatherrecommender.data.local.dao.WeatherDao
 import com.example.weatherrecommender.data.local.entity.DailyForecastEntity
+import com.example.weatherrecommender.data.local.entity.LocationEntity
 import com.example.weatherrecommender.data.mapper.toDomain
 import com.example.weatherrecommender.data.mapper.toEntity
 import com.example.weatherrecommender.data.remote.ForecastApi
@@ -128,21 +129,75 @@ class WeatherRepositoryImpl @Inject constructor(
     }
 
     override fun observeRecentLocations(limit: Int): Flow<List<Location>> {
-        return weatherDao.getRecentLocationsFlow(limit).map { entities ->
-            entities.map { it.toDomain() }
+        // Over-fetch so proximity/name collapse can still fill [limit] unique cities.
+        val fetchLimit = (limit * DEDUPE_FETCH_MULTIPLIER).coerceAtLeast(limit)
+        return weatherDao.getRecentLocationsFlow(fetchLimit).map { entities ->
+            LocationHistoryDeduper.collapse(entities)
+                .take(limit)
+                .map { it.toDomain() }
         }
     }
 
     override suspend fun markLocationViewed(location: Location) {
         val now = System.currentTimeMillis()
-        val existing = weatherDao.getLocation(location.id)
-        if (existing != null) {
+        val existingById = weatherDao.getLocation(location.id)
+        if (existingById != null) {
             weatherDao.updateLastViewedAt(location.id, now)
+            return
+        }
+
+        val duplicate = findDuplicateLocation(location)
+        if (duplicate != null) {
+            mergeViewedLocation(incoming = location, existing = duplicate, now = now)
+            return
+        }
+
+        // Insert a stub so history appears even if the subsequent forecast refresh fails.
+        weatherDao.insertLocation(
+            location.toEntity(lastUpdated = now, lastViewedAt = now)
+        )
+    }
+
+    /**
+     * Finds an already-cached row for the same city under a different id
+     * (coordinate proximity first, then normalized name+country).
+     */
+    private suspend fun findDuplicateLocation(location: Location): LocationEntity? {
+        val near = weatherDao.findLocationsNear(
+            latitude = location.latitude,
+            longitude = location.longitude,
+            delta = LocationHistoryDeduper.PROXIMITY_DEGREES
+        )
+        val byProximity = near.maxByOrNull { it.lastViewedAt }
+        if (byProximity != null) return byProximity
+
+        val country = location.country?.trim().orEmpty()
+        val name = location.name.trim()
+        return if (name.isEmpty()) {
+            null
         } else {
-            // Insert a stub so history appears even if the subsequent forecast refresh fails.
+            weatherDao.findLocationsByNameAndCountry(name = name, country = country)
+                .maxByOrNull { it.lastViewedAt }
+        }
+    }
+
+    /**
+     * Upserts history for a city that already exists under another id.
+     * Prefers stable positive (GeoNames / Open-Meteo) ids over synthetic Nominatim negatives.
+     */
+    private suspend fun mergeViewedLocation(
+        incoming: Location,
+        existing: LocationEntity,
+        now: Long
+    ) {
+        val preferIncomingId = incoming.id > 0L && existing.id < 0L
+        if (preferIncomingId) {
+            weatherDao.deleteLocationWithForecasts(existing.id)
             weatherDao.insertLocation(
-                location.toEntity(lastUpdated = now, lastViewedAt = now)
+                incoming.toEntity(lastUpdated = now, lastViewedAt = now)
             )
+        } else {
+            weatherDao.updateLastViewedAt(existing.id, now)
         }
     }
 
@@ -213,6 +268,7 @@ class WeatherRepositoryImpl @Inject constructor(
 
     private companion object {
         const val MAX_CACHED_LOCATIONS = 20
+        const val DEDUPE_FETCH_MULTIPLIER = 3
     }
 
     /**
