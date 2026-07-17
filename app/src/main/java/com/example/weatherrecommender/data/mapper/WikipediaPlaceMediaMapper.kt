@@ -3,7 +3,6 @@ package com.example.weatherrecommender.data.mapper
 import com.example.weatherrecommender.data.remote.dto.WikipediaSummaryDto
 import com.example.weatherrecommender.domain.model.PlaceMedia
 import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
 /**
  * Pure helpers for Wikipedia place-media enrichment: title candidates + DTO → [PlaceMedia].
@@ -28,7 +27,8 @@ object WikipediaPlaceMediaMapper {
 
     /** Path-encodes a Wikipedia title (spaces → `%20`). */
     fun encodeTitle(title: String): String =
-        URLEncoder.encode(title, StandardCharsets.UTF_8).replace("+", "%20")
+        // String charset name is API 1+; Charset overload requires API 33 (lint NewApi).
+        URLEncoder.encode(title, "UTF-8").replace("+", "%20")
 
     /**
      * Maps a summary payload to [PlaceMedia], or null when the page is unusable
