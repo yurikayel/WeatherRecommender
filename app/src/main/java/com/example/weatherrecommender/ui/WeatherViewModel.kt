@@ -114,9 +114,6 @@ class WeatherViewModel @Inject constructor(
     private var forecastJob: Job? = null
     private var deviceLocationJob: Job? = null
 
-    /** Ensures first-launch GPS auto-select runs at most once per ViewModel lifetime. */
-    private var hasAutoSelectedDeviceLocation = false
-
     private var currentConnectivityStatus: ConnectivityStatus = ConnectivityStatus.Available
 
     init {
@@ -368,12 +365,13 @@ class WeatherViewModel @Inject constructor(
 
     /**
      * Called from the UI after the runtime location permission dialog.
-     * When granted, resolves the device city; on first success auto-opens its weather.
+     * When granted, reverse-geocodes the last-known fix for the home chip and map center —
+     * does **not** open detail; the user opts in via [onCurrentLocationClick].
      * When denied, home stays on the static default framing and the chip remains hidden.
      */
     fun onLocationPermissionResult(granted: Boolean) {
         if (!granted) return
-        resolveDeviceLocation(autoSelect = !hasAutoSelectedDeviceLocation)
+        resolveDeviceLocation()
     }
 
     /** Home header chip: quick-check weather for the reverse-geocoded device city. */
@@ -382,7 +380,7 @@ class WeatherViewModel @Inject constructor(
         onLocationSelected(location)
     }
 
-    private fun resolveDeviceLocation(autoSelect: Boolean) {
+    private fun resolveDeviceLocation() {
         deviceLocationJob?.cancel()
         deviceLocationJob = viewModelScope.launch {
             val coords = deviceLocationProvider.getLastKnownLocation() ?: return@launch
@@ -400,10 +398,6 @@ class WeatherViewModel @Inject constructor(
                                 state.mapCamera
                             }
                         )
-                    }
-                    if (autoSelect && !hasAutoSelectedDeviceLocation) {
-                        hasAutoSelectedDeviceLocation = true
-                        onLocationSelected(location)
                     }
                 },
                 onError = {

@@ -14,7 +14,7 @@ Key experience details:
 - **Home "top picks"**: the home screen surfaces a randomised, population-weighted set of well-known cities, each with its best activity for today (stretch). Pull-to-refresh on home force-refreshes this feed.
 - **Recently viewed History**: after Top Picks, lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
 - **In-screen map**: MapLibre collapsing AppBar (expanded **3:2** width:height) with a rounded surface sheet that scrolls up to cover the map — classic nested-scroll collapse into a compact toolbar (city name / Concierge). Home↔detail Crossfades only the sheet body (no full-screen slide). Selecting a city updates the map camera in place; back fades home back and resets the camera to the device location (or a static London default without GPS).
-- **Current location**: with permission granted, the last-known GPS fix is reverse-geocoded to a city — home shows a discreet `Current location · {City}` chip, the map centers there, and the first launch auto-opens that city's weather. Denied → chip hidden, static default framing.
+- **Current location**: with permission granted, the last-known GPS fix is reverse-geocoded to a city — home shows a discreet `Current location · {City}` chip and the map centers there; tapping the chip opens that city's weather (GPS never auto-navigates to detail). Denied → chip hidden, static default framing.
 - **Share**: detail toolbar exports a branded 9:16 portrait "weather flyer" PNG with denser display-scale typography (header + selected-day hero + 7-day strip + ranked activities with score bars) via the system share sheet and best-effort saves a copy to Downloads.
 
 ## b. Platform and Tooling Choices
@@ -75,7 +75,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Substantial UI test coverage | Done | 19 instrumented Compose tests for key flows (home, search, top picks, chips, day selection, back, banners, dark theme) |
 | Share weather flyer | Done | Detail share → branded 9:16 portrait PNG (`GraphicsLayer` + FileProvider); also best-effort save to Downloads |
 | In-screen map | Done | Collapsing 3:2 MapLibre AppBar + OpenFreeMap (no Google key); sheet covers map on scroll; home centers on device location (static London fallback, wider zoom); tap → Nominatim reverse; camera/pin in ViewModel |
-| Current-location chip | Done | Runtime permission → LocationManager last-known fix → Nominatim reverse; home header chip; first-launch auto-select |
+| Current-location chip | Done | Runtime permission → LocationManager last-known fix → Nominatim reverse; home header chip (opt-in tap); map centers on fix |
 | Wikipedia city stamp | Done | Best-effort Wikipedia summary thumbnail + extract (not Open-Meteo); Room-cached; postage-stamp frame under chips; description after activity list; CC BY-SA attribution |
 
 ## f. API usage notes ☀️

@@ -389,13 +389,17 @@ class WeatherViewModelTest {
         every { deviceLocationProvider.hasLocationPermission() } returns true
         coEvery { deviceLocationProvider.getLastKnownLocation() } returns GeoCoordinates(38.7, -9.1)
         coEvery { repository.reverseGeocode(38.7, -9.1) } returns Result.Success(deviceCity)
-        every { repository.getForecastFlow(deviceCity) } returns flowOf(forecast.copy(location = deviceCity))
-        coEvery { repository.refreshForecast(deviceCity) } returns Result.Success(Unit)
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
         every { getRankedActivitiesUseCase.invoke(any(), 0) } returns day0Activities
 
         backgroundScope.launch { viewModel.uiState.collect {} }
 
         viewModel.onLocationPermissionResult(granted = true)
+        advanceUntilIdle()
+        assertNull(viewModel.uiState.value.selectedLocation)
+
+        viewModel.onLocationSelected(location)
         advanceUntilIdle()
         viewModel.onBack()
         advanceUntilIdle()
@@ -403,6 +407,7 @@ class WeatherViewModelTest {
         val state = viewModel.uiState.value
         assertNull(state.selectedLocation)
         assertNull(state.mapPin)
+        assertEquals(deviceCity, state.deviceLocation)
         assertEquals(deviceCity.latitude, state.mapCamera.latitude, 0.0)
         assertEquals(deviceCity.longitude, state.mapCamera.longitude, 0.0)
         assertEquals(MapCameraPosition.HOME_DEFAULT_ZOOM, state.mapCamera.zoom, 0.0)
@@ -429,14 +434,11 @@ class WeatherViewModelTest {
     }
 
     @Test
-    fun `granted location permission with fix auto-selects device city`() = runTest {
+    fun `granted location permission with fix populates chip and keeps home`() = runTest {
         val deviceCity = Location(-1_000_001, "Lisbon", 38.7, -9.1, "Portugal", "Lisbon")
         every { deviceLocationProvider.hasLocationPermission() } returns true
         coEvery { deviceLocationProvider.getLastKnownLocation() } returns GeoCoordinates(38.7, -9.1)
         coEvery { repository.reverseGeocode(38.7, -9.1) } returns Result.Success(deviceCity)
-        every { repository.getForecastFlow(deviceCity) } returns flowOf(forecast.copy(location = deviceCity))
-        coEvery { repository.refreshForecast(deviceCity) } returns Result.Success(Unit)
-        every { getRankedActivitiesUseCase.invoke(any(), 0) } returns day0Activities
 
         backgroundScope.launch { viewModel.uiState.collect {} }
 
@@ -445,8 +447,12 @@ class WeatherViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(deviceCity, state.deviceLocation)
-        assertEquals(deviceCity, state.selectedLocation)
-        assertEquals(deviceCity, state.mapPin)
+        assertNull(state.selectedLocation)
+        assertNull(state.mapPin)
+        assertEquals(deviceCity.latitude, state.mapCamera.latitude, 0.0)
+        assertEquals(deviceCity.longitude, state.mapCamera.longitude, 0.0)
+        assertEquals(MapCameraPosition.HOME_DEFAULT_ZOOM, state.mapCamera.zoom, 0.0)
+        io.mockk.coVerify(exactly = 0) { repository.refreshForecast(any()) }
     }
 
     @Test
@@ -463,16 +469,19 @@ class WeatherViewModelTest {
 
         viewModel.onLocationPermissionResult(granted = true)
         advanceUntilIdle()
-        assertEquals(deviceCity, viewModel.uiState.value.selectedLocation)
-
-        viewModel.onBack()
-        advanceUntilIdle()
         assertNull(viewModel.uiState.value.selectedLocation)
         assertEquals(deviceCity, viewModel.uiState.value.deviceLocation)
 
         viewModel.onCurrentLocationClick()
         advanceUntilIdle()
         assertEquals(deviceCity, viewModel.uiState.value.selectedLocation)
+
+        viewModel.onBack()
+        advanceUntilIdle()
+        assertNull(viewModel.uiState.value.selectedLocation)
+        assertEquals(deviceCity, viewModel.uiState.value.deviceLocation)
+        assertEquals(deviceCity.latitude, viewModel.uiState.value.mapCamera.latitude, 0.0)
+        assertEquals(deviceCity.longitude, viewModel.uiState.value.mapCamera.longitude, 0.0)
     }
 
     @Test
