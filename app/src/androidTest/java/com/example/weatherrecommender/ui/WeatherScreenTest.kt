@@ -29,7 +29,7 @@ class WeatherScreenTest {
 
     private val london = Location(1, "London", 51.5, -0.1, "UK", "England", elevation = 25.0)
     private val lisbon = Location(
-        id = 2, name = "Lisbon", latitude = 38.7, longitude = -9.1,
+        id = -4, name = "Lisbon", latitude = 38.7, longitude = -9.1,
         country = "Portugal", admin1 = "Lisbon", elevation = 68.0, hasSeaAccess = true
     )
 

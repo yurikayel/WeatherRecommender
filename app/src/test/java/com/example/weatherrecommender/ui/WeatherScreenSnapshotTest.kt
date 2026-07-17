@@ -43,7 +43,7 @@ class WeatherScreenSnapshotTest {
     }
 
     private val lisbon = Location(
-        id = 4, name = "Lisbon", latitude = 38.7, longitude = -9.1,
+        id = -4, name = "Lisbon", latitude = 38.7, longitude = -9.1,
         country = "Portugal", admin1 = "Lisbon", elevation = 68.0, hasSeaAccess = true
     )
 

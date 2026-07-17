@@ -32,8 +32,8 @@ class GetTopPicksUseCaseTest {
         topPicksCache
     )
 
-    private val lisbon = Location(4, "Lisbon", 38.7, -9.1, "Portugal", null, hasSeaAccess = true)
-    private val zurich = Location(9, "Zurich", 47.4, 8.5, "Switzerland", null, elevation = 429.0)
+    private val lisbon = Location(-4, "Lisbon", 38.7, -9.1, "Portugal", null, hasSeaAccess = true)
+    private val zurich = Location(-9, "Zurich", 47.4, 8.5, "Switzerland", null, elevation = 429.0)
 
     private fun forecast(location: Location) = WeatherForecast(
         location = location,
@@ -77,11 +77,41 @@ class GetTopPicksUseCaseTest {
     }
 
     @Test
+    fun `forceRefresh bypasses the in-memory cache`() = runTest {
+        val cached = listOf(
+            TopPick(
+                location = lisbon,
+                topActivity = RankedActivity(RecommendedActivity.SURFING, 88, ReasonKey.SURF_IDEAL, listOf(100, 8)),
+                weatherCode = 0,
+                maxTemp = 26.0
+            )
+        )
+        topPicksCache.put(cached)
+        every { featuredCities.randomWeightedByPopulation(any(), any()) } returns listOf(lisbon)
+        coEvery { repository.getForecastRemote(lisbon) } returns Result.Success(forecast(lisbon))
+        every { getRankedActivities.invoke(any(), 0) } returns listOf(
+            RankedActivity(RecommendedActivity.SURFING, 70, ReasonKey.SURF_IDEAL, listOf(80, 12))
+        )
+
+        val picks = useCase.invoke(1, forceRefresh = true)
+
+        assertEquals(1, picks.size)
+        assertEquals(70, picks.first().topActivity.score)
+        coVerify(exactly = 1) { repository.getForecastRemote(lisbon) }
+    }
+
+    @Test
     fun `weighted selection returns the requested distinct count`() {
         val featured = FeaturedCities()
         val picks = featured.randomWeightedByPopulation(4, Random(42))
 
         assertEquals(4, picks.size)
         assertEquals(picks.distinctBy { it.id }.size, picks.size)
+    }
+
+    @Test
+    fun `featured seed ids are negative to avoid GeoNames collisions`() {
+        val featured = FeaturedCities()
+        assertEquals((-1L downTo -14L).toList(), featured.all.map { it.id })
     }
 }
