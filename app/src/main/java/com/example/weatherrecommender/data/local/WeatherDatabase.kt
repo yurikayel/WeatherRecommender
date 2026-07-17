@@ -12,7 +12,7 @@ import com.example.weatherrecommender.data.local.entity.LocationEntity
  * The Room database for the application.
  * Contains tables for locations and daily forecasts.
  */
-@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 5, exportSchema = true)
+@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 6, exportSchema = true)
 abstract class WeatherDatabase : RoomDatabase() {
     abstract fun weatherDao(): WeatherDao
 
@@ -60,14 +60,56 @@ abstract class WeatherDatabase : RoomDatabase() {
         }
 
         /**
-         * v5 caches optional Wikipedia place media ([LocationEntity.imageUrl], description,
-         * imageAttribution) so detail reopen can show the stamp/blurb offline.
+         * v5 briefly cached Wikipedia place media columns. Kept so devices that reached v5 can
+         * migrate forward; [MIGRATION_5_6] drops those columns.
          */
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE location_entity ADD COLUMN imageUrl TEXT")
                 db.execSQL("ALTER TABLE location_entity ADD COLUMN description TEXT")
                 db.execSQL("ALTER TABLE location_entity ADD COLUMN imageAttribution TEXT")
+            }
+        }
+
+        /**
+         * v6 removes Wikipedia place-media columns (imageUrl, description, imageAttribution).
+         * Recreates the table (SQLite DROP COLUMN is unavailable on older Android SQLite).
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS location_entity_new (
+                        id INTEGER NOT NULL,
+                        name TEXT NOT NULL,
+                        latitude REAL NOT NULL,
+                        longitude REAL NOT NULL,
+                        country TEXT NOT NULL,
+                        admin1 TEXT,
+                        lastUpdated INTEGER NOT NULL,
+                        elevation REAL,
+                        population INTEGER,
+                        featureCode TEXT,
+                        hasSeaAccess INTEGER NOT NULL,
+                        lastViewedAt INTEGER NOT NULL,
+                        PRIMARY KEY(id)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO location_entity_new (
+                        id, name, latitude, longitude, country, admin1, lastUpdated,
+                        elevation, population, featureCode, hasSeaAccess, lastViewedAt
+                    )
+                    SELECT
+                        id, name, latitude, longitude, country, admin1, lastUpdated,
+                        elevation, population, featureCode, hasSeaAccess, lastViewedAt
+                    FROM location_entity
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE location_entity")
+                db.execSQL("ALTER TABLE location_entity_new RENAME TO location_entity")
             }
         }
     }

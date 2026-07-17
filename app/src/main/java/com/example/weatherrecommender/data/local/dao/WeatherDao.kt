@@ -68,25 +68,6 @@ interface WeatherDao {
     suspend fun updateLastViewedAt(locationId: Long, timestamp: Long)
 
     /**
-     * Persists Wikipedia place media without touching forecast rows or [LocationEntity.lastUpdated].
-     */
-    @Query(
-        """
-        UPDATE location_entity
-        SET imageUrl = :imageUrl,
-            description = :description,
-            imageAttribution = :imageAttribution
-        WHERE id = :locationId
-        """
-    )
-    suspend fun updatePlaceMedia(
-        locationId: Long,
-        imageUrl: String?,
-        description: String?,
-        imageAttribution: String?
-    )
-
-    /**
      * Finds cached locations near a coordinate (≈ [delta] degrees ≈ a few km).
      * Used to merge Nominatim reverse-geocode ids with existing GeoNames rows.
      */

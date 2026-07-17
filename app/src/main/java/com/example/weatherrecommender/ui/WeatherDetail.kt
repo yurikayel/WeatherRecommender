@@ -33,11 +33,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -77,117 +75,90 @@ private val DayChipWidth = 72.dp
 private val DayChipHeight = 120.dp
 
 /**
- * Detail body inside the collapsing-map sheet: geography chips, optional Wikipedia postage stamp,
- * day selector, ranked activities, and optional city extract.
+ * Detail body inside the collapsing-map sheet: geography chips, day selector, and ranked activities.
  * The map lives in [WeatherScreenContent] so it stays mounted across home↔detail.
  * Tapping a day re-ranks activities (handled by [WeatherViewModel.onDaySelected]).
+ * Pull-to-refresh is home-only (bonus) so it cannot fight nested-scroll map collapse here.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DetailContent(
     uiState: WeatherUiState,
-    onDaySelected: (Int) -> Unit,
-    onRefresh: () -> Unit
+    onDaySelected: (Int) -> Unit
 ) {
-    PullToRefreshBox(
-        isRefreshing = uiState.isLoadingForecast && uiState.forecast != null,
-        onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-        ) {
+        Spacer(Modifier.height(12.dp))
+        val location = uiState.selectedLocation
+        location?.let { GeoChipsRow(it) }
+
+        if (uiState.isLoadingForecast && uiState.forecast == null) {
+            Spacer(Modifier.height(16.dp))
+            PremiumShimmerLoadingState()
+        }
+
+        uiState.error?.let { error ->
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.error_prefix, error.asString()),
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        uiState.syncError?.let { syncError ->
             Spacer(Modifier.height(12.dp))
-            val location = uiState.selectedLocation
-            location?.let { GeoChipsRow(it) }
+            SyncErrorBanner(syncError.asString())
+        }
 
-            location?.imageUrl?.takeIf { it.isNotBlank() }?.let { imageUrl ->
-                Spacer(Modifier.height(16.dp))
-                CityPostageStamp(
-                    imageUrl = imageUrl,
-                    cityName = location.name,
-                    attribution = location.imageAttribution
-                )
-            }
+        val forecast = uiState.forecast
+        if (forecast != null) {
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = stringResource(R.string.detail_pick_a_day),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                modifier = Modifier.semantics { heading() }
+            )
+            Spacer(Modifier.height(12.dp))
+            DaySelectorRow(
+                days = forecast.dailyForecasts,
+                selectedIndex = uiState.selectedDayIndex,
+                onDaySelected = onDaySelected
+            )
 
-            if (uiState.isLoadingForecast && uiState.forecast == null) {
-                Spacer(Modifier.height(16.dp))
-                PremiumShimmerLoadingState()
-            }
+            val selectedDay = forecast.dailyForecasts.getOrNull(uiState.selectedDayIndex)
+            Spacer(Modifier.height(28.dp))
+            Text(
+                text = stringResource(
+                    R.string.detail_activities_for_day,
+                    selectedDay?.let { isoDateToWeekday(it.date) } ?: ""
+                ),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                modifier = Modifier.semantics { heading() }
+            )
+            Spacer(Modifier.height(12.dp))
 
-            uiState.error?.let { error ->
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.error_prefix, error.asString()),
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-
-            uiState.syncError?.let { syncError ->
-                Spacer(Modifier.height(12.dp))
-                SyncErrorBanner(syncError.asString())
-            }
-
-            val forecast = uiState.forecast
-            if (forecast != null) {
-                Spacer(Modifier.height(20.dp))
-                Text(
-                    text = stringResource(R.string.detail_pick_a_day),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    modifier = Modifier.semantics { heading() }
-                )
-                Spacer(Modifier.height(12.dp))
-                DaySelectorRow(
-                    days = forecast.dailyForecasts,
-                    selectedIndex = uiState.selectedDayIndex,
-                    onDaySelected = onDaySelected
-                )
-
-                val selectedDay = forecast.dailyForecasts.getOrNull(uiState.selectedDayIndex)
-                Spacer(Modifier.height(28.dp))
-                Text(
-                    text = stringResource(
-                        R.string.detail_activities_for_day,
-                        selectedDay?.let { isoDateToWeekday(it.date) } ?: ""
-                    ),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    modifier = Modifier.semantics { heading() }
-                )
-                Spacer(Modifier.height(12.dp))
-
-                // Slide-up + fade when the selected day changes so the re-ranking reads as new content.
-                AnimatedContent(
-                    targetState = uiState.selectedDayIndex to uiState.rankedActivities,
-                    transitionSpec = {
-                        (slideInVertically(tween(DAY_SWITCH_MS)) { it / 8 } + fadeIn(tween(DAY_SWITCH_MS)))
-                            .togetherWith(fadeOut(tween(DAY_SWITCH_MS / 2)))
-                    },
-                    label = "day_activities"
-                ) { (_, activities) ->
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.animateContentSize()
-                    ) {
-                        activities.forEach { ranked -> ActivityCard(ranked) }
-                    }
+            // Slide-up + fade when the selected day changes so the re-ranking reads as new content.
+            AnimatedContent(
+                targetState = uiState.selectedDayIndex to uiState.rankedActivities,
+                transitionSpec = {
+                    (slideInVertically(tween(DAY_SWITCH_MS)) { it / 8 } + fadeIn(tween(DAY_SWITCH_MS)))
+                        .togetherWith(fadeOut(tween(DAY_SWITCH_MS / 2)))
+                },
+                label = "day_activities"
+            ) { (_, activities) ->
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.animateContentSize()
+                ) {
+                    activities.forEach { ranked -> ActivityCard(ranked) }
                 }
-
-                location?.description?.takeIf { it.isNotBlank() }?.let { extract ->
-                    Spacer(Modifier.height(28.dp))
-                    CityDescriptionSection(
-                        cityName = location.name,
-                        description = extract,
-                        attribution = location.imageAttribution,
-                        showAttribution = location.imageUrl.isNullOrBlank()
-                    )
-                }
-                Spacer(Modifier.height(24.dp))
             }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }

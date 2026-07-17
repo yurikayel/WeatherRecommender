@@ -6,7 +6,7 @@ This is a native Android app that implements the Concierge Weather Recommender a
 | Scope | What |
 |-------|------|
 | **Core (brief)** | City search, 7-day forecast, per-day activity ranking, offline-first Room cache, Clean Architecture + tests |
-| **Stretch** | Home top picks; History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 9:16 weather flyer PNG (+ save to Downloads); collapsing 3:2 MapLibre map AppBar + Crossfade sheet body (Nominatim reverse, no Google key); GPS current-location chip; pastel day chips; Wikipedia postage-stamp city photo + extract on detail; Paparazzi + instrumented CI |
+| **Stretch** | Home top picks; History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 9:16 weather flyer PNG (+ save to Downloads); collapsing 3:2 MapLibre map AppBar + Crossfade sheet body (Nominatim reverse, no Google key); GPS current-location chip; pastel day chips; Paparazzi + instrumented CI |
 
 Key experience details:
 - **Per-day recommendations**: the detail screen shows a day selector; tapping a day re-ranks its activities. There is no single "week-long" score.
@@ -30,7 +30,7 @@ Key experience details:
 
 ## c. Architecture and Technical Decisions 🏗️
 - **Clean Architecture Principles**: The project is strictly divided into three layers:
-  - **Data Layer**: Retrofit interfaces (Open-Meteo Forecast / Geocoding / Marine, Nominatim, Wikipedia summary), Room DAOs, and the Repository implementation mapping network data to domain models.
+  - **Data Layer**: Retrofit interfaces (Open-Meteo Forecast / Geocoding / Marine, Nominatim), Room DAOs, and the Repository implementation mapping network data to domain models.
   - **Domain Layer**: Core business logic, `AppError` sealed hierarchy, and the `GetRankedActivitiesUseCase` fully isolated from Android dependencies.
   - **UI Layer**: Composed of `WeatherScreen` (Jetpack Compose) and `WeatherViewModel`, orchestrating UI states via a `StateFlow`.
 - **Offline-First (SSOT)**: The UI never consumes data directly from the network. It observes a Room database `Flow`. A parallel background request fetches fresh data from the Open-Meteo API and updates the local database, triggering reactive UI updates.
@@ -53,7 +53,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 - **Lint**: `./gradlew lintDebug`
 - **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify`
 - **Static analysis**: `./gradlew detekt`
-- **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (19 Compose UI tests for key flows, plus 4 Room migration tests; also run on CI emulator)
+- **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (19 Compose UI tests for key flows, plus 5 Room migration tests; also run on CI emulator)
 
 **Testing Strategy**:
 - **Domain Layer**: Activity scorers and `GetRankedActivitiesUseCase` are pure Kotlin, unit-tested with JUnit.
@@ -67,7 +67,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 |-------|--------|----------------|
 | Offline cache | Done | Room SSOT + WorkManager background sync (chunked refreshes) |
 | Recently viewed History | Done | Home section after Top Picks; Room `lastViewedAt`; last 10; Nominatim/GeoNames dedupe |
-| Pull-to-refresh | Done (bonus) | Home-only `PullToRefreshBox` (force-refresh top picks); `enabled` only when sheet at top **and** map header fully expanded — not on detail |
+| Pull-to-refresh | Done (bonus) | Home-only `Modifier.pullToRefresh` (force-refresh top picks); `enabled` only when sheet at top **and** map header fully expanded — not on detail |
 | Dark mode + theme toggle | Done | Navy dark palette; AppBar theme toggle; DataStore preference (system until overridden, then persisted) |
 | Advanced UI polish / animation | Done | Collapsing 3:2 map AppBar + sheet + home↔detail Crossfade, day selector, score ring, top-pick press scale, shimmer/crossfade; pastel day chips; normalized top-pick cards |
 | Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground) |
@@ -76,7 +76,6 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Share weather flyer | Done | Detail share → branded 9:16 portrait PNG (`GraphicsLayer` + FileProvider); also best-effort save to Downloads |
 | In-screen map | Done | Collapsing 3:2 MapLibre AppBar + OpenFreeMap (no Google key); sheet covers map on scroll; home centers on device location (static London fallback, wider zoom); tap → Nominatim reverse; camera/pin in ViewModel |
 | Current-location chip | Done | Runtime permission → LocationManager last-known fix → Nominatim reverse; home header chip (opt-in tap); map centers on fix |
-| Wikipedia city stamp | Done | Best-effort Wikipedia summary thumbnail + extract (not Open-Meteo); Room-cached; postage-stamp frame under chips; description after activity list; CC BY-SA attribution |
 
 ## f. API usage notes ☀️
 The application interfaces with three Open-Meteo APIs (No API key required):
@@ -84,10 +83,6 @@ The application interfaces with three Open-Meteo APIs (No API key required):
 - **Forecast API**: `https://api.open-meteo.com/v1/forecast` for the 7-day daily forecast (temperature, precipitation, snowfall, wind, weather code).
 - **Marine API**: `https://marine-api.open-meteo.com/v1/marine` for daily `wave_height_max`. This serves a dual purpose: it feeds surf scoring with real wave data, and — because it returns null wave heights for inland coordinates — it acts as a reliable **sea-access detector**. The marine call is best-effort: a failure never fails the primary forecast.
 
-**City images & descriptions (not from Open-Meteo)**
-- Open-Meteo Geocoding / Forecast / Marine and Nominatim **do not** return city photos or long-form place blurbs — only names, coordinates, and geography metadata.
-- Detail enrichment uses the free [Wikipedia REST summary API](https://en.wikipedia.org/api/rest_v1/page/summary/{title}) (`thumbnail.source` + `extract`) with a descriptive `User-Agent`. Lookup is best-effort by city name (then `City, Country`) and **never blocks or fails** the forecast path.
-- Media is cached on the Room `location_entity` (`imageUrl`, `description`, `imageAttribution`) so reopen can show the stamp offline. UI: a compact postage-stamp photo under the geography chips; the extract appears **after** the ranked activities list. Attribution: Wikipedia · CC BY-SA.
 
 **Map and reverse geocoding (no Google Maps key)**
 - **Map rendering**: [MapLibre Compose](https://maplibre.org/maplibre-compose/) with the free [OpenFreeMap](https://openfreemap.org/) Liberty style. No API key and no Google Play Services Maps SDK — any networked emulator/device works. We ship the **OpenGL** MapLibre Android backend for broader AVD support (Vulkan can fail on some emulators).
@@ -128,7 +123,7 @@ Honest scope note: a **strict 3–4 hour** take would likely stop at search → 
 - **Home top picks + `FeaturedCities`**: the brief focuses on search → city detail. A home feed makes the app feel like a concierge product on first launch, but Open-Meteo has no "browse cities" endpoint, so a bundled seed list was required.
 - **Marine API**: surfing without wave data is guesswork; marine also doubles as sea-access detection so inland cities never show Surfing.
 - **WorkManager `LocationSyncer`**: keeps Room forecasts fresh for previously viewed cities without blocking the UI.
-- **History + map + share + Wikipedia stamp**: discovery and shareability beyond the letter of the brief; Nominatim avoids a Google Maps key; Wikipedia fills the gap that Open-Meteo/Nominatim have no city photos or extracts.
+- **History + map + share**: discovery and shareability beyond the letter of the brief; Nominatim avoids a Google Maps key for reviewers.
 - **Paparazzi goldens + instrumented CI**: raise confidence for UI regressions beyond unit tests alone.
 - **Per-day ranking UI**: the brief can be read as a single weekly ranking; per-day scoring is more honest to daily weather swings and stays cheap (pure in-memory recompute).
 
@@ -139,7 +134,6 @@ Honest scope note: a **strict 3–4 hour** take would likely stop at search → 
 - **Top-picks 45-minute TTL**: `TopPicksCache` avoids repeating a cold-start forecast burst on every home visit. Pull-to-refresh on home calls `getTopPicks(forceRefresh=true)` to bypass the TTL when the user asks for fresh data; offline pull shows a connectivity error and keeps the last feed.
 - **WorkManager Sync**: Background sync runs every 6 hours when any network is available. Stricter constraints (unmetered + charging) were removed to improve refresh reliability on mobile.
 - **Share → Downloads**: MediaStore on API 29+ (no permission); pre-Q may request legacy write. A Downloads failure never blocks the share sheet.
-- **Wikipedia enrichment**: best-effort title lookup (`City`, then `City, Country`); failures and disambiguation pages hide the stamp/extract. Media is Room-cached (v5) and preserved across forecast REPLACE upserts; reopen works offline once cached. Never blocks or fails the forecast path.
 - **Crash reporting**: A `CrashReporter` abstraction logs locally; swap for Firebase Crashlytics when a Firebase project is configured.
 - **Rate limiting (HTTP)**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present); other failures map to localized error strings.
 

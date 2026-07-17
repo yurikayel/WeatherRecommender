@@ -3,20 +3,17 @@ package com.example.weatherrecommender.data.repository
 import com.example.weatherrecommender.data.local.dao.WeatherDao
 import com.example.weatherrecommender.data.local.entity.DailyForecastEntity
 import com.example.weatherrecommender.data.local.entity.LocationEntity
-import com.example.weatherrecommender.data.mapper.WikipediaPlaceMediaMapper
 import com.example.weatherrecommender.data.mapper.toDomain
 import com.example.weatherrecommender.data.mapper.toEntity
 import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
 import com.example.weatherrecommender.data.remote.NominatimApi
-import com.example.weatherrecommender.data.remote.WikipediaApi
 import com.example.weatherrecommender.data.remote.dto.NominatimResponse
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.AppResult
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
-import com.example.weatherrecommender.domain.model.PlaceMedia
 import com.example.weatherrecommender.domain.model.Result
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
@@ -32,14 +29,11 @@ import kotlin.math.abs
  * Concrete implementation of the [WeatherRepository].
  *
  * Coordinates data fetching between the [GeocodingApi], [ForecastApi], [MarineApi],
- * [NominatimApi], [WikipediaApi], and local [WeatherDao]. Implements the Offline-First
- * architecture by storing responses in Room as the Single Source of Truth (SSOT).
+ * [NominatimApi], and local [WeatherDao]. Implements the Offline-First architecture by
+ * storing responses in Room as the Single Source of Truth (SSOT).
  *
  * The Marine API is queried alongside the forecast: its wave data enriches surf scoring and, since
  * it only returns values near open water, doubles as a "has sea access" detector.
- *
- * Wikipedia enrichment is best-effort and never fails the forecast path — Open-Meteo / Nominatim
- * do not provide city images or long-form descriptions.
  */
 @Suppress("TooManyFunctions")
 class WeatherRepositoryImpl @Inject constructor(
@@ -47,7 +41,6 @@ class WeatherRepositoryImpl @Inject constructor(
     private val forecastApi: ForecastApi,
     private val marineApi: MarineApi,
     private val nominatimApi: NominatimApi,
-    private val wikipediaApi: WikipediaApi,
     private val weatherDao: WeatherDao
 ) : WeatherRepository {
 
@@ -90,7 +83,7 @@ class WeatherRepositoryImpl @Inject constructor(
             if (forecastEntities.isEmpty()) {
                 null
             } else {
-                // Prefer the persisted location (it carries geography + Wikipedia media);
+                // Prefer the persisted location (it carries geography / sea-access);
                 // fall back to the caller-supplied location before the first successful refresh.
                 val resolvedLocation = locationEntity?.toDomain() ?: location
                 WeatherForecast(resolvedLocation, forecastEntities.map { it.toDomain() })
@@ -101,16 +94,11 @@ class WeatherRepositoryImpl @Inject constructor(
     override suspend fun refreshForecast(location: Location): AppResult<Unit> {
         return try {
             val forecast = fetchRemoteForecast(location)
-            // Preserve view history and Wikipedia media across forecast REPLACE upserts.
+            // Preserve view history across forecast REPLACE upserts.
             val existing = weatherDao.getLocation(location.id)
             val existingViewedAt = existing?.lastViewedAt ?: 0L
-            val withCachedMedia = forecast.location.copy(
-                imageUrl = existing?.imageUrl ?: forecast.location.imageUrl,
-                description = existing?.description ?: forecast.location.description,
-                imageAttribution = existing?.imageAttribution ?: forecast.location.imageAttribution
-            )
             weatherDao.insertLocationWithForecast(
-                location = withCachedMedia.toEntity(lastViewedAt = existingViewedAt),
+                location = forecast.location.toEntity(lastViewedAt = existingViewedAt),
                 forecasts = forecast.dailyForecasts.map { it.toEntity(location.id) }
             )
             evictStaleLocationsIfNeeded()
@@ -169,45 +157,6 @@ class WeatherRepositoryImpl @Inject constructor(
         weatherDao.insertLocation(
             location.toEntity(lastUpdated = now, lastViewedAt = now)
         )
-    }
-
-    override suspend fun enrichPlaceMedia(location: Location) {
-        val cached = weatherDao.getLocation(location.id)
-        val alreadyCached = cached != null &&
-            (!cached.imageUrl.isNullOrBlank() || !cached.description.isNullOrBlank())
-        if (cached == null || alreadyCached) {
-            return
-        }
-
-        val media = fetchWikipediaMedia(location)
-        if (media == null || media.isEmpty) {
-            return
-        }
-
-        weatherDao.updatePlaceMedia(
-            locationId = cached.id,
-            imageUrl = media.imageUrl,
-            description = media.description,
-            imageAttribution = media.attribution
-        )
-    }
-
-    /**
-     * Tries Wikipedia summary titles derived from city name (+ country). Returns null on any
-     * network/HTTP failure so callers never treat this as a hard error.
-     */
-    private suspend fun fetchWikipediaMedia(location: Location): PlaceMedia? {
-        val titles = WikipediaPlaceMediaMapper.candidateTitles(location.name, location.country)
-        for (title in titles) {
-            try {
-                val dto = wikipediaApi.getPageSummary(WikipediaPlaceMediaMapper.encodeTitle(title))
-                val media = WikipediaPlaceMediaMapper.toPlaceMedia(dto)
-                if (media != null && !media.isEmpty) return media
-            } catch (_: Exception) {
-                // Try the next title candidate; total failure is fine (hide stamp).
-            }
-        }
-        return null
     }
 
     /**

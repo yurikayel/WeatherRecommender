@@ -248,7 +248,7 @@ class WeatherViewModel @Inject constructor(
                         val maxIndex = maxOf(0, forecast.dailyForecasts.lastIndex)
                         val dayIndex = state.selectedDayIndex.coerceIn(0, maxIndex)
                         state.copy(
-                            // Prefer SSOT location so Wikipedia media / sea-access updates flow through.
+                            // Prefer SSOT location so sea-access / geography updates flow through.
                             selectedLocation = forecast.location,
                             forecast = forecast,
                             rankedActivities = getRankedActivities(forecast, dayIndex),
@@ -261,10 +261,8 @@ class WeatherViewModel @Inject constructor(
         }
 
         // Mark viewed before refresh so lastViewedAt is preserved across the Room REPLACE upsert.
-        // Wikipedia media enrichment runs after mark (row exists) and never blocks / fails forecast.
         viewModelScope.launch {
             repository.markLocationViewed(location)
-            launch { repository.enrichPlaceMedia(location) }
             val refreshResult = repository.refreshForecast(location)
             refreshResult.fold(
                 onSuccess = { /* Handled by the SSOT flow emission. */ },
@@ -279,10 +277,6 @@ class WeatherViewModel @Inject constructor(
                     }
                 }
             )
-            // After refresh so media survives REPLACE and caches for offline reopen.
-            if (refreshResult is Result.Success) {
-                repository.enrichPlaceMedia(location)
-            }
         }
     }
 
@@ -408,8 +402,9 @@ class WeatherViewModel @Inject constructor(
     }
 
     /**
-     * Pull-to-refresh: on home, force-refreshes top picks (bypassing TTL);
-     * on detail, refreshes the selected city's forecast into Room.
+     * Refresh entry point used by home pull-to-refresh (bonus): force-refreshes top picks
+     * (bypassing TTL). When a location is selected, refreshes that city's forecast into Room
+     * (kept for callers/tests; the detail UI no longer exposes PTR so it won't fight map collapse).
      */
     fun refresh() {
         val location = _uiState.value.selectedLocation

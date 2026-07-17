@@ -22,10 +22,7 @@ fun LocationEntity.toDomain(): Location {
         elevation = this.elevation,
         population = this.population,
         featureCode = this.featureCode,
-        hasSeaAccess = this.hasSeaAccess,
-        imageUrl = this.imageUrl,
-        description = this.description,
-        imageAttribution = this.imageAttribution
+        hasSeaAccess = this.hasSeaAccess
     )
 }
 
@@ -53,10 +50,7 @@ fun Location.toEntity(
         population = this.population,
         featureCode = this.featureCode,
         hasSeaAccess = this.hasSeaAccess,
-        lastViewedAt = lastViewedAt,
-        imageUrl = this.imageUrl,
-        description = this.description,
-        imageAttribution = this.imageAttribution
+        lastViewedAt = lastViewedAt
     )
 }
 

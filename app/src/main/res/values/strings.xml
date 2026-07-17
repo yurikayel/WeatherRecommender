@@ -18,9 +18,6 @@
     <string name="search">Search</string>
 
     <!-- Home screen -->
-    <string name="home_brand_eyebrow">Concierge</string>
-    <string name="home_greeting_title">Plan your day</string>
-    <string name="home_greeting_subtitle">Activities ranked by the forecast.</string>
     <string name="home_top_picks_title">Top picks for you</string>
     <string name="home_top_picks_empty">Connect to the internet to see today\'s suggestions.</string>
     <string name="home_history_title">Recently viewed</string>
@@ -37,9 +34,6 @@
     <string name="chip_coastal">Coastal</string>
     <string name="chip_inland">Inland</string>
     <string name="chip_elevation">%1$d m elevation</string>
-    <string name="detail_city_stamp_cd">Postcard photo of %1$s</string>
-    <string name="detail_about_city">About %1$s</string>
-    <string name="detail_wikipedia_attribution">Text and image from Wikipedia · %1$s · CC BY-SA</string>
     <string name="temp_degrees">%1$d°</string>
     <string name="share_weather">Share weather</string>
     <string name="share_weather_failed">Couldn\'t share the weather card. Please try again.</string>

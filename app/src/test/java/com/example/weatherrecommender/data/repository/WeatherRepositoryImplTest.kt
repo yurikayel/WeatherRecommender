@@ -6,7 +6,6 @@ import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
 import com.example.weatherrecommender.data.remote.NominatimApi
-import com.example.weatherrecommender.data.remote.WikipediaApi
 import com.example.weatherrecommender.data.remote.dto.DailyForecastDto
 import com.example.weatherrecommender.data.remote.dto.ForecastResponse
 import com.example.weatherrecommender.data.remote.dto.GeocodingLocationDto
@@ -15,8 +14,6 @@ import com.example.weatherrecommender.data.remote.dto.MarineDailyDto
 import com.example.weatherrecommender.data.remote.dto.MarineResponse
 import com.example.weatherrecommender.data.remote.dto.NominatimAddress
 import com.example.weatherrecommender.data.remote.dto.NominatimResponse
-import com.example.weatherrecommender.data.remote.dto.WikipediaSummaryDto
-import com.example.weatherrecommender.data.remote.dto.WikipediaThumbnailDto
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.Result
@@ -43,7 +40,6 @@ class WeatherRepositoryImplTest {
     private val forecastApi: ForecastApi = mockk()
     private val marineApi: MarineApi = mockk()
     private val nominatimApi: NominatimApi = mockk()
-    private val wikipediaApi: WikipediaApi = mockk()
     private val weatherDao: WeatherDao = mockk(relaxed = true)
 
     private lateinit var repository: WeatherRepositoryImpl
@@ -68,7 +64,7 @@ class WeatherRepositoryImplTest {
     @Before
     fun setup() {
         repository = WeatherRepositoryImpl(
-            geocodingApi, forecastApi, marineApi, nominatimApi, wikipediaApi, weatherDao
+            geocodingApi, forecastApi, marineApi, nominatimApi, weatherDao
         )
         // Default: inland (no marine data) unless a test overrides it.
         coEvery { marineApi.getMarine(any(), any()) } returns MarineResponse(51.5, -0.1, null)
@@ -357,75 +353,5 @@ class WeatherRepositoryImplTest {
 
         assertTrue(result is Result.Error)
         assertEquals(AppError.ApiError.NotFound, (result as Result.Error).error)
-    }
-
-    @Test
-    fun `enrichPlaceMedia persists Wikipedia thumbnail and extract`() = runTest {
-        coEvery { weatherDao.getLocation(location.id) } returns location.toEntity(lastViewedAt = 1L)
-        coEvery { wikipediaApi.getPageSummary(any()) } returns WikipediaSummaryDto(
-            type = "standard",
-            title = "London",
-            extract = "London is the capital of England.",
-            thumbnail = WikipediaThumbnailDto(source = "https://upload.wikimedia.org/london.jpg")
-        )
-
-        repository.enrichPlaceMedia(location)
-
-        coVerify {
-            weatherDao.updatePlaceMedia(
-                locationId = location.id,
-                imageUrl = "https://upload.wikimedia.org/london.jpg",
-                description = "London is the capital of England.",
-                imageAttribution = "London"
-            )
-        }
-    }
-
-    @Test
-    fun `enrichPlaceMedia skips network when media already cached`() = runTest {
-        coEvery { weatherDao.getLocation(location.id) } returns location.copy(
-            imageUrl = "https://cached.jpg",
-            description = "Cached"
-        ).toEntity(lastViewedAt = 1L)
-
-        repository.enrichPlaceMedia(location)
-
-        coVerify(exactly = 0) { wikipediaApi.getPageSummary(any()) }
-        coVerify(exactly = 0) { weatherDao.updatePlaceMedia(any(), any(), any(), any()) }
-    }
-
-    @Test
-    fun `enrichPlaceMedia swallows Wikipedia failures`() = runTest {
-        coEvery { weatherDao.getLocation(location.id) } returns location.toEntity(lastViewedAt = 1L)
-        coEvery { wikipediaApi.getPageSummary(any()) } throws IOException("offline")
-
-        repository.enrichPlaceMedia(location)
-
-        coVerify(exactly = 0) { weatherDao.updatePlaceMedia(any(), any(), any(), any()) }
-    }
-
-    @Test
-    fun `refreshForecast preserves cached Wikipedia media`() = runTest {
-        coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
-        coEvery { weatherDao.getLocation(location.id) } returns location.copy(
-            imageUrl = "https://upload.wikimedia.org/london.jpg",
-            description = "London extract",
-            imageAttribution = "London"
-        ).toEntity(lastViewedAt = 42L)
-
-        val result = repository.refreshForecast(location)
-
-        assertTrue(result is Result.Success)
-        coVerify {
-            weatherDao.insertLocationWithForecast(
-                match {
-                    it.id == location.id &&
-                        it.lastViewedAt == 42L &&
-                        it.imageUrl == "https://upload.wikimedia.org/london.jpg" &&
-                        it.description == "London extract"
-                },
-                any()
-            )
-        }
     }
 }

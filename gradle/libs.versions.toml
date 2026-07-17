@@ -28,7 +28,6 @@ paparazzi = "2.0.0-alpha05"
 datastore = "1.1.7"
 maplibreCompose = "0.13.0"
 maplibreAndroid = "13.0.2"
-coil = "2.7.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -73,7 +72,6 @@ androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 maplibre-compose = { module = "org.maplibre.compose:maplibre-compose", version.ref = "maplibreCompose" }
 maplibre-android-opengl = { module = "org.maplibre.gl:android-sdk-opengl", version.ref = "maplibreAndroid" }
-coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
