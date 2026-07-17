@@ -19,6 +19,13 @@ interface WeatherRepository {
     suspend fun searchCity(query: String): AppResult<List<Location>>
 
     /**
+     * Resolves a map tap (lat/lng) to a named [Location] via reverse geocoding.
+     *
+     * Open-Meteo Geocoding is forward-only; reverse uses Nominatim (OSM).
+     */
+    suspend fun reverseGeocode(latitude: Double, longitude: Double): AppResult<Location>
+
+    /**
      * Streams the weather forecast for a specific location.
      * Emits new data when the local cache is updated.
      *
@@ -46,4 +53,18 @@ interface WeatherRepository {
      * @return An [AppResult] containing the freshly fetched [WeatherForecast].
      */
     suspend fun getForecastRemote(location: Location): AppResult<WeatherForecast>
+
+    /**
+     * Streams the most recently viewed locations for the home History section.
+     * Only locations the user explicitly selected are included (not top-picks previews).
+     *
+     * @param limit Maximum number of history entries (newest first). Defaults to 10.
+     */
+    fun observeRecentLocations(limit: Int = 10): Flow<List<Location>>
+
+    /**
+     * Records that the user opened [location] (search result or top pick tap).
+     * Updates [lastViewedAt] without requiring a successful forecast refresh.
+     */
+    suspend fun markLocationViewed(location: Location)
 }

@@ -4,6 +4,7 @@ import com.example.weatherrecommender.BuildConfig
 import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
+import com.example.weatherrecommender.data.remote.NominatimApi
 import com.example.weatherrecommender.data.remote.RateLimitRetryInterceptor
 import dagger.Module
 import dagger.Provides
@@ -102,5 +103,22 @@ object NetworkModule {
     @Singleton
     fun provideMarineApi(@Named("MarineRetrofit") retrofit: Retrofit): MarineApi {
         return retrofit.create(MarineApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @Named("NominatimRetrofit")
+    fun provideNominatimRetrofit(okHttpClient: OkHttpClient, json: Json): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(NominatimApi.BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideNominatimApi(@Named("NominatimRetrofit") retrofit: Retrofit): NominatimApi {
+        return retrofit.create(NominatimApi::class.java)
     }
 }

@@ -7,6 +7,8 @@ import com.example.weatherrecommender.data.mapper.toEntity
 import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
+import com.example.weatherrecommender.data.remote.NominatimApi
+import com.example.weatherrecommender.data.remote.dto.NominatimResponse
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.AppResult
 import com.example.weatherrecommender.domain.model.DailyForecast
@@ -16,9 +18,11 @@ import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import retrofit2.HttpException
 import java.io.IOException
 import javax.inject.Inject
+import kotlin.math.abs
 
 /**
  * Concrete implementation of the [WeatherRepository].
@@ -30,10 +34,12 @@ import javax.inject.Inject
  * The Marine API is queried alongside the forecast: its wave data enriches surf scoring and, since
  * it only returns values near open water, doubles as a "has sea access" detector.
  */
+@Suppress("TooManyFunctions")
 class WeatherRepositoryImpl @Inject constructor(
     private val geocodingApi: GeocodingApi,
     private val forecastApi: ForecastApi,
     private val marineApi: MarineApi,
+    private val nominatimApi: NominatimApi,
     private val weatherDao: WeatherDao
 ) : WeatherRepository {
 
@@ -59,6 +65,15 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun reverseGeocode(latitude: Double, longitude: Double): AppResult<Location> {
+        return try {
+            val response = nominatimApi.reverseGeocode(latitude, longitude)
+            Result.Success(response.toLocation(fallbackLat = latitude, fallbackLng = longitude))
+        } catch (e: Exception) {
+            Result.Error(e.toAppError())
+        }
+    }
+
     override fun getForecastFlow(location: Location): Flow<WeatherForecast?> {
         return combine(
             weatherDao.getLocationFlow(location.id),
@@ -78,8 +93,10 @@ class WeatherRepositoryImpl @Inject constructor(
     override suspend fun refreshForecast(location: Location): AppResult<Unit> {
         return try {
             val forecast = fetchRemoteForecast(location)
+            // Preserve view history across forecast REPLACE upserts (sync must not reset it).
+            val existingViewedAt = weatherDao.getLocation(location.id)?.lastViewedAt ?: 0L
             weatherDao.insertLocationWithForecast(
-                location = forecast.location.toEntity(),
+                location = forecast.location.toEntity(lastViewedAt = existingViewedAt),
                 forecasts = forecast.dailyForecasts.map { it.toEntity(location.id) }
             )
             evictStaleLocationsIfNeeded()
@@ -107,6 +124,25 @@ class WeatherRepositoryImpl @Inject constructor(
             Result.Success(fetchRemoteForecast(location))
         } catch (e: Exception) {
             Result.Error(e.toAppError())
+        }
+    }
+
+    override fun observeRecentLocations(limit: Int): Flow<List<Location>> {
+        return weatherDao.getRecentLocationsFlow(limit).map { entities ->
+            entities.map { it.toDomain() }
+        }
+    }
+
+    override suspend fun markLocationViewed(location: Location) {
+        val now = System.currentTimeMillis()
+        val existing = weatherDao.getLocation(location.id)
+        if (existing != null) {
+            weatherDao.updateLastViewedAt(location.id, now)
+        } else {
+            // Insert a stub so history appears even if the subsequent forecast refresh fails.
+            weatherDao.insertLocation(
+                location.toEntity(lastUpdated = now, lastViewedAt = now)
+            )
         }
     }
 
@@ -177,6 +213,39 @@ class WeatherRepositoryImpl @Inject constructor(
 
     private companion object {
         const val MAX_CACHED_LOCATIONS = 20
+    }
+
+    /**
+     * Maps Nominatim reverse results into our [Location] model.
+     * Uses a negative synthetic id derived from place_id so it cannot collide with
+     * Open-Meteo / GeoNames positive IDs (same convention as FeaturedCities).
+     */
+    private fun NominatimResponse.toLocation(fallbackLat: Double, fallbackLng: Double): Location {
+        val address = address
+        val placeName = listOfNotNull(
+            address?.city,
+            address?.town,
+            address?.village,
+            address?.municipality,
+            name?.takeIf { it.isNotBlank() },
+            address?.county
+        ).firstOrNull()
+            ?: displayName?.substringBefore(',')?.trim()
+            ?: "Dropped pin"
+
+        val lat = lat.toDoubleOrNull() ?: fallbackLat
+        val lng = lon.toDoubleOrNull() ?: fallbackLng
+        // Offset into a range far from FeaturedCities (−1…−14) and Open-Meteo positives.
+        val syntheticId = -(1_000_000L + abs(placeId))
+
+        return Location(
+            id = syntheticId,
+            name = placeName,
+            latitude = lat,
+            longitude = lng,
+            country = address?.country,
+            admin1 = address?.state
+        )
     }
 
     private fun Exception.toAppError(): AppError {
