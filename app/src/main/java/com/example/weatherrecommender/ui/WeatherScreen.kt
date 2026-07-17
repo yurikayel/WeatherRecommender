@@ -10,10 +10,16 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -136,9 +142,14 @@ fun WeatherScreenContent(
         if (!inDetail) shareInProgress = false
     }
 
+    // Top inset is owned by WeatherCollapsingTopBar (WindowInsets.statusBars) so the map can
+    // draw edge-to-edge under the status bar; Scaffold only applies horizontal + bottom safe areas.
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.safeDrawing.only(
+            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
+        )
     ) { padding ->
         if (inDetail) {
             BackHandler(onBack = onBack)
@@ -285,7 +296,7 @@ private fun CollapsingMapScaffold(
             onShare = onShare,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(CollapsedAppBarHeight)
+                .height(collapse.collapsedAppBarHeight)
                 .align(Alignment.TopCenter)
         )
 
@@ -330,16 +341,24 @@ private class MapCollapseState(
     val headerHeight: Dp,
     val sheetTop: Dp,
     val fraction: Float,
-    val mapInteractive: Boolean
+    val mapInteractive: Boolean,
+    /** Status-bar inset + [TopAppBarDefaults.TopAppBarExpandedHeight] for edge-to-edge layout. */
+    val collapsedAppBarHeight: Dp
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun rememberMapCollapseState(resetKey: Any): MapCollapseState {
     val density = LocalDensity.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    // Surface height must include statusBars so Material3's inner windowInsetsPadding leaves a
+    // full 64.dp content row — otherwise icons are squeezed below the title.
+    val collapsedAppBarHeight =
+        statusBarHeight + TopAppBarDefaults.TopAppBarExpandedHeight
     val expandedMapHeight = screenWidthDp * MAP_ASPECT_HEIGHT / MAP_ASPECT_WIDTH
     val expandedPx = with(density) { expandedMapHeight.toPx() }
-    val collapsedPx = with(density) { CollapsedAppBarHeight.toPx() }
+    val collapsedPx = with(density) { collapsedAppBarHeight.toPx() }
     val maxCollapsePx = (expandedPx - collapsedPx).coerceAtLeast(1f)
 
     var toolbarOffsetPx by remember { mutableFloatStateOf(0f) }
@@ -381,14 +400,15 @@ private fun rememberMapCollapseState(resetKey: Any): MapCollapseState {
 
     val headerHeight = with(density) { (expandedPx + toolbarOffsetPx).toDp() }
     val fraction = (-toolbarOffsetPx / maxCollapsePx).coerceIn(0f, 1f)
-    val sheetTop = (headerHeight - MapSheetOverlap).coerceAtLeast(CollapsedAppBarHeight)
+    val sheetTop = (headerHeight - MapSheetOverlap).coerceAtLeast(collapsedAppBarHeight)
 
     return MapCollapseState(
         nestedScrollConnection = nestedScrollConnection,
         headerHeight = headerHeight,
         sheetTop = sheetTop,
         fraction = fraction,
-        mapInteractive = fraction < MAP_INTERACTIVE_COLLAPSE_THRESHOLD
+        mapInteractive = fraction < MAP_INTERACTIVE_COLLAPSE_THRESHOLD,
+        collapsedAppBarHeight = collapsedAppBarHeight
     )
 }
 
@@ -422,6 +442,10 @@ private fun WeatherCollapsingTopBar(
 
     TopAppBar(
         modifier = modifier,
+        // Match Surface height (statusBars + TopAppBarExpandedHeight): insets pad the status area,
+        // then navigationIcon / title / actions share one CenterVertically content row.
+        windowInsets = WindowInsets.statusBars,
+        expandedHeight = TopAppBarDefaults.TopAppBarExpandedHeight,
         title = {
             Text(
                 text = title,
@@ -505,6 +529,5 @@ private const val BODY_CROSSFADE_MS = 280
 /** Width:height = 1:1 when the collapsing map header is fully expanded. */
 private const val MAP_ASPECT_WIDTH = 1f
 private const val MAP_ASPECT_HEIGHT = 1f
-private val CollapsedAppBarHeight: Dp = 64.dp
 private val MapSheetOverlap: Dp = 28.dp
 private const val MAP_INTERACTIVE_COLLAPSE_THRESHOLD = 0.72f
