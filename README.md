@@ -13,7 +13,7 @@ Key experience details:
 - **Geography-aware activities**: activities that don't make sense for a location are hidden entirely (e.g. surfing is only offered where there is sea access; skiing only in mountainous terrain or when snow is falling).
 - **Home "top picks"**: the home screen surfaces a randomised, population-weighted set of well-known cities, each with its best activity for today (stretch). Pull-to-refresh on home force-refreshes this feed.
 - **Recently viewed History**: after Top Picks, lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
-- **In-screen map**: square MapLibre section at the top of home/detail scroll content (not sticky). Defaults to a London overview; search and selection recenter the camera; back resets to London.
+- **In-screen map**: square MapLibre section **fixed above** a Crossfade of home/detail body content (no full-screen slide). Selecting a city updates the map camera in place and fades the body to detail; back fades home back and resets the camera (random capital / GPS).
 - **Share**: detail toolbar exports a branded 7-day weather card PNG via the system share sheet and best-effort saves a copy to Downloads.
 
 ## b. Platform and Tooling Choices
@@ -68,7 +68,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Recently viewed History | Done | Home section after Top Picks; Room `lastViewedAt`; last 10; Nominatim/GeoNames dedupe |
 | Pull-to-refresh | Done | `PullToRefreshBox` on city detail **and** home (force-refresh top picks) |
 | Dark mode + theme toggle | Done | Navy dark palette; discreet home-header toggle; DataStore preference (system until overridden, then persisted) |
-| Advanced UI polish / animation | Done | Home↔detail slide, day selector, score ring, top-pick press scale, shimmer/crossfade; pastel day chips; normalized top-pick cards |
+| Advanced UI polish / animation | Done | Fixed map + home↔detail body Crossfade, day selector, score ring, top-pick press scale, shimmer/crossfade; pastel day chips; normalized top-pick cards |
 | Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground) |
 | Snapshot tests | Done | Paparazzi 2.0.0-alpha05, golden PNGs (home/detail + share card), verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
 | Substantial UI test coverage | Done | ~17 instrumented Compose tests for key flows (home, search, top picks, chips, day selection, back, banners, dark theme) |
@@ -87,7 +87,7 @@ The application interfaces with three Open-Meteo APIs (No API key required):
 - **Reverse geocode** (map tap / long-press): Open-Meteo has no reverse endpoint, so we call [Nominatim](https://nominatim.openstreetmap.org/) (`/reverse`) with a descriptive `User-Agent`, then open the same detail flow as `onLocationSelected`.
 - **Attribution**: OpenStreetMap contributors / OpenFreeMap / Nominatim (shown under the map).
 
-The map is a **square section** at the top of home and detail **scroll content** (not a sticky overlay). `mapCamera` / `mapPin` live in `WeatherUiState` so selection survives home↔detail even when the composable is recreated. Home defaults to London overview; back resets the camera.
+The map is a **square section fixed at the top of the scaffold**; only the region below Crossfades between home and detail scroll bodies. `mapCamera` / `mapPin` live in `WeatherUiState` and drive the same map instance on select/back. Home defaults to a random world capital (or GPS when available); back re-seeds that overview.
 
 ## g. Activity recommendation logic
 `GetRankedActivitiesUseCase(forecast, dayIndex)` evaluates each injected `ActivityScorer` for a **single day**. A scorer first decides whether it is *applicable* to the location's geography; only applicable activities are scored (0-100) and ranked. This prevents nonsensical suggestions such as surfing in a landlocked city.
