@@ -66,6 +66,8 @@ class WeatherViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Available)
+        every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
+        coEvery { repository.markLocationViewed(any()) } returns Unit
         coEvery { getTopPicksUseCase(any(), any()) } returns emptyList()
         viewModel = WeatherViewModel(
             repository,
@@ -196,6 +198,8 @@ class WeatherViewModelTest {
     @Test
     fun `refresh when offline sets syncError`() = runTest {
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Unavailable)
+        every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
+        coEvery { repository.markLocationViewed(any()) } returns Unit
         viewModel = WeatherViewModel(
             repository,
             getRankedActivitiesUseCase,
@@ -229,6 +233,7 @@ class WeatherViewModelTest {
             )
         )
         coEvery { getTopPicksUseCase(any(), any()) } returns picks
+        every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
         viewModel = WeatherViewModel(
             repository,
             getRankedActivitiesUseCase,
@@ -263,6 +268,7 @@ class WeatherViewModelTest {
         )
         coEvery { getTopPicksUseCase(any(), forceRefresh = false) } returns initial
         coEvery { getTopPicksUseCase(any(), forceRefresh = true) } returns refreshed
+        every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
         viewModel = WeatherViewModel(
             repository,
             getRankedActivitiesUseCase,
@@ -281,5 +287,115 @@ class WeatherViewModelTest {
         assertEquals(refreshed, viewModel.uiState.value.topPicks)
         assertEquals(false, viewModel.uiState.value.isRefreshingTopPicks)
         io.mockk.coVerify { getTopPicksUseCase(any(), forceRefresh = true) }
+    }
+
+    @Test
+    fun `history from repository is exposed on home state`() = runTest {
+        val history = listOf(
+            Location(-4, "Lisbon", 38.7, -9.1, "Portugal", "Lisbon"),
+            Location(1, "London", 51.5, -0.1, "UK", "England")
+        )
+        every { repository.observeRecentLocations(10) } returns flowOf(history)
+        viewModel = WeatherViewModel(
+            repository,
+            getRankedActivitiesUseCase,
+            getTopPicksUseCase,
+            connectivityObserver
+        )
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+
+        assertEquals(history, viewModel.uiState.value.recentHistory)
+    }
+
+    @Test
+    fun `location selection marks the city as viewed`() = runTest {
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationSelected(location)
+        advanceUntilIdle()
+
+        io.mockk.coVerify { repository.markLocationViewed(location) }
+        io.mockk.coVerify { repository.refreshForecast(location) }
+    }
+
+    @Test
+    fun `search centers map camera on first result`() = runTest {
+        coEvery { repository.searchCity("Lon") } returns Result.Success(listOf(location))
+
+        viewModel.uiState.test {
+            awaitItem()
+            viewModel.onQueryChanged("Lon")
+            awaitItem()
+            advanceTimeBy(600)
+            advanceUntilIdle()
+
+            val state = expectMostRecentItem()
+            assertEquals(location.latitude, state.mapCamera.latitude, 0.0)
+            assertEquals(location.longitude, state.mapCamera.longitude, 0.0)
+            assertEquals(location, state.mapPin)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `location selection updates map camera and pin`() = runTest {
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationSelected(location)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(location.latitude, state.mapCamera.latitude, 0.0)
+        assertEquals(location.longitude, state.mapCamera.longitude, 0.0)
+        assertEquals(location, state.mapPin)
+    }
+
+    @Test
+    fun `onBack keeps map camera centered on last city`() = runTest {
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationSelected(location)
+        advanceUntilIdle()
+        viewModel.onBack()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertNull(state.selectedLocation)
+        assertEquals(location, state.mapPin)
+        assertEquals(location.latitude, state.mapCamera.latitude, 0.0)
+    }
+
+    @Test
+    fun `map tap reverse geocodes then selects location`() = runTest {
+        val pinned = Location(-1_000_042, "London", 51.5, -0.1, "UK", "England")
+        coEvery { repository.reverseGeocode(51.5, -0.1) } returns Result.Success(pinned)
+        every { repository.getForecastFlow(pinned) } returns flowOf(forecast.copy(location = pinned))
+        coEvery { repository.refreshForecast(pinned) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(any(), 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onMapTapped(51.5, -0.1)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(pinned, state.selectedLocation)
+        assertEquals(false, state.isResolvingMapTap)
+        assertEquals(pinned, state.mapPin)
+        io.mockk.coVerify { repository.reverseGeocode(51.5, -0.1) }
     }
 }

@@ -1,15 +1,19 @@
 package com.example.weatherrecommender.data.repository
 
 import com.example.weatherrecommender.data.local.dao.WeatherDao
+import com.example.weatherrecommender.data.mapper.toEntity
 import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
+import com.example.weatherrecommender.data.remote.NominatimApi
 import com.example.weatherrecommender.data.remote.dto.DailyForecastDto
 import com.example.weatherrecommender.data.remote.dto.ForecastResponse
 import com.example.weatherrecommender.data.remote.dto.GeocodingLocationDto
 import com.example.weatherrecommender.data.remote.dto.GeocodingResponse
 import com.example.weatherrecommender.data.remote.dto.MarineDailyDto
 import com.example.weatherrecommender.data.remote.dto.MarineResponse
+import com.example.weatherrecommender.data.remote.dto.NominatimAddress
+import com.example.weatherrecommender.data.remote.dto.NominatimResponse
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.Result
@@ -35,6 +39,7 @@ class WeatherRepositoryImplTest {
     private val geocodingApi: GeocodingApi = mockk()
     private val forecastApi: ForecastApi = mockk()
     private val marineApi: MarineApi = mockk()
+    private val nominatimApi: NominatimApi = mockk()
     private val weatherDao: WeatherDao = mockk(relaxed = true)
 
     private lateinit var repository: WeatherRepositoryImpl
@@ -58,7 +63,9 @@ class WeatherRepositoryImplTest {
 
     @Before
     fun setup() {
-        repository = WeatherRepositoryImpl(geocodingApi, forecastApi, marineApi, weatherDao)
+        repository = WeatherRepositoryImpl(
+            geocodingApi, forecastApi, marineApi, nominatimApi, weatherDao
+        )
         // Default: inland (no marine data) unless a test overrides it.
         coEvery { marineApi.getMarine(any(), any()) } returns MarineResponse(51.5, -0.1, null)
     }
@@ -114,6 +121,43 @@ class WeatherRepositoryImplTest {
 
         assertTrue(result is Result.Error)
         assertEquals(AppError.ApiError.RateLimitExceeded, (result as Result.Error).error)
+    }
+
+    @Test
+    fun `reverseGeocode maps Nominatim city to Location`() = runTest {
+        coEvery { nominatimApi.reverseGeocode(51.5, -0.1) } returns NominatimResponse(
+            placeId = 42,
+            lat = "51.5074",
+            lon = "-0.1278",
+            displayName = "Westminster, London, England, UK",
+            name = "Westminster",
+            address = NominatimAddress(
+                city = "London",
+                state = "England",
+                country = "United Kingdom"
+            )
+        )
+
+        val result = repository.reverseGeocode(51.5, -0.1)
+
+        assertTrue(result is Result.Success)
+        val mapped = (result as Result.Success).data
+        assertEquals("London", mapped.name)
+        assertEquals("England", mapped.admin1)
+        assertEquals("United Kingdom", mapped.country)
+        assertEquals(51.5074, mapped.latitude, 0.0001)
+        assertEquals(-0.1278, mapped.longitude, 0.0001)
+        assertTrue(mapped.id < -1_000_000L)
+    }
+
+    @Test
+    fun `reverseGeocode maps IOException to NoConnectivity`() = runTest {
+        coEvery { nominatimApi.reverseGeocode(any(), any()) } throws IOException("offline")
+
+        val result = repository.reverseGeocode(1.0, 2.0)
+
+        assertTrue(result is Result.Error)
+        assertEquals(AppError.NetworkError.NoConnectivity, (result as Result.Error).error)
     }
 
     @Test
@@ -195,6 +239,58 @@ class WeatherRepositoryImplTest {
         assertTrue(result is Result.Success)
         assertEquals(1, (result as Result.Success).data.dailyForecasts.size)
         coVerify(exactly = 0) { weatherDao.insertLocationWithForecast(any(), any()) }
+    }
+
+    @Test
+    fun `markLocationViewed updates timestamp when location already cached`() = runTest {
+        coEvery { weatherDao.getLocation(location.id) } returns location.toEntity(lastViewedAt = 1L)
+
+        repository.markLocationViewed(location)
+
+        coVerify { weatherDao.updateLastViewedAt(location.id, any()) }
+        coVerify(exactly = 0) { weatherDao.insertLocation(any()) }
+    }
+
+    @Test
+    fun `markLocationViewed inserts stub when location is new`() = runTest {
+        coEvery { weatherDao.getLocation(location.id) } returns null
+
+        repository.markLocationViewed(location)
+
+        coVerify {
+            weatherDao.insertLocation(
+                match { it.id == location.id && it.lastViewedAt > 0L }
+            )
+        }
+        coVerify(exactly = 0) { weatherDao.updateLastViewedAt(any(), any()) }
+    }
+
+    @Test
+    fun `refreshForecast preserves existing lastViewedAt`() = runTest {
+        coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
+        coEvery { weatherDao.getLocation(location.id) } returns location.toEntity(lastViewedAt = 42L)
+
+        val result = repository.refreshForecast(location)
+
+        assertTrue(result is Result.Success)
+        coVerify {
+            weatherDao.insertLocationWithForecast(
+                match { it.id == location.id && it.lastViewedAt == 42L },
+                any()
+            )
+        }
+    }
+
+    @Test
+    fun `observeRecentLocations maps dao entities to domain`() = runTest {
+        every { weatherDao.getRecentLocationsFlow(10) } returns flowOf(
+            listOf(location.toEntity(lastViewedAt = 99L))
+        )
+
+        val recent = repository.observeRecentLocations(10).first()
+
+        assertEquals(1, recent.size)
+        assertEquals("London", recent.first().name)
     }
 
     @Test
