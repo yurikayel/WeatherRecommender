@@ -38,6 +38,8 @@
     <string name="temp_degrees">%1$d°</string>
     <string name="share_weather">Share weather</string>
     <string name="share_weather_failed">Couldn\'t share the weather card. Please try again.</string>
+    <string name="share_weather_saved_downloads">Saved to Downloads</string>
+    <string name="share_weather_save_failed">Shared, but couldn\'t save to Downloads</string>
     <string name="share_weather_chooser">Share weather</string>
     <string name="share_weather_subject">Weather in %1$s</string>
     <string name="share_weather_text">Here\'s the 7-day forecast for %1$s from Concierge Weather.</string>

@@ -1,8 +1,15 @@
 package com.example.weatherrecommender.ui
 
+import android.Manifest
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.media.MediaScannerConnection
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,6 +26,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.DailyForecast
@@ -29,6 +37,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/** Result of capturing and sharing the weather card image. */
+internal data class ShareWeatherOutcome(
+    val shared: Boolean,
+    /** Whether the same PNG was written to Downloads. Independent of [shared]. */
+    val savedToDownloads: Boolean = false
+)
 
 /**
  * Renders [ShareWeatherCard] into a [androidx.compose.ui.graphics.layer.GraphicsLayer],
@@ -41,7 +59,7 @@ internal fun ShareWeatherCapture(
     location: Location,
     days: List<DailyForecast>,
     tipActivity: RecommendedActivity?,
-    onComplete: (success: Boolean) -> Unit
+    onComplete: (ShareWeatherOutcome) -> Unit
 ) {
     val context = LocalContext.current
     val graphicsLayer = rememberGraphicsLayer()
@@ -82,32 +100,37 @@ internal fun ShareWeatherCapture(
         if (laidOut == 0 || finished > 0) return@LaunchedEffect
         // Let Compose finish recording into the graphics layer.
         delay(64)
-        val success = try {
+        val outcome = try {
             val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
             withContext(Dispatchers.IO) {
                 shareWeatherBitmap(context, bitmap, location.name)
             }
         } catch (_: Exception) {
-            false
+            ShareWeatherOutcome(shared = false)
         }
         finished = 1
-        onComplete(success)
+        onComplete(outcome)
     }
 }
 
 /**
  * Writes [bitmap] to cache and opens [Intent.ACTION_SEND] with `image/png` via FileProvider.
- * @return true when the chooser was launched successfully.
+ * Also copies the same image into Downloads when possible; a Downloads failure does not
+ * prevent sharing.
  */
-internal fun shareWeatherBitmap(context: Context, bitmap: Bitmap, cityName: String): Boolean {
+internal fun shareWeatherBitmap(context: Context, bitmap: Bitmap, cityName: String): ShareWeatherOutcome {
     return try {
         val dir = File(context.cacheDir, "shared_images").apply { mkdirs() }
         val file = File(dir, "weather_share_${System.currentTimeMillis()}.png")
         FileOutputStream(file).use { out ->
             if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
-                return false
+                return ShareWeatherOutcome(shared = false)
             }
         }
+
+        val downloadsFileName = buildDownloadsFileName(cityName)
+        val savedToDownloads = saveBitmapToDownloads(context, bitmap, downloadsFileName)
+
         val authority = "${context.packageName}.fileprovider"
         val uri = FileProvider.getUriForFile(context, authority, file)
         val send = Intent(Intent.ACTION_SEND).apply {
@@ -129,8 +152,102 @@ internal fun shareWeatherBitmap(context: Context, bitmap: Bitmap, cityName: Stri
                 context.getString(R.string.share_weather_chooser)
             )
         )
-        true
+        ShareWeatherOutcome(shared = true, savedToDownloads = savedToDownloads)
+    } catch (_: Exception) {
+        ShareWeatherOutcome(shared = false)
+    }
+}
+
+/**
+ * Saves [bitmap] into the public Downloads folder.
+ * Uses MediaStore on Android Q+ (no storage permission). On older APIs writes directly
+ * when [Manifest.permission.WRITE_EXTERNAL_STORAGE] is already granted.
+ */
+internal fun saveBitmapToDownloads(context: Context, bitmap: Bitmap, fileName: String): Boolean {
+    return try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            saveBitmapToDownloadsMediaStore(context, bitmap, fileName)
+        } else {
+            saveBitmapToDownloadsLegacy(context, bitmap, fileName)
+        }
     } catch (_: Exception) {
         false
     }
+}
+
+private fun saveBitmapToDownloadsMediaStore(
+    context: Context,
+    bitmap: Bitmap,
+    fileName: String
+): Boolean {
+    val resolver = context.contentResolver
+    val values = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+        put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        put(MediaStore.MediaColumns.IS_PENDING, 1)
+    }
+    val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
+    return try {
+        resolver.openOutputStream(uri)?.use { out ->
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
+                resolver.delete(uri, null, null)
+                return false
+            }
+        } ?: run {
+            resolver.delete(uri, null, null)
+            return false
+        }
+        values.clear()
+        values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+        true
+    } catch (_: Exception) {
+        runCatching { resolver.delete(uri, null, null) }
+        false
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun saveBitmapToDownloadsLegacy(
+    context: Context,
+    bitmap: Bitmap,
+    fileName: String
+): Boolean {
+    if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        != PackageManager.PERMISSION_GRANTED
+    ) {
+        return false
+    }
+    val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+    if (!downloads.exists() && !downloads.mkdirs()) {
+        return false
+    }
+    val file = File(downloads, fileName)
+    FileOutputStream(file).use { out ->
+        if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
+            return false
+        }
+    }
+    MediaScannerConnection.scanFile(
+        context,
+        arrayOf(file.absolutePath),
+        arrayOf("image/png"),
+        null
+    )
+    return true
+}
+
+internal fun buildDownloadsFileName(cityName: String, date: Date = Date()): String {
+    val city = sanitizeCityForFilename(cityName)
+    val datePart = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(date)
+    return "WeatherRecommender_${city}_$datePart.png"
+}
+
+internal fun sanitizeCityForFilename(cityName: String): String {
+    val sanitized = cityName
+        .replace(Regex("[^A-Za-z0-9]+"), "_")
+        .trim('_')
+        .take(40)
+    return sanitized.ifEmpty { "City" }
 }

@@ -1,6 +1,11 @@
-package com.example.weatherrecommender.ui
+﻿package com.example.weatherrecommender.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -33,8 +38,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.Location
@@ -88,10 +95,33 @@ fun WeatherScreenContent(
     val canShare = inDetail &&
         uiState.forecast != null &&
         uiState.forecast.dailyForecasts.isNotEmpty()
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var shareInProgress by remember { mutableStateOf(false) }
     val shareFailedMessage = stringResource(R.string.share_weather_failed)
+    val shareSavedMessage = stringResource(R.string.share_weather_saved_downloads)
+    val shareSaveFailedMessage = stringResource(R.string.share_weather_save_failed)
+
+    val writeStorageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        // Proceed either way — share must not depend on Downloads permission.
+        shareInProgress = true
+    }
+
+    fun startShare() {
+        val needsLegacyWrite = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+        val hasWrite = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        ) == PackageManager.PERMISSION_GRANTED
+        if (needsLegacyWrite && !hasWrite) {
+            writeStorageLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else {
+            shareInProgress = true
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -116,7 +146,7 @@ fun WeatherScreenContent(
                 actions = {
                     if (canShare) {
                         IconButton(
-                            onClick = { shareInProgress = true },
+                            onClick = { startShare() },
                             enabled = !shareInProgress
                         ) {
                             Icon(
@@ -201,11 +231,14 @@ fun WeatherScreenContent(
             location = location,
             days = forecast.dailyForecasts,
             tipActivity = uiState.rankedActivities.firstOrNull()?.activity,
-            onComplete = { success ->
+            onComplete = { outcome ->
                 shareInProgress = false
-                if (!success) {
-                    scope.launch {
-                        snackbarHostState.showSnackbar(shareFailedMessage)
+                scope.launch {
+                    when {
+                        !outcome.shared -> snackbarHostState.showSnackbar(shareFailedMessage)
+                        outcome.savedToDownloads ->
+                            snackbarHostState.showSnackbar(shareSavedMessage)
+                        else -> snackbarHostState.showSnackbar(shareSaveFailedMessage)
                     }
                 }
             }
