@@ -1,6 +1,6 @@
 # Concierge Weather Recommender
 
-## a. Project Overview ­ƒô▒
+## a. Project Overview 📱
 This is a native Android app that implements the Concierge Weather Recommender assignment brief: search for a city and see, **for each of the next 7 days**, a ranked list of activities (Skiing, Surfing, Outdoor sightseeing, Indoor sightseeing) suited to that day's Open-Meteo forecast. Home-screen top picks, the Marine API sea-access path, and WorkManager background sync are conscious stretch goals beyond the core brief.
 
 | Scope | What |
@@ -24,7 +24,7 @@ Key experience details:
 - **Testing**: JUnit 4, MockK, Turbine, Paparazzi 2.x (CI runs with `-Ppaparazzi`)
 - **Quality**: detekt, Kover coverage, Android Lint
 
-## c. Architecture and Technical Decisions ­ƒÅù´©Å
+## c. Architecture and Technical Decisions 🏗️
 - **Clean Architecture Principles**: The project is strictly divided into three layers:
   - **Data Layer**: Retrofit interfaces, Room DAOs, and the Repository implementation mapping network data to domain models.
   - **Domain Layer**: Core business logic, `AppError` sealed hierarchy, and the `GetRankedActivitiesUseCase` fully isolated from Android dependencies.
@@ -34,17 +34,17 @@ Key experience details:
 - **Per-day scoring**: `GetRankedActivitiesUseCase(forecast, dayIndex)` ranks only the applicable activities for the selected day. Day switching is a pure, in-memory recompute (no network).
 - **Home suggestions**: `GetTopPicksUseCase` picks population-weighted cities from a bundled `FeaturedCities` seed list (the Geocoding API has no "browse" endpoint) and fetches their forecasts concurrently and best-effort via `WeatherRepository.getForecastRemote` (read-only, does not pollute the cache).
 
-## d. How to build and run the app ­ƒÜÇ
+## d. How to build and run the app 🚀
 1. Clone the repository and open the project in Android Studio (2025.2.3+ recommended for AGP 9).
-2. Ensure **JDK 21** is selected (Project Structure ÔåÆ SDK ÔåÆ JDK, or set `JAVA_HOME`).
+2. Ensure **JDK 21** is selected (Project Structure → SDK → JDK, or set `JAVA_HOME`).
 3. Ensure `local.properties` contains your Android SDK path (not committed to git).
 4. Build the project: `./gradlew assembleDebug`
 5. Install on a device or emulator: `./gradlew installDebug` or run directly from Android Studio.
 
 Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations.auto-download=true`); the Foojay resolver plugin is configured in `settings.gradle.kts`.
 
-## e. How to run tests & testing strategy ­ƒº¬
-- **Unit tests**: `./gradlew testDebugUnitTest` (requires JDK 21+) ÔÇö ~50+ tests across domain, data, and ViewModel (plus Paparazzi below)
+## e. How to run tests & testing strategy 🧪
+- **Unit tests**: `./gradlew testDebugUnitTest` (requires JDK 21+) — ~50+ tests across domain, data, and ViewModel (plus Paparazzi below)
 - **Paparazzi snapshots**: `./gradlew recordPaparazziDebug -Ppaparazzi` (verify with `verifyPaparazziDebug -Ppaparazzi`; 6 golden PNGs live in `app/src/test/snapshots/`)
 - **Lint**: `./gradlew lintDebug`
 - **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify`
@@ -54,7 +54,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 **Testing Strategy**:
 - **Domain Layer**: Activity scorers and `GetRankedActivitiesUseCase` are pure Kotlin, unit-tested with JUnit.
 - **Data Layer**: `WeatherRepositoryImpl` tested with MockK for APIs and DAO; `LocationSyncer` and rate-limit retry interceptor covered.
-- **UI Layer**: `WeatherViewModel` tested with Turbine for StateFlow emissions; Compose UI has **substantial coverage of key flows** (~17 instrumented tests: home, search, detail, errors, dark theme smoke) ÔÇö not claimed as exhaustive full-UI coverage.
+- **UI Layer**: `WeatherViewModel` tested with Turbine for StateFlow emissions; Compose UI has **substantial coverage of key flows** (~17 instrumented tests: home, search, detail, errors, dark theme smoke) — not claimed as exhaustive full-UI coverage.
 - **Snapshots**: Paparazzi goldens committed and verified in CI with `-Ppaparazzi`.
 
 ### Bonus features (assignment stretch goals)
@@ -64,15 +64,16 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Offline cache | Done | Room SSOT + WorkManager background sync |
 | Pull-to-refresh | Done | `PullToRefreshBox` on city detail **and** home (force-refresh top picks) |
 | Dark mode | Done | Navy-tinted dark palette, primary containers, system bar icon contrast; light + dark Paparazzi goldens |
-| Advanced UI polish / animation | Done | HomeÔåödetail slide transition, animated day selector, score ring sweep, top-pick press scale, shimmer + crossfade loading |
+| Advanced UI polish / animation | Done | Home↔detail slide transition, animated day selector, score ring sweep, top-pick press scale, shimmer + crossfade loading |
+| Splash screen | Done | Android 12+ \core-splashscreen\ + branded sun/cloud mark (original vector; also used as launcher foreground) |
 | Snapshot tests | Done | Paparazzi 2.0.0-alpha05, 6 golden PNGs, verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
 | Substantial UI test coverage | Done | ~17 instrumented Compose tests for key flows (home greeting, search/clear, top picks, geography chips, day selection, back nav, sync/error banners, dark theme) |
 
-## f. API usage notes ÔÿÇ´©Å
+## f. API usage notes ☀️
 The application interfaces with three Open-Meteo APIs (No API key required):
 - **Geocoding API**: `https://geocoding-api.open-meteo.com/v1/search` for resolving a city name to coordinates. We also read `elevation`, `population`, and `feature_code` from each result to drive geography-aware activities and home suggestions.
 - **Forecast API**: `https://api.open-meteo.com/v1/forecast` for the 7-day daily forecast (temperature, precipitation, snowfall, wind, weather code).
-- **Marine API**: `https://marine-api.open-meteo.com/v1/marine` for daily `wave_height_max`. This serves a dual purpose: it feeds surf scoring with real wave data, and ÔÇö because it returns null wave heights for inland coordinates ÔÇö it acts as a reliable **sea-access detector**. The marine call is best-effort: a failure never fails the primary forecast.
+- **Marine API**: `https://marine-api.open-meteo.com/v1/marine` for daily `wave_height_max`. This serves a dual purpose: it feeds surf scoring with real wave data, and — because it returns null wave heights for inland coordinates — it acts as a reliable **sea-access detector**. The marine call is best-effort: a failure never fails the primary forecast.
 
 ## g. Activity recommendation logic
 `GetRankedActivitiesUseCase(forecast, dayIndex)` evaluates each injected `ActivityScorer` for a **single day**. A scorer first decides whether it is *applicable* to the location's geography; only applicable activities are scored (0-100) and ranked. This prevents nonsensical suggestions such as surfing in a landlocked city.
@@ -83,33 +84,33 @@ The application interfaces with three Open-Meteo APIs (No API key required):
 - **Outdoor / Indoor sightseeing**: always applicable.
 
 **Per-day scoring heuristics**
-- **Skiing**: rewards fresh snowfall (ÔëÑ 3 cm) and sub-freezing average temperature; penalised when the day is mild (> 6┬░C).
+- **Skiing**: rewards fresh snowfall (≥ 3 cm) and sub-freezing average temperature; penalised when the day is mild (> 6°C).
 - **Surfing**: rewards rideable-but-manageable waves (~0.4-2.5 m from the Marine API), light-to-moderate wind, and warm air; penalised by flat seas or strong wind (> 35 km/h).
-- **Outdoor Sightseeing**: rewards mild days (14-26┬░C) with little rain; penalised by rain (> 5 mm), extreme heat (> 32┬░C), and strong wind.
-- **Indoor Sightseeing**: the wet-weather fallback ÔÇö rises with rain/snow and cold, so it climbs the ranking exactly when outdoor options fall.
+- **Outdoor Sightseeing**: rewards mild days (14-26°C) with little rain; penalised by rain (> 5 mm), extreme heat (> 32°C), and strong wind.
+- **Indoor Sightseeing**: the wet-weather fallback — rises with rain/snow and cold, so it climbs the ranking exactly when outdoor options fall.
 
 Because scoring is per-day, the top activity for a city legitimately changes across the week (e.g. Outdoor on a sunny day, Indoor on a stormy one).
 
-## h. Assumptions made Ô£à
+## h. Assumptions made ✅
 - Recommendations are made **per day**, not aggregated across the week.
 - **Sea access** is approximated by the Open-Meteo Marine API returning non-null wave heights near the city coordinate. This is a heuristic: a coastal city whose centre coordinate is slightly inland of the nearest marine grid cell may occasionally read as inland, and vice-versa.
-- **Skiing terrain** is approximated by an elevation threshold (ÔëÑ 800 m) or active snowfall. This is deliberately conservative: some valley ski towns (e.g. Innsbruck at ~570 m) only surface skiing once snow is in the forecast.
-- **Home "top picks"** come from a curated, bundled `FeaturedCities` list because the Geocoding API only supports search-by-name (no discovery/browse endpoint). Selection is randomised but weighted by population. Seed location IDs are **synthetic negatives (ÔêÆ1ÔÇªÔêÆ14)** ÔÇö they are **not** Open-Meteo / GeoNames IDs ÔÇö so they cannot collide with real place IDs returned by search.
+- **Skiing terrain** is approximated by an elevation threshold (≥ 800 m) or active snowfall. This is deliberately conservative: some valley ski towns (e.g. Innsbruck at ~570 m) only surface skiing once snow is in the forecast.
+- **Home "top picks"** come from a curated, bundled `FeaturedCities` list because the Geocoding API only supports search-by-name (no discovery/browse endpoint). Selection is randomised but weighted by population. Seed location IDs are **synthetic negatives (−1…−14)** — they are **not** Open-Meteo / GeoNames IDs — so they cannot collide with real place IDs returned by search.
 - All arrays returned by the Open-Meteo forecast/marine endpoints for daily variables are aligned by date/index.
 - The `admin1` field from the Geocoding API accurately represents the state/region for UI display purposes.
 
-## i. Trade-offs and omissions ÔÜû´©Å
-This solution intentionally went beyond a strict 3ÔÇô4 hour brief where it improved correctness, polish, or reviewer confidence; the trade-offs below explain those choices and what was left out.
+## i. Trade-offs and omissions ⚖️
+This solution intentionally went beyond a strict 3–4 hour brief where it improved correctness, polish, or reviewer confidence; the trade-offs below explain those choices and what was left out.
 
 **What went beyond the brief (and why)**
-- **Home top picks + `FeaturedCities`**: the brief focuses on search ÔåÆ city detail. A home feed makes the app feel like a concierge product on first launch, but Open-Meteo has no "browse cities" endpoint, so a bundled seed list was required.
+- **Home top picks + `FeaturedCities`**: the brief focuses on search → city detail. A home feed makes the app feel like a concierge product on first launch, but Open-Meteo has no "browse cities" endpoint, so a bundled seed list was required.
 - **Marine API**: surfing without wave data is guesswork; marine also doubles as sea-access detection so inland cities never show Surfing.
 - **WorkManager `LocationSyncer`**: keeps Room forecasts fresh for previously viewed cities without blocking the UI.
 - **Paparazzi goldens + instrumented CI**: raise confidence for UI regressions beyond unit tests alone.
 - **Per-day ranking UI**: the brief can be read as a single weekly ranking; per-day scoring is more honest to daily weather swings and stays cheap (pure in-memory recompute).
 
 **Concrete trade-offs**
-- **FeaturedCities synthetic IDs**: seeds use negative IDs (ÔêÆ1ÔÇªÔêÆ14) to avoid colliding with positive GeoNames / Open-Meteo IDs. They are never written as if they were API IDs; search results always use real positive IDs.
+- **FeaturedCities synthetic IDs**: seeds use negative IDs (−1…−14) to avoid colliding with positive GeoNames / Open-Meteo IDs. They are never written as if they were API IDs; search results always use real positive IDs.
 - **LocationSyncer rate limiting**: an earlier all-parallel `refreshForecast` fan-out risked HTTP 429 when many cities were cached. Sync now refreshes in **chunks of 3** with a short delay between batches (same stagger idea as `GetTopPicksUseCase`), trading wall-clock sync time for fewer rate-limit hits.
 - **Top-picks 45-minute TTL**: `TopPicksCache` avoids repeating a cold-start forecast burst on every home visit. Pull-to-refresh on home calls `getTopPicks(forceRefresh=true)` to bypass the TTL when the user asks for fresh data; offline pull shows a connectivity error and keeps the last feed.
 - **WorkManager Sync**: Background sync runs every 6 hours when any network is available. Stricter constraints (unmetered + charging) were removed to improve refresh reliability on mobile.
@@ -146,5 +147,5 @@ This project runs on **AGP 9.3.0** with the **new DSL** and **built-in Kotlin** 
 - Paparazzi tests disable HTML reports (`reports.html.required.set(false)`) as a Gradle 9 workaround.
 - All runtime dependencies are declared in `gradle/libs.versions.toml` (including Paparazzi, material-icons-extended, hilt-navigation-compose).
 
-## m. AI usage disclosure ­ƒôØ
+## m. AI usage disclosure 📝
 Parts of this codebase were developed with assistance from Cursor (AI-assisted editing and scaffolding). Architecture choices, scoring heuristics, and documentation were reviewed and adjusted by the author. All AI-assisted output was verified by compiling with the Gradle wrapper, running the unit/Paparazzi test suites, lint/detekt/Kover locally, and relying on GitHub Actions CI (including the instrumented emulator job) as an additional check.
