@@ -1,16 +1,22 @@
 # Concierge Weather Recommender
 
 ## a. Project Overview
-This is a native Android application built in Kotlin that acts as a Concierge service for premium users. It allows users to search for a city and see a ranked list of activities (Skiing, Surfing, Outdoor sightseeing, Indoor sightseeing) based on the 7-day weather forecast.
+This is a native Android application built in Kotlin that acts as a Concierge service for premium users. It allows users to search for a city and see, **for each of the next 7 days**, a ranked list of activities (Skiing, Surfing, Outdoor sightseeing, Indoor sightseeing) suited to that day's forecast.
+
+Key experience details:
+- **Per-day recommendations**: the detail screen shows a day selector; tapping a day re-ranks its activities. There is no single "week-long" score.
+- **Geography-aware activities**: activities that don't make sense for a location are hidden entirely (e.g. surfing is only offered where there is sea access; skiing only in mountainous terrain or when snow is falling).
+- **Home "top picks"**: the home screen surfaces a randomised, population-weighted set of well-known cities, each with its best activity for today.
 
 ## b. Platform and Tooling Choices
-- **Language**: Kotlin
+- **Language**: Kotlin (AGP 9 built-in Kotlin; `org.jetbrains.kotlin.android` plugin removed)
+- **Build**: Android Gradle Plugin 9.0.1, Gradle 9.1, JDK 21 (toolchain + CI)
 - **UI Framework**: Jetpack Compose (Material 3)
 - **Networking**: Retrofit, OkHttp, kotlinx.serialization
 - **Local Persistence**: Room Database (Offline-First / SSOT)
 - **Dependency Injection**: Dagger Hilt
 - **Concurrency**: Kotlin Coroutines and StateFlow
-- **Testing**: JUnit 4, MockK, Turbine, Paparazzi (optional, `-Ppaparazzi`)
+- **Testing**: JUnit 4, MockK, Turbine, Paparazzi 2.x (CI runs with `-Ppaparazzi`)
 - **Quality**: detekt, Kover coverage, Android Lint
 
 ## c. Architecture and Technical Decisions
@@ -19,17 +25,22 @@ This is a native Android application built in Kotlin that acts as a Concierge se
   - **Domain Layer**: Core business logic, `AppError` sealed hierarchy, and the `GetRankedActivitiesUseCase` fully isolated from Android dependencies.
   - **UI Layer**: Composed of `WeatherScreen` (Jetpack Compose) and `WeatherViewModel`, orchestrating UI states via a `StateFlow`.
 - **Offline-First (SSOT)**: The UI never consumes data directly from the network. It observes a Room database `Flow`. A parallel background request fetches fresh data from the Open-Meteo API and updates the local database, triggering reactive UI updates.
-- **Strategy Pattern (SOLID)**: The recommendation engine utilizes independent `ActivityScorer` strategies (e.g., `SurfScorer`, `SkiScorer`) injected via Dagger Hilt, strictly adhering to the Open/Closed Principle.
+- **Strategy Pattern (SOLID)**: The recommendation engine utilizes independent `ActivityScorer` strategies (e.g., `SurfScorer`, `SkiScorer`) injected via Dagger Hilt, strictly adhering to the Open/Closed Principle. Each scorer exposes `isApplicable(context)` for geography gating and `score(context)` for a single day, so adding an activity means adding one class.
+- **Per-day scoring**: `GetRankedActivitiesUseCase(forecast, dayIndex)` ranks only the applicable activities for the selected day. Day switching is a pure, in-memory recompute (no network).
+- **Home suggestions**: `GetTopPicksUseCase` picks population-weighted cities from a bundled `FeaturedCities` seed list (the Geocoding API has no "browse" endpoint) and fetches their forecasts concurrently and best-effort via `WeatherRepository.getForecastRemote` (read-only, does not pollute the cache).
 
 ## d. How to build and run the app
-1. Clone the repository and open the project in Android Studio.
-2. Ensure `local.properties` contains your Android SDK path (not committed to git).
-3. Build the project: `./gradlew assembleDebug`
-4. Install on a device or emulator: `./gradlew installDebug` or run directly from Android Studio.
+1. Clone the repository and open the project in Android Studio (2025.2.3+ recommended for AGP 9).
+2. Ensure **JDK 21** is selected (Project Structure → SDK → JDK, or set `JAVA_HOME`).
+3. Ensure `local.properties` contains your Android SDK path (not committed to git).
+4. Build the project: `./gradlew assembleDebug`
+5. Install on a device or emulator: `./gradlew installDebug` or run directly from Android Studio.
+
+Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations.auto-download=true`); the Foojay resolver plugin is configured in `settings.gradle.kts`.
 
 ## e. How to run tests & testing strategy
-- **Unit tests**: `./gradlew testDebugUnitTest`
-- **Paparazzi snapshots** (requires Android SDK platform 37): `./gradlew recordPaparazziDebug -Ppaparazzi`
+- **Unit tests**: `./gradlew testDebugUnitTest` (requires JDK 21+)
+- **Paparazzi snapshots**: `./gradlew recordPaparazziDebug -Ppaparazzi` (verify with `verifyPaparazziDebug -Ppaparazzi`; goldens live in `app/src/test/snapshots/`)
 - **Lint**: `./gradlew lintDebug`
 - **Coverage**: `./gradlew koverXmlReportDebug`
 - **Static analysis**: `./gradlew detekt`
@@ -38,45 +49,77 @@ This is a native Android application built in Kotlin that acts as a Concierge se
 **Testing Strategy**:
 - **Domain Layer**: Activity scorers and `GetRankedActivitiesUseCase` are pure Kotlin, unit-tested with JUnit.
 - **Data Layer**: `WeatherRepositoryImpl` tested with MockK for APIs and DAO.
-- **UI Layer**: `WeatherViewModel` tested with Turbine for StateFlow emissions; Compose UI tested with instrumented tests.
+- **UI Layer**: `WeatherViewModel` tested with Turbine for StateFlow emissions; Compose UI covered by 17 instrumented tests (home, search, detail, errors, dark theme smoke).
+
+### Bonus features (assignment stretch goals)
+
+| Bonus | Status | Implementation |
+|-------|--------|----------------|
+| Offline cache | Done | Room SSOT + WorkManager background sync |
+| Pull-to-refresh | Done | `PullToRefreshBox` on city detail |
+| Dark mode | Done | Navy-tinted dark palette, primary containers, system bar icon contrast; light + dark Paparazzi goldens |
+| Advanced UI polish / animation | Done | Home↔detail slide transition, animated day selector, score ring sweep, top-pick press scale, shimmer + crossfade loading |
+| Snapshot tests | Done | Paparazzi 2.0.0-alpha05, 6 golden PNGs, verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
+| Full UI test coverage | Done | Instrumented Compose tests for home greeting, search/clear, top picks, geography chips, day selection, back nav, sync/error banners, dark theme |
 
 ## f. API usage notes
-The application interfaces with two Open-Meteo APIs (No API key required):
-- **Geocoding API**: `https://geocoding-api.open-meteo.com/v1/search` for fetching coordinate data from a city name search query.
-- **Forecast API**: `https://api.open-meteo.com/v1/forecast` for retrieving the 7-day weather forecast.
+The application interfaces with three Open-Meteo APIs (No API key required):
+- **Geocoding API**: `https://geocoding-api.open-meteo.com/v1/search` for resolving a city name to coordinates. We also read `elevation`, `population`, and `feature_code` from each result to drive geography-aware activities and home suggestions.
+- **Forecast API**: `https://api.open-meteo.com/v1/forecast` for the 7-day daily forecast (temperature, precipitation, snowfall, wind, weather code).
+- **Marine API**: `https://marine-api.open-meteo.com/v1/marine` for daily `wave_height_max`. This serves a dual purpose: it feeds surf scoring with real wave data, and — because it returns null wave heights for inland coordinates — it acts as a reliable **sea-access detector**. The marine call is best-effort: a failure never fails the primary forecast.
 
 ## g. Activity recommendation logic
-The `GetRankedActivitiesUseCase` relies on injected `ActivityScorer` classes that assign a score (0-100) based on the 7-day forecast aggregates:
-- **Skiing**: Scores high if significant snowfall (> 10mm) and freezing temperatures (< 0°C). Penalized by high temperatures.
-- **Surfing**: Prioritizes low max wind speeds (< 15km/h for glassy waves) combined with warm temperatures (> 20°C). Severely penalized by gale winds (> 30km/h).
-- **Outdoor Sightseeing**: Thrives in moderate temperatures (15°C - 25°C) with low precipitation. Penalized by heavy rain and extreme heat.
-- **Indoor Sightseeing**: Acts as a fallback for poor weather. Ranks highest when precipitation is high or temperatures are extremely cold (< 5°C).
+`GetRankedActivitiesUseCase(forecast, dayIndex)` evaluates each injected `ActivityScorer` for a **single day**. A scorer first decides whether it is *applicable* to the location's geography; only applicable activities are scored (0-100) and ranked. This prevents nonsensical suggestions such as surfing in a landlocked city.
+
+**Applicability (geography gating)**
+- **Surfing**: only where `Location.hasSeaAccess` is true. Sea access is detected from the Marine API (non-null wave heights).
+- **Skiing**: only in mountainous terrain (`elevation >= 800 m`) **or** on days with snowfall.
+- **Outdoor / Indoor sightseeing**: always applicable.
+
+**Per-day scoring heuristics**
+- **Skiing**: rewards fresh snowfall (≥ 3 cm) and sub-freezing average temperature; penalised when the day is mild (> 6°C).
+- **Surfing**: rewards rideable-but-manageable waves (~0.4-2.5 m from the Marine API), light-to-moderate wind, and warm air; penalised by flat seas or strong wind (> 35 km/h).
+- **Outdoor Sightseeing**: rewards mild days (14-26°C) with little rain; penalised by rain (> 5 mm), extreme heat (> 32°C), and strong wind.
+- **Indoor Sightseeing**: the wet-weather fallback — rises with rain/snow and cold, so it climbs the ranking exactly when outdoor options fall.
+
+Because scoring is per-day, the top activity for a city legitimately changes across the week (e.g. Outdoor on a sunny day, Indoor on a stormy one).
 
 ## h. Assumptions made
-- The app aggregates the 7-day forecast into a single "week-long" recommendation score rather than recommending different activities for different days of the week.
-- All arrays returned by the Open-Meteo forecast endpoint for daily variables are aligned by index (same size).
+- Recommendations are made **per day**, not aggregated across the week.
+- **Sea access** is approximated by the Open-Meteo Marine API returning non-null wave heights near the city coordinate. This is a heuristic: a coastal city whose centre coordinate is slightly inland of the nearest marine grid cell may occasionally read as inland, and vice-versa.
+- **Skiing terrain** is approximated by an elevation threshold (≥ 800 m) or active snowfall. This is deliberately conservative: some valley ski towns (e.g. Innsbruck at ~570 m) only surface skiing once snow is in the forecast.
+- **Home "top picks"** come from a curated, bundled `FeaturedCities` list because the Geocoding API only supports search-by-name (no discovery/browse endpoint). Selection is randomised but weighted by population.
+- All arrays returned by the Open-Meteo forecast/marine endpoints for daily variables are aligned by date/index.
 - The `admin1` field from the Geocoding API accurately represents the state/region for UI display purposes.
 
 ## i. Trade-offs and omissions
 - **WorkManager Sync**: Background sync runs every 6 hours when any network is available. Stricter constraints (unmetered + charging) were removed to improve refresh reliability on mobile.
 - **Crash reporting**: A `CrashReporter` abstraction logs locally; swap for Firebase Crashlytics when a Firebase project is configured.
-- **Rate limiting**: HTTP 429 responses map to localized error strings; no client-side retry backoff yet.
+- **Rate limiting**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present); other failures map to localized error strings.
 
 ## j. Production-readiness notes
 Implemented:
 1. Network connectivity checks via `ConnectivityObserver` with `ACCESS_NETWORK_STATE` permission.
 2. Localized error mapping via `UiText` and `AppErrorMapper`.
-3. CI/CD via GitHub Actions (unit tests, detekt, lint, Kover, debug + release builds).
+3. CI/CD via GitHub Actions (unit tests + Paparazzi verify, detekt, lint, Kover, debug + release builds on JDK 21). CI installs `platforms;android-36` and `build-tools;36.0.0`.
 4. Debug-only HTTP body logging; release builds use R8 minification.
 5. Privacy policy: see [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
 Before Play Store release:
 1. Configure Firebase Crashlytics (optional) by binding a Crashlytics implementation to `CrashReporter`.
 2. Add store listing assets (screenshots, feature graphic).
-3. Record and commit Paparazzi golden images if visual regression testing is desired in CI.
 
 ## k. Cross-platform delivery notes
 If transitioning to Kotlin Multiplatform (KMP), the Domain layer (`GetRankedActivitiesUseCase`, `WeatherRepository` interface) and Data layer (Ktor instead of Retrofit, `kotlinx.serialization`, Room/SQLDelight) can be entirely shared. Only the UI layer (Compose Android vs Compose Multiplatform/SwiftUI) and platform-specific DI (e.g., Koin instead of Hilt) would need distinct implementations.
 
-## l. AI usage disclosure
+## l. AGP 9 / Gradle 9 migration notes
+This project runs on **AGP 9.0.1** with the **new DSL** and **built-in Kotlin** (no `android.newDsl=false` / `android.builtInKotlin=false` opt-outs). Key changes:
+- Removed `org.jetbrains.kotlin.android`; Kotlin compilation is provided by AGP.
+- **Hilt 2.59.2+** required for AGP 9 Gradle plugin compatibility.
+- **KSP 2.3.6+** required so generated sources register via `android.sourceSets` (not deprecated `kotlin.sourceSets`).
+- **Kotlin 2.2.10** aligned with AGP's built-in KGP baseline; compose compiler and serialization plugins remain explicit.
+- Paparazzi tests disable HTML reports (`reports.html.required.set(false)`) as a Gradle 9 workaround.
+- All runtime dependencies are declared in `gradle/libs.versions.toml` (including Paparazzi, material-icons-extended, hilt-navigation-compose).
+
+## m. AI usage disclosure
 This codebase was generated and structured with the assistance of an advanced AI agent (Google Deepmind Antigravity). The AI orchestrated the transition from a basic MVVM app to a robust Senior-level architecture involving Dagger Hilt, Offline-First/Room SSOT, Strategy Pattern heuristics, and Turbine reactive tests. All AI-generated code is verified by compiling the project using the Gradle wrapper and running the unit test suite.
