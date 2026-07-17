@@ -9,6 +9,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -37,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.Location
+import com.example.weatherrecommender.ui.map.WeatherMapHeader
 import kotlinx.coroutines.launch
 
 /**
@@ -54,6 +56,7 @@ fun WeatherScreen(
         uiState = uiState,
         onQueryChanged = viewModel::onQueryChanged,
         onLocationSelected = viewModel::onLocationSelected,
+        onMapTapped = viewModel::onMapTapped,
         onDaySelected = viewModel::onDaySelected,
         onBack = viewModel::onBack,
         onRefresh = viewModel::refresh,
@@ -65,8 +68,8 @@ fun WeatherScreen(
 /**
  * Stateless, testable root of the Weather screen.
  *
- * Renders one of two modes based on [WeatherUiState.selectedLocation]: a friendly home feed of
- * suggestions, or a per-day detail view for the chosen city.
+ * Renders a **persistent map header** above home/detail content so the map survives navigation.
+ * Modes are derived from [WeatherUiState.selectedLocation].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +80,7 @@ fun WeatherScreenContent(
     onDaySelected: (Int) -> Unit,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
+    onMapTapped: (Double, Double) -> Unit = { _, _ -> },
     isDarkTheme: Boolean = false,
     onToggleTheme: () -> Unit = {}
 ) {
@@ -133,43 +137,58 @@ fun WeatherScreenContent(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
-            if (inDetail) {
-                BackHandler(onBack = onBack)
-            }
-            AnimatedContent(
-                targetState = inDetail,
-                transitionSpec = {
-                    if (targetState) {
-                        (slideInHorizontally(tween(TRANSITION_MS)) { it / 4 } + fadeIn(tween(TRANSITION_MS)))
-                            .togetherWith(
-                                slideOutHorizontally(tween(TRANSITION_MS)) { -it / 4 } + fadeOut(tween(TRANSITION_MS))
-                            )
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+        ) {
+            // Persistent across home ↔ detail: not inside AnimatedContent.
+            WeatherMapHeader(
+                camera = uiState.mapCamera,
+                pin = uiState.mapPin,
+                collapsed = inDetail,
+                isResolvingTap = uiState.isResolvingMapTap,
+                onMapTap = onMapTapped
+            )
+
+            Box(modifier = Modifier.weight(1f)) {
+                if (inDetail) {
+                    BackHandler(onBack = onBack)
+                }
+                AnimatedContent(
+                    targetState = inDetail,
+                    transitionSpec = {
+                        if (targetState) {
+                            (slideInHorizontally(tween(TRANSITION_MS)) { it / 4 } + fadeIn(tween(TRANSITION_MS)))
+                                .togetherWith(
+                                    slideOutHorizontally(tween(TRANSITION_MS)) { -it / 4 } + fadeOut(tween(TRANSITION_MS))
+                                )
+                        } else {
+                            (slideInHorizontally(tween(TRANSITION_MS)) { -it / 4 } + fadeIn(tween(TRANSITION_MS)))
+                                .togetherWith(
+                                    slideOutHorizontally(tween(TRANSITION_MS)) { it / 4 } + fadeOut(tween(TRANSITION_MS))
+                                )
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    label = "home_detail_transition"
+                ) { detail ->
+                    if (detail) {
+                        DetailContent(
+                            uiState = uiState,
+                            onDaySelected = onDaySelected,
+                            onRefresh = onRefresh
+                        )
                     } else {
-                        (slideInHorizontally(tween(TRANSITION_MS)) { -it / 4 } + fadeIn(tween(TRANSITION_MS)))
-                            .togetherWith(
-                                slideOutHorizontally(tween(TRANSITION_MS)) { it / 4 } + fadeOut(tween(TRANSITION_MS))
-                            )
+                        HomeContent(
+                            uiState = uiState,
+                            onQueryChanged = onQueryChanged,
+                            onLocationSelected = onLocationSelected,
+                            onRefresh = onRefresh,
+                            isDarkTheme = isDarkTheme,
+                            onToggleTheme = onToggleTheme
+                        )
                     }
-                },
-                modifier = Modifier.fillMaxSize(),
-                label = "home_detail_transition"
-            ) { detail ->
-                if (detail) {
-                    DetailContent(
-                        uiState = uiState,
-                        onDaySelected = onDaySelected,
-                        onRefresh = onRefresh
-                    )
-                } else {
-                    HomeContent(
-                        uiState = uiState,
-                        onQueryChanged = onQueryChanged,
-                        onLocationSelected = onLocationSelected,
-                        onRefresh = onRefresh,
-                        isDarkTheme = isDarkTheme,
-                        onToggleTheme = onToggleTheme
-                    )
                 }
             }
         }

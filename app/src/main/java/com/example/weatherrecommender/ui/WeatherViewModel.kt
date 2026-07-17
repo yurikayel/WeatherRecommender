@@ -21,6 +21,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import javax.inject.Inject
 import com.example.weatherrecommender.domain.util.ConnectivityObserver
 import com.example.weatherrecommender.domain.util.ConnectivityStatus
+import com.example.weatherrecommender.ui.map.MapCameraPosition
 import com.example.weatherrecommender.ui.util.UiText
 import com.example.weatherrecommender.ui.util.asUiText
 
@@ -31,6 +32,8 @@ import com.example.weatherrecommender.ui.util.asUiText
  *  - **Home** (`selectedLocation == null`): a search bar plus a feed of [topPicks].
  *  - **Detail** (`selectedLocation != null`): the forecast with a per-day selector; [rankedActivities]
  *    always reflects [selectedDayIndex].
+ *
+ * The header map is driven by [mapCamera] / [mapPin] and lives outside home↔detail transitions.
  *
  * @property query The current search query.
  * @property isSearching True if a search request is in-flight.
@@ -43,6 +46,10 @@ import com.example.weatherrecommender.ui.util.asUiText
  * @property topPicks Population-weighted featured suggestions shown on the home screen.
  * @property isLoadingTopPicks True while the home suggestions are loading (initial skeleton).
  * @property isRefreshingTopPicks True while pull-to-refresh is force-refreshing top picks.
+ * @property recentHistory The 10 most recently viewed cities, newest first (empty when none).
+ * @property mapCamera Camera target for the persistent header map.
+ * @property mapPin Marker shown on the map (selected city or search preview).
+ * @property isResolvingMapTap True while reverse-geocoding a map tap.
  * @property error The main UI error, usually blocking or prominent.
  * @property syncError A background sync error for offline scenarios.
  */
@@ -58,6 +65,10 @@ data class WeatherUiState(
     val topPicks: List<TopPick> = emptyList(),
     val isLoadingTopPicks: Boolean = false,
     val isRefreshingTopPicks: Boolean = false,
+    val recentHistory: List<Location> = emptyList(),
+    val mapCamera: MapCameraPosition = MapCameraPosition.DEFAULT,
+    val mapPin: Location? = null,
+    val isResolvingMapTap: Boolean = false,
     val error: UiText? = null,
     val syncError: UiText? = null
 )
@@ -121,7 +132,16 @@ class WeatherViewModel @Inject constructor(
 
                     repository.searchCity(query).fold(
                         onSuccess = { locations ->
-                            _uiState.update { it.copy(searchResults = locations, isSearching = false) }
+                            _uiState.update { state ->
+                                val preview = locations.firstOrNull()
+                                state.copy(
+                                    searchResults = locations,
+                                    isSearching = false,
+                                    mapCamera = preview?.toMapCamera(MapCameraPosition.CITY_ZOOM)
+                                        ?: state.mapCamera,
+                                    mapPin = preview ?: state.mapPin
+                                )
+                            }
                         },
                         onError = { err ->
                             _uiState.update { it.copy(error = err.asUiText(), isSearching = false) }
@@ -131,6 +151,15 @@ class WeatherViewModel @Inject constructor(
         }
 
         loadTopPicks()
+        observeHistory()
+    }
+
+    private fun observeHistory() {
+        viewModelScope.launch {
+            repository.observeRecentLocations(HISTORY_LIMIT).collect { history ->
+                _uiState.update { it.copy(recentHistory = history) }
+            }
+        }
     }
 
     /**
@@ -162,6 +191,7 @@ class WeatherViewModel @Inject constructor(
 
     private companion object {
         const val TOP_PICKS_LOAD_DEFER_MS = 400
+        const val HISTORY_LIMIT = 10
     }
 
     fun onQueryChanged(query: String) {
@@ -184,7 +214,10 @@ class WeatherViewModel @Inject constructor(
                 selectedDayIndex = 0,
                 isLoadingForecast = true,
                 error = null,
-                syncError = null
+                syncError = null,
+                isResolvingMapTap = false,
+                mapCamera = location.toMapCamera(MapCameraPosition.DETAIL_ZOOM),
+                mapPin = location
             )
         }
 
@@ -207,8 +240,9 @@ class WeatherViewModel @Inject constructor(
             }
         }
 
-        // Trigger a background refresh (network -> DB).
+        // Mark viewed before refresh so lastViewedAt is preserved across the Room REPLACE upsert.
         viewModelScope.launch {
+            repository.markLocationViewed(location)
             repository.refreshForecast(location).fold(
                 onSuccess = { /* Handled by the SSOT flow emission. */ },
                 onError = { err ->
@@ -219,6 +253,45 @@ class WeatherViewModel @Inject constructor(
                         } else {
                             state.copy(syncError = mappedError, isLoadingForecast = false)
                         }
+                    }
+                }
+            )
+        }
+    }
+
+    /**
+     * Tap / long-press on the map: reverse-geocode then open the same detail flow as search.
+     */
+    fun onMapTapped(latitude: Double, longitude: Double) {
+        if (_uiState.value.isResolvingMapTap) return
+        if (currentConnectivityStatus != ConnectivityStatus.Available) {
+            _uiState.update { it.copy(error = AppError.NetworkError.NoConnectivity.asUiText()) }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                isResolvingMapTap = true,
+                error = null,
+                mapCamera = MapCameraPosition(
+                    latitude = latitude,
+                    longitude = longitude,
+                    zoom = MapCameraPosition.CITY_ZOOM
+                )
+            )
+        }
+
+        viewModelScope.launch {
+            repository.reverseGeocode(latitude, longitude).fold(
+                onSuccess = { location ->
+                    onLocationSelected(location)
+                },
+                onError = { err ->
+                    _uiState.update {
+                        it.copy(
+                            isResolvingMapTap = false,
+                            error = err.asUiText()
+                        )
                     }
                 }
             )
@@ -237,7 +310,7 @@ class WeatherViewModel @Inject constructor(
         }
     }
 
-    /** Returns from the detail view to the home screen. */
+    /** Returns from the detail view to the home screen. Map camera/pin stay put. */
     fun onBack() {
         forecastJob?.cancel()
         _uiState.update {
@@ -282,3 +355,9 @@ class WeatherViewModel @Inject constructor(
         }
     }
 }
+
+private fun Location.toMapCamera(zoom: Double) = MapCameraPosition(
+    latitude = latitude,
+    longitude = longitude,
+    zoom = zoom
+)
