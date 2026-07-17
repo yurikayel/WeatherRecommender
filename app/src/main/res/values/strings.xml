@@ -46,8 +46,10 @@
     <string name="share_weather_subject">Weather in %1$s</string>
     <string name="share_weather_text">Here\'s the 7-day forecast for %1$s from Concierge Weather.</string>
     <string name="share_card_forecast_label">Next 7 days</string>
-    <string name="share_card_tip_label">Top activity tip</string>
-    <string name="share_card_footer">Concierge Weather · Open-Meteo</string>
+    <string name="share_card_date_range">%1$s – %2$s</string>
+    <string name="share_card_hero_day">%1$s, %2$s</string>
+    <string name="share_card_hero_conditions">%1$s · low %2$d°</string>
+    <string name="share_card_footer">Concierge Weather · Weather data by Open-Meteo</string>
 
     <!-- Persistent header map -->
     <string name="map_content_description">Map for choosing a city. Tap or long-press to select a location.</string>

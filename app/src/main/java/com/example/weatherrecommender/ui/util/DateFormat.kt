@@ -17,6 +17,9 @@ fun isoDateToWeekday(isoDate: String): String = formatIso(isoDate, "EEE") ?: iso
 /** Returns the day-of-month for an ISO date, e.g. "17". */
 fun isoDateToDayOfMonth(isoDate: String): String = formatIso(isoDate, "d") ?: isoDate.takeLast(2)
 
+/** Returns a short localized month + day for an ISO date, e.g. "Jul 17". */
+fun isoDateToShortDate(isoDate: String): String = formatIso(isoDate, "MMM d") ?: isoDate.takeLast(5)
+
 private fun formatIso(isoDate: String, outputPattern: String): String? {
     return try {
         val parsed = SimpleDateFormat(ISO_PATTERN, Locale.US).parse(isoDate) ?: return null

@@ -213,7 +213,8 @@ fun WeatherScreenContent(
         ShareWeatherCapture(
             location = location,
             days = forecast.dailyForecasts,
-            tipActivity = uiState.rankedActivities.firstOrNull()?.activity,
+            selectedDayIndex = uiState.selectedDayIndex,
+            rankedActivities = uiState.rankedActivities,
             onComplete = { outcome ->
                 shareInProgress = false
                 scope.launch {

@@ -33,7 +33,7 @@ import androidx.core.content.FileProvider
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
-import com.example.weatherrecommender.domain.model.RecommendedActivity
+import com.example.weatherrecommender.domain.model.RankedActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -45,7 +45,7 @@ import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Renders [ShareWeatherCard] into a [androidx.compose.ui.graphics.layer.GraphicsLayer],
+ * Renders [ShareWeatherFlyer] into a [androidx.compose.ui.graphics.layer.GraphicsLayer],
  * captures a PNG bitmap, and launches the system share sheet.
  *
  * Kept in the UI layer so domain stays free of Android Intents.
@@ -54,7 +54,8 @@ import kotlin.time.Duration.Companion.milliseconds
 internal fun ShareWeatherCapture(
     location: Location,
     days: List<DailyForecast>,
-    tipActivity: RecommendedActivity?,
+    selectedDayIndex: Int,
+    rankedActivities: List<RankedActivity>,
     onComplete: (ShareWeatherOutcome) -> Unit
 ) {
     val context = LocalContext.current
@@ -84,10 +85,11 @@ internal fun ShareWeatherCapture(
                 }
                 .onGloballyPositioned { laidOut++ }
         ) {
-            ShareWeatherCard(
+            ShareWeatherFlyer(
                 location = location,
                 days = days,
-                tipActivity = tipActivity
+                selectedDayIndex = selectedDayIndex,
+                rankedActivities = rankedActivities
             )
         }
     }
