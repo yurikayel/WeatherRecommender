@@ -4,6 +4,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Optional: home "Current location" chip + first-launch auto-select. Denied → random capital. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Pre-Q only: MediaStore Downloads insert needs no storage permission on API 29+. -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
