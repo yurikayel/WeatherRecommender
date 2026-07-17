@@ -35,6 +35,8 @@ performance:
 
 naming:
   FunctionNaming:
+    # Allow Compose PascalCase (@Composable) and camelCase; ignoreAnnotated needs type resolution.
+    functionPattern: '([a-z][a-zA-Z0-9]*)|([A-Z][a-zA-Z0-9]*)'
     ignoreAnnotated:
       - Composable
       - Test

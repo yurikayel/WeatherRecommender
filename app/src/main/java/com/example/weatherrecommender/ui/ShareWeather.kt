@@ -42,13 +42,6 @@ import java.util.Date
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
-/** Result of capturing and sharing the weather card image. */
-internal data class ShareWeatherOutcome(
-    val shared: Boolean,
-    /** Whether the same PNG was written to Downloads. Independent of [shared]. */
-    val savedToDownloads: Boolean = false
-)
-
 /**
  * Renders [ShareWeatherCard] into a [androidx.compose.ui.graphics.layer.GraphicsLayer],
  * captures a PNG bitmap, and launches the system share sheet.
@@ -189,24 +182,24 @@ private fun saveBitmapToDownloadsMediaStore(
         put(MediaStore.MediaColumns.IS_PENDING, 1)
     }
     val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
-    return try {
-        resolver.openOutputStream(uri)?.use { out ->
-            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
-                resolver.delete(uri, null, null)
-                return false
-            }
-        } ?: run {
+    val success = runCatching {
+        val wrote = resolver.openOutputStream(uri)?.use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        } == true
+        if (wrote) {
+            values.clear()
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+            true
+        } else {
             resolver.delete(uri, null, null)
-            return false
+            false
         }
-        values.clear()
-        values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-        resolver.update(uri, values, null, null)
-        true
-    } catch (_: Exception) {
+    }.getOrElse {
         runCatching { resolver.delete(uri, null, null) }
         false
     }
+    return success
 }
 
 @Suppress("DEPRECATION")
@@ -215,28 +208,27 @@ private fun saveBitmapToDownloadsLegacy(
     bitmap: Bitmap,
     fileName: String
 ): Boolean {
-    if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        != PackageManager.PERMISSION_GRANTED
-    ) {
-        return false
-    }
-    val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-    if (!downloads.exists() && !downloads.mkdirs()) {
-        return false
-    }
-    val file = File(downloads, fileName)
-    FileOutputStream(file).use { out ->
-        if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
-            return false
-        }
-    }
-    MediaScannerConnection.scanFile(
+    val hasWrite = ContextCompat.checkSelfPermission(
         context,
-        arrayOf(file.absolutePath),
-        arrayOf("image/png"),
-        null
-    )
-    return true
+        Manifest.permission.WRITE_EXTERNAL_STORAGE
+    ) == PackageManager.PERMISSION_GRANTED
+    val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+    val ready = hasWrite && (downloads.exists() || downloads.mkdirs())
+    if (!ready) return false
+
+    val file = File(downloads, fileName)
+    val wrote = FileOutputStream(file).use { out ->
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+    }
+    if (wrote) {
+        MediaScannerConnection.scanFile(
+            context,
+            arrayOf(file.absolutePath),
+            arrayOf("image/png"),
+            null
+        )
+    }
+    return wrote
 }
 
 internal fun buildDownloadsFileName(cityName: String, date: Date = Date()): String {
