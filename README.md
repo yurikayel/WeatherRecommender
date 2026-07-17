@@ -1,6 +1,6 @@
 # Concierge Weather Recommender
 
-## a. Project Overview
+## a. Project Overview 📱
 This is a native Android app that implements the Concierge Weather Recommender assignment brief: search for a city and see, **for each of the next 7 days**, a ranked list of activities (Skiing, Surfing, Outdoor sightseeing, Indoor sightseeing) suited to that day's Open-Meteo forecast. Home-screen top picks, the Marine API sea-access path, and WorkManager background sync are conscious stretch goals beyond the core brief.
 
 | Scope | What |
@@ -24,7 +24,7 @@ Key experience details:
 - **Testing**: JUnit 4, MockK, Turbine, Paparazzi 2.x (CI runs with `-Ppaparazzi`)
 - **Quality**: detekt, Kover coverage, Android Lint
 
-## c. Architecture and Technical Decisions
+## c. Architecture and Technical Decisions 🏗️
 - **Clean Architecture Principles**: The project is strictly divided into three layers:
   - **Data Layer**: Retrofit interfaces, Room DAOs, and the Repository implementation mapping network data to domain models.
   - **Domain Layer**: Core business logic, `AppError` sealed hierarchy, and the `GetRankedActivitiesUseCase` fully isolated from Android dependencies.
@@ -34,7 +34,7 @@ Key experience details:
 - **Per-day scoring**: `GetRankedActivitiesUseCase(forecast, dayIndex)` ranks only the applicable activities for the selected day. Day switching is a pure, in-memory recompute (no network).
 - **Home suggestions**: `GetTopPicksUseCase` picks population-weighted cities from a bundled `FeaturedCities` seed list (the Geocoding API has no "browse" endpoint) and fetches their forecasts concurrently and best-effort via `WeatherRepository.getForecastRemote` (read-only, does not pollute the cache).
 
-## d. How to build and run the app
+## d. How to build and run the app 🚀
 1. Clone the repository and open the project in Android Studio (2025.2.3+ recommended for AGP 9).
 2. Ensure **JDK 21** is selected (Project Structure → SDK → JDK, or set `JAVA_HOME`).
 3. Ensure `local.properties` contains your Android SDK path (not committed to git).
@@ -43,7 +43,7 @@ Key experience details:
 
 Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations.auto-download=true`); the Foojay resolver plugin is configured in `settings.gradle.kts`.
 
-## e. How to run tests & testing strategy
+## e. How to run tests & testing strategy 🧪
 - **Unit tests**: `./gradlew testDebugUnitTest` (requires JDK 21+) — ~50+ tests across domain, data, and ViewModel (plus Paparazzi below)
 - **Paparazzi snapshots**: `./gradlew recordPaparazziDebug -Ppaparazzi` (verify with `verifyPaparazziDebug -Ppaparazzi`; 6 golden PNGs live in `app/src/test/snapshots/`)
 - **Lint**: `./gradlew lintDebug`
@@ -68,7 +68,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Snapshot tests | Done | Paparazzi 2.0.0-alpha05, 6 golden PNGs, verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
 | Substantial UI test coverage | Done | ~17 instrumented Compose tests for key flows (home greeting, search/clear, top picks, geography chips, day selection, back nav, sync/error banners, dark theme) |
 
-## f. API usage notes
+## f. API usage notes ☀️
 The application interfaces with three Open-Meteo APIs (No API key required):
 - **Geocoding API**: `https://geocoding-api.open-meteo.com/v1/search` for resolving a city name to coordinates. We also read `elevation`, `population`, and `feature_code` from each result to drive geography-aware activities and home suggestions.
 - **Forecast API**: `https://api.open-meteo.com/v1/forecast` for the 7-day daily forecast (temperature, precipitation, snowfall, wind, weather code).
@@ -90,7 +90,7 @@ The application interfaces with three Open-Meteo APIs (No API key required):
 
 Because scoring is per-day, the top activity for a city legitimately changes across the week (e.g. Outdoor on a sunny day, Indoor on a stormy one).
 
-## h. Assumptions made
+## h. Assumptions made ✅
 - Recommendations are made **per day**, not aggregated across the week.
 - **Sea access** is approximated by the Open-Meteo Marine API returning non-null wave heights near the city coordinate. This is a heuristic: a coastal city whose centre coordinate is slightly inland of the nearest marine grid cell may occasionally read as inland, and vice-versa.
 - **Skiing terrain** is approximated by an elevation threshold (≥ 800 m) or active snowfall. This is deliberately conservative: some valley ski towns (e.g. Innsbruck at ~570 m) only surface skiing once snow is in the forecast.
@@ -98,7 +98,7 @@ Because scoring is per-day, the top activity for a city legitimately changes acr
 - All arrays returned by the Open-Meteo forecast/marine endpoints for daily variables are aligned by date/index.
 - The `admin1` field from the Geocoding API accurately represents the state/region for UI display purposes.
 
-## i. Trade-offs and omissions
+## i. Trade-offs and omissions ⚖️
 This solution intentionally went beyond a strict 3–4 hour brief where it improved correctness, polish, or reviewer confidence; the trade-offs below explain those choices and what was left out.
 
 **What went beyond the brief (and why)**
@@ -146,5 +146,5 @@ This project runs on **AGP 9.3.0** with the **new DSL** and **built-in Kotlin** 
 - Paparazzi tests disable HTML reports (`reports.html.required.set(false)`) as a Gradle 9 workaround.
 - All runtime dependencies are declared in `gradle/libs.versions.toml` (including Paparazzi, material-icons-extended, hilt-navigation-compose).
 
-## m. AI usage disclosure
+## m. AI usage disclosure 📝
 Parts of this codebase were developed with assistance from Cursor (AI-assisted editing and scaffolding). Architecture choices, scoring heuristics, and documentation were reviewed and adjusted by the author. All AI-assisted output was verified by compiling with the Gradle wrapper, running the unit/Paparazzi test suites, lint/detekt/Kover locally, and relying on GitHub Actions CI (including the instrumented emulator job) as an additional check.
