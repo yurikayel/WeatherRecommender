@@ -15,7 +15,7 @@ Key experience details:
 - **Recently viewed History**: after Top Picks, lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
 - **In-screen map**: square MapLibre section **fixed above** a Crossfade of home/detail body content (no full-screen slide). Selecting a city updates the map camera in place and fades the body to detail; back fades home back and resets the camera to the device location (or a static London default without GPS).
 - **Current location**: with permission granted, the last-known GPS fix is reverse-geocoded to a city — home shows a discreet `Current location · {City}` chip, the map centers there, and the first launch auto-opens that city's weather. Denied → chip hidden, static default framing.
-- **Share**: detail toolbar exports a branded 9:16 portrait "weather flyer" PNG (header + selected-day hero + 7-day strip + ranked activities with score bars) via the system share sheet and best-effort saves a copy to Downloads.
+- **Share**: detail toolbar exports a branded 9:16 portrait "weather flyer" PNG with denser display-scale typography (header + selected-day hero + 7-day strip + ranked activities with score bars) via the system share sheet and best-effort saves a copy to Downloads.
 
 ## b. Platform and Tooling Choices
 - **Language**: Kotlin (AGP built-in Kotlin; `org.jetbrains.kotlin.android` plugin removed)

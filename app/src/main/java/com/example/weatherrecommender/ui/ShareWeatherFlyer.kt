@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,6 +72,92 @@ private const val MAX_FLYER_ACTIVITIES = 4
 private const val MAX_FLYER_DAYS = 7
 
 /**
+ * Flyer type scale — explicit sizes/weights/lineHeights (no Material default LH bloat).
+ * Font family stays system/default: downloadable Inter crashes under Paparazzi/layoutlib,
+ * and system sans keeps share PNGs deterministic across devices.
+ */
+private object FlyerType {
+    val brand = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 11.sp,
+        lineHeight = 13.sp,
+        letterSpacing = 1.4.sp
+    )
+    val city = TextStyle(
+        fontWeight = FontWeight.Bold,
+        fontSize = 32.sp,
+        lineHeight = 36.sp
+    )
+    val place = TextStyle(
+        fontWeight = FontWeight.Medium,
+        fontSize = 14.sp,
+        lineHeight = 17.sp
+    )
+    val meta = TextStyle(
+        fontWeight = FontWeight.Normal,
+        fontSize = 10.sp,
+        lineHeight = 12.sp,
+        letterSpacing = 0.3.sp
+    )
+    val section = TextStyle(
+        fontWeight = FontWeight.Bold,
+        fontSize = 13.sp,
+        lineHeight = 15.sp,
+        letterSpacing = 0.5.sp
+    )
+    val heroDay = TextStyle(
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        lineHeight = 14.sp
+    )
+    val heroTemp = TextStyle(
+        fontWeight = FontWeight.Bold,
+        fontSize = 48.sp,
+        lineHeight = 50.sp
+    )
+    val heroConditions = TextStyle(
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 14.sp
+    )
+    val dayLabel = TextStyle(
+        fontWeight = FontWeight.Medium,
+        fontSize = 10.sp,
+        lineHeight = 12.sp
+    )
+    val dayHigh = TextStyle(
+        fontWeight = FontWeight.Bold,
+        fontSize = 13.sp,
+        lineHeight = 15.sp
+    )
+    val dayLow = TextStyle(
+        fontWeight = FontWeight.Normal,
+        fontSize = 10.sp,
+        lineHeight = 12.sp
+    )
+    val activityName = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 15.sp,
+        lineHeight = 17.sp
+    )
+    val activityReason = TextStyle(
+        fontWeight = FontWeight.Normal,
+        fontSize = 11.sp,
+        lineHeight = 13.sp
+    )
+    val score = TextStyle(
+        fontWeight = FontWeight.Bold,
+        fontSize = 17.sp,
+        lineHeight = 19.sp
+    )
+    val footer = TextStyle(
+        fontWeight = FontWeight.Normal,
+        fontSize = 9.sp,
+        lineHeight = 11.sp
+    )
+}
+
+/**
  * Vertical "weather and activities flyer" rendered for image export / Paparazzi.
  * Mirrors everything on the detail screen — location, 7-day forecast, and the ranked
  * activities for the selected day — re-laid-out as a portrait 9:16 poster.
@@ -96,7 +183,7 @@ internal fun ShareWeatherFlyer(
                     colors = listOf(PremiumPrimaryContainerLight, FlyerSurface, FlyerSurface)
                 )
             )
-            .padding(horizontal = 22.dp, vertical = 20.dp)
+            .padding(horizontal = 18.dp, vertical = 14.dp)
     ) {
         FlyerHeader(location = location, days = forecastDays)
 
@@ -114,9 +201,8 @@ internal fun ShareWeatherFlyer(
         Spacer(Modifier.weight(1f))
         Text(
             text = stringResource(R.string.share_card_footer),
+            style = FlyerType.footer,
             color = FlyerMuted.copy(alpha = 0.85f),
-            fontSize = 10.sp,
-            lineHeight = 13.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
@@ -129,25 +215,20 @@ private fun FlyerHeader(location: Location, days: List<DailyForecast>) {
         Image(
             painter = painterResource(R.drawable.ic_weather_mark),
             contentDescription = null,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(22.dp)
         )
         Spacer(Modifier.width(6.dp))
         Text(
             text = stringResource(R.string.app_title),
-            color = FlyerAccent,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.2.sp
+            style = FlyerType.brand,
+            color = FlyerAccent
         )
     }
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(6.dp))
     Text(
         text = location.name,
+        style = FlyerType.city,
         color = FlyerInk,
-        fontSize = 26.sp,
-        lineHeight = 31.sp,
-        fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
@@ -158,10 +239,8 @@ private fun FlyerHeader(location: Location, days: List<DailyForecast>) {
     if (subtitle.isNotEmpty()) {
         Text(
             text = subtitle,
+            style = FlyerType.place,
             color = FlyerMuted,
-            fontSize = 13.sp,
-            lineHeight = 17.sp,
-            fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -170,17 +249,15 @@ private fun FlyerHeader(location: Location, days: List<DailyForecast>) {
     val first = days.firstOrNull()
     val last = days.lastOrNull()
     if (first != null && last != null) {
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             text = stringResource(
                 R.string.share_card_date_range,
                 isoDateToShortDate(first.date),
                 isoDateToShortDate(last.date)
             ),
-            color = FlyerMuted,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
-            letterSpacing = 0.4.sp
+            style = FlyerType.meta,
+            color = FlyerMuted
         )
     }
 }
@@ -195,7 +272,7 @@ private fun FlyerHero(day: DailyForecast) {
     ) {
         Box(
             modifier = Modifier
-                .size(64.dp)
+                .size(68.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(flyerPastelFor(day.weatherCode)),
             contentAlignment = Alignment.Center
@@ -204,10 +281,10 @@ private fun FlyerHero(day: DailyForecast) {
                 imageVector = weatherCodeIcon(day.weatherCode),
                 contentDescription = weatherCodeDescription(day.weatherCode),
                 tint = FlyerInk,
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(38.dp)
             )
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(14.dp))
         Column {
             Text(
                 text = stringResource(
@@ -215,17 +292,13 @@ private fun FlyerHero(day: DailyForecast) {
                     isoDateToWeekday(day.date),
                     isoDateToShortDate(day.date)
                 ),
-                color = FlyerMuted,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-                fontWeight = FontWeight.Medium
+                style = FlyerType.heroDay,
+                color = FlyerMuted
             )
             Text(
                 text = stringResource(R.string.temp_degrees, day.maxTemp.roundToInt()),
-                color = FlyerInk,
-                fontSize = 40.sp,
-                lineHeight = 46.sp,
-                fontWeight = FontWeight.Bold
+                style = FlyerType.heroTemp,
+                color = FlyerInk
             )
             Text(
                 text = stringResource(
@@ -233,9 +306,8 @@ private fun FlyerHero(day: DailyForecast) {
                     weatherCodeDescription(day.weatherCode),
                     day.minTemp.roundToInt()
                 ),
-                color = FlyerMuted,
-                fontSize = 12.sp,
-                lineHeight = 16.sp
+                style = FlyerType.heroConditions,
+                color = FlyerMuted
             )
         }
     }
@@ -244,14 +316,14 @@ private fun FlyerHero(day: DailyForecast) {
 @Composable
 private fun FlyerForecastStrip(days: List<DailyForecast>) {
     FlyerSectionLabel(stringResource(R.string.share_card_forecast_label))
-    Spacer(Modifier.height(6.dp))
+    Spacer(Modifier.height(4.dp))
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(FlyerSurface.copy(alpha = 0.9f))
-            .padding(horizontal = 8.dp, vertical = 8.dp)
+            .padding(horizontal = 6.dp, vertical = 6.dp)
     ) {
         days.forEach { day ->
             FlyerDayColumn(day = day, modifier = Modifier.weight(1f))
@@ -266,21 +338,19 @@ private fun FlyerDayColumn(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.padding(horizontal = 2.dp)
+        modifier = modifier.padding(horizontal = 1.dp)
     ) {
         Text(
             text = isoDateToWeekday(day.date),
+            style = FlyerType.dayLabel,
             color = FlyerMuted,
-            fontSize = 10.sp,
-            lineHeight = 13.sp,
-            fontWeight = FontWeight.Medium,
             maxLines = 1
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         Box(
             modifier = Modifier
-                .size(28.dp)
-                .clip(RoundedCornerShape(9.dp))
+                .size(26.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(flyerPastelFor(day.weatherCode)),
             contentAlignment = Alignment.Center
         ) {
@@ -288,23 +358,20 @@ private fun FlyerDayColumn(
                 imageVector = weatherCodeIcon(day.weatherCode),
                 contentDescription = weatherCodeDescription(day.weatherCode),
                 tint = FlyerInk,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(15.dp)
             )
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         Text(
             text = stringResource(R.string.temp_degrees, day.maxTemp.roundToInt()),
+            style = FlyerType.dayHigh,
             color = FlyerInk,
-            fontSize = 12.sp,
-            lineHeight = 15.sp,
-            fontWeight = FontWeight.Bold,
             maxLines = 1
         )
         Text(
             text = stringResource(R.string.temp_degrees, day.minTemp.roundToInt()),
+            style = FlyerType.dayLow,
             color = FlyerMuted,
-            fontSize = 10.sp,
-            lineHeight = 13.sp,
             maxLines = 1
         )
     }
@@ -315,9 +382,9 @@ private fun FlyerActivities(day: DailyForecast, activities: List<RankedActivity>
     FlyerSectionLabel(
         stringResource(R.string.detail_activities_for_day, isoDateToWeekday(day.date))
     )
-    Spacer(Modifier.height(6.dp))
+    Spacer(Modifier.height(4.dp))
     Column(
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         activities.take(MAX_FLYER_ACTIVITIES).forEach { ranked ->
@@ -332,9 +399,9 @@ private fun FlyerActivityRow(ranked: RankedActivity) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(11.dp))
             .background(FlyerSurface.copy(alpha = 0.9f))
-            .padding(horizontal = 10.dp, vertical = 7.dp)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
         Box(
             modifier = Modifier
@@ -350,26 +417,23 @@ private fun FlyerActivityRow(ranked: RankedActivity) {
                 modifier = Modifier.size(16.dp)
             )
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = ranked.activity.asUiText().asString(),
+                style = FlyerType.activityName,
                 color = FlyerInk,
-                fontSize = 13.sp,
-                lineHeight = 16.sp,
-                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = ranked.reasonKey.asUiText(ranked.reasonArgs).asString(),
+                style = FlyerType.activityReason,
                 color = FlyerMuted,
-                fontSize = 10.sp,
-                lineHeight = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.height(2.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -386,13 +450,11 @@ private fun FlyerActivityRow(ranked: RankedActivity) {
                 )
             }
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(8.dp))
         Text(
             text = ranked.score.toString(),
-            color = flyerScoreColor(ranked.score),
-            fontSize = 15.sp,
-            lineHeight = 18.sp,
-            fontWeight = FontWeight.Bold
+            style = FlyerType.score,
+            color = flyerScoreColor(ranked.score)
         )
     }
 }
@@ -401,11 +463,8 @@ private fun FlyerActivityRow(ranked: RankedActivity) {
 private fun FlyerSectionLabel(text: String) {
     Text(
         text = text,
+        style = FlyerType.section,
         color = FlyerMuted,
-        fontSize = 11.sp,
-        lineHeight = 14.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.4.sp,
         modifier = Modifier.fillMaxWidth()
     )
 }
