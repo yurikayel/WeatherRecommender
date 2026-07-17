@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
  * Data Access Object for handling local SQLite persistence using Room.
  * Enables Offline-First architecture by storing Locations and their Forecasts.
  */
+@Suppress("TooManyFunctions")
 @Dao
 interface WeatherDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -38,6 +39,21 @@ interface WeatherDao {
 
     @Query("DELETE FROM daily_forecast_entity WHERE locationId = :locationId")
     suspend fun deleteForecastsForLocation(locationId: Long)
+
+    @Query("DELETE FROM location_entity WHERE id = :locationId")
+    suspend fun deleteLocation(locationId: Long)
+
+    @Query("SELECT COUNT(*) FROM location_entity")
+    suspend fun getLocationCount(): Int
+
+    @Query("SELECT id FROM location_entity ORDER BY lastUpdated ASC LIMIT :count")
+    suspend fun getOldestLocationIds(count: Int): List<Long>
+
+    @Transaction
+    suspend fun deleteLocationWithForecasts(locationId: Long) {
+        deleteForecastsForLocation(locationId)
+        deleteLocation(locationId)
+    }
 
     @Transaction
     suspend fun insertLocationWithForecast(

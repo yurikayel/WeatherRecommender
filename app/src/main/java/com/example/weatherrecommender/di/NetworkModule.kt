@@ -3,6 +3,8 @@ package com.example.weatherrecommender.di
 import com.example.weatherrecommender.BuildConfig
 import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
+import com.example.weatherrecommender.data.remote.MarineApi
+import com.example.weatherrecommender.data.remote.RateLimitRetryInterceptor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -38,6 +40,7 @@ object NetworkModule {
         val builder = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
+            .addInterceptor(RateLimitRetryInterceptor())
 
         if (BuildConfig.DEBUG) {
             builder.addInterceptor(
@@ -74,6 +77,17 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("MarineRetrofit")
+    fun provideMarineRetrofit(okHttpClient: OkHttpClient, json: Json): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(MarineApi.BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+    }
+
+    @Provides
+    @Singleton
     fun provideGeocodingApi(@Named("GeocodingRetrofit") retrofit: Retrofit): GeocodingApi {
         return retrofit.create(GeocodingApi::class.java)
     }
@@ -82,5 +96,11 @@ object NetworkModule {
     @Singleton
     fun provideForecastApi(@Named("ForecastRetrofit") retrofit: Retrofit): ForecastApi {
         return retrofit.create(ForecastApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideMarineApi(@Named("MarineRetrofit") retrofit: Retrofit): MarineApi {
+        return retrofit.create(MarineApi::class.java)
     }
 }

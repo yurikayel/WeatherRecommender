@@ -6,14 +6,16 @@ import com.example.weatherrecommender.data.mapper.toDomain
 import com.example.weatherrecommender.data.mapper.toEntity
 import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
+import com.example.weatherrecommender.data.remote.MarineApi
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.AppResult
+import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.Result
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import retrofit2.HttpException
 import java.io.IOException
 import javax.inject.Inject
@@ -21,12 +23,17 @@ import javax.inject.Inject
 /**
  * Concrete implementation of the [WeatherRepository].
  *
- * Coordinates data fetching between the [GeocodingApi], [ForecastApi], and local [WeatherDao].
- * Implements the Offline-First architecture by storing responses in Room as the Single Source of Truth (SSOT).
+ * Coordinates data fetching between the [GeocodingApi], [ForecastApi], [MarineApi], and local
+ * [WeatherDao]. Implements the Offline-First architecture by storing responses in Room as the
+ * Single Source of Truth (SSOT).
+ *
+ * The Marine API is queried alongside the forecast: its wave data enriches surf scoring and, since
+ * it only returns values near open water, doubles as a "has sea access" detector.
  */
 class WeatherRepositoryImpl @Inject constructor(
     private val geocodingApi: GeocodingApi,
     private val forecastApi: ForecastApi,
+    private val marineApi: MarineApi,
     private val weatherDao: WeatherDao
 ) : WeatherRepository {
 
@@ -35,12 +42,15 @@ class WeatherRepositoryImpl @Inject constructor(
             val response = geocodingApi.searchCity(query)
             val locations = response.results?.map { dto ->
                 Location(
-                    id = dto.id.toLong(),
+                    id = dto.id,
                     name = dto.name,
                     latitude = dto.latitude,
                     longitude = dto.longitude,
                     country = dto.country,
-                    admin1 = dto.admin1
+                    admin1 = dto.admin1,
+                    elevation = dto.elevation,
+                    population = dto.population,
+                    featureCode = dto.featureCode
                 )
             } ?: emptyList()
             Result.Success(locations)
@@ -50,47 +60,123 @@ class WeatherRepositoryImpl @Inject constructor(
     }
 
     override fun getForecastFlow(location: Location): Flow<WeatherForecast?> {
-        return weatherDao.getDailyForecastsFlow(location.id).map { entities ->
-            if (entities.isEmpty()) null
-            else WeatherForecast(location, entities.map { it.toDomain() })
+        return combine(
+            weatherDao.getLocationFlow(location.id),
+            weatherDao.getDailyForecastsFlow(location.id)
+        ) { locationEntity, forecastEntities ->
+            if (forecastEntities.isEmpty()) {
+                null
+            } else {
+                // Prefer the persisted location (it carries geography resolved during refresh);
+                // fall back to the caller-supplied location before the first successful refresh.
+                val resolvedLocation = locationEntity?.toDomain() ?: location
+                WeatherForecast(resolvedLocation, forecastEntities.map { it.toDomain() })
+            }
         }
     }
 
     override suspend fun refreshForecast(location: Location): AppResult<Unit> {
         return try {
-            val response = forecastApi.getForecast(
-                latitude = location.latitude,
-                longitude = location.longitude
-            )
-            val dailyDto = response.daily
-            val dailyForecasts = mutableListOf<DailyForecastEntity>()
-            
-            val size = dailyDto.time.size
-            for (i in 0 until size) {
-                dailyForecasts.add(
-                    DailyForecastEntity(
-                        locationId = location.id,
-                        date = dailyDto.time.getOrNull(i) ?: "",
-                        weatherCode = dailyDto.weatherCode.getOrNull(i) ?: 0,
-                        maxTemp = dailyDto.temperature2mMax.getOrNull(i) ?: 0.0,
-                        minTemp = dailyDto.temperature2mMin.getOrNull(i) ?: 0.0,
-                        precipitationSum = dailyDto.precipitationSum.getOrNull(i) ?: 0.0,
-                        snowfallSum = dailyDto.snowfallSum.getOrNull(i) ?: 0.0,
-                        maxWindSpeed = dailyDto.windSpeed10mMax.getOrNull(i) ?: 0.0
-                    )
-                )
-            }
-            
-            // Save to Room as SSOT
+            val forecast = fetchRemoteForecast(location)
             weatherDao.insertLocationWithForecast(
-                location = location.toEntity(),
-                forecasts = dailyForecasts
+                location = forecast.location.toEntity(),
+                forecasts = forecast.dailyForecasts.map { it.toEntity(location.id) }
             )
-            
+            evictStaleLocationsIfNeeded()
             Result.Success(Unit)
         } catch (e: Exception) {
             Result.Error(e.toAppError())
         }
+    }
+
+    /**
+     * Keeps the Room cache bounded by evicting the least-recently-updated locations once the
+     * cap is exceeded. SyncWorker only iterates stored locations, so this also bounds background sync.
+     */
+    private suspend fun evictStaleLocationsIfNeeded() {
+        val overflow = weatherDao.getLocationCount() - MAX_CACHED_LOCATIONS
+        if (overflow <= 0) return
+
+        weatherDao.getOldestLocationIds(overflow).forEach { locationId ->
+            weatherDao.deleteLocationWithForecasts(locationId)
+        }
+    }
+
+    override suspend fun getForecastRemote(location: Location): AppResult<WeatherForecast> {
+        return try {
+            Result.Success(fetchRemoteForecast(location))
+        } catch (e: Exception) {
+            Result.Error(e.toAppError())
+        }
+    }
+
+    /**
+     * Fetches the forecast (and best-effort marine data) for a location and assembles the domain
+     * model, resolving sea access from wave data. Does not persist anything.
+     */
+    private suspend fun fetchRemoteForecast(location: Location): WeatherForecast {
+        val forecastResponse = forecastApi.getForecast(
+            latitude = location.latitude,
+            longitude = location.longitude
+        )
+        val daily = forecastResponse.daily
+
+        val waveByDate = fetchWaveHeightsByDate(location)
+        val hasSeaAccess = waveByDate?.values?.any { it != null } ?: location.hasSeaAccess
+
+        val dailyForecasts = daily.time.indices.map { i ->
+            val date = daily.time.getOrNull(i) ?: ""
+            DailyForecast(
+                date = date,
+                weatherCode = daily.weatherCode.getOrNull(i) ?: 0,
+                maxTemp = daily.temperature2mMax.getOrNull(i) ?: 0.0,
+                minTemp = daily.temperature2mMin.getOrNull(i) ?: 0.0,
+                precipitationSum = daily.precipitationSum.getOrNull(i) ?: 0.0,
+                snowfallSum = daily.snowfallSum.getOrNull(i) ?: 0.0,
+                maxWindSpeed = daily.windSpeed10mMax.getOrNull(i) ?: 0.0,
+                waveHeightMax = waveByDate?.get(date)
+            )
+        }
+
+        return WeatherForecast(
+            location = location.copy(hasSeaAccess = hasSeaAccess),
+            dailyForecasts = dailyForecasts
+        )
+    }
+
+    /**
+     * Best-effort fetch of daily max wave heights keyed by date. Returns null when the Marine API
+     * is unreachable, so a marine outage never fails the primary forecast.
+     */
+    private suspend fun fetchWaveHeightsByDate(location: Location): Map<String, Double?>? {
+        return try {
+            val marine = marineApi.getMarine(
+                latitude = location.latitude,
+                longitude = location.longitude
+            )
+            val marineDaily = marine.daily ?: return null
+            marineDaily.time.indices.associateBy({ marineDaily.time[it] }) { i ->
+                marineDaily.waveHeightMax.getOrNull(i)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun DailyForecast.toEntity(locationId: Long) = DailyForecastEntity(
+        locationId = locationId,
+        date = date,
+        maxTemp = maxTemp,
+        minTemp = minTemp,
+        weatherCode = weatherCode,
+        precipitationSum = precipitationSum,
+        maxWindSpeed = maxWindSpeed,
+        snowfallSum = snowfallSum,
+        waveHeightMax = waveHeightMax
+    )
+
+    private companion object {
+        const val MAX_CACHED_LOCATIONS = 20
     }
 
     private fun Exception.toAppError(): AppError {

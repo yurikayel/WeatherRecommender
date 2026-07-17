@@ -18,7 +18,11 @@ fun LocationEntity.toDomain(): Location {
         latitude = this.latitude,
         longitude = this.longitude,
         country = this.country,
-        admin1 = this.admin1
+        admin1 = this.admin1,
+        elevation = this.elevation,
+        population = this.population,
+        featureCode = this.featureCode,
+        hasSeaAccess = this.hasSeaAccess
     )
 }
 
@@ -37,7 +41,11 @@ fun Location.toEntity(lastUpdated: Long = System.currentTimeMillis()): LocationE
         longitude = this.longitude,
         country = this.country ?: "",
         admin1 = this.admin1,
-        lastUpdated = lastUpdated
+        lastUpdated = lastUpdated,
+        elevation = this.elevation,
+        population = this.population,
+        featureCode = this.featureCode,
+        hasSeaAccess = this.hasSeaAccess
     )
 }
 
@@ -54,6 +62,7 @@ fun DailyForecastEntity.toDomain(): DailyForecast {
         minTemp = this.minTemp,
         precipitationSum = this.precipitationSum,
         snowfallSum = this.snowfallSum,
-        maxWindSpeed = this.maxWindSpeed
+        maxWindSpeed = this.maxWindSpeed,
+        waveHeightMax = this.waveHeightMax
     )
 }

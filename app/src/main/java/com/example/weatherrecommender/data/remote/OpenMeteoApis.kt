@@ -2,6 +2,7 @@ package com.example.weatherrecommender.data.remote
 
 import com.example.weatherrecommender.data.remote.dto.ForecastResponse
 import com.example.weatherrecommender.data.remote.dto.GeocodingResponse
+import com.example.weatherrecommender.data.remote.dto.MarineResponse
 import retrofit2.http.GET
 import retrofit2.http.Query
 
@@ -56,5 +57,35 @@ interface ForecastApi {
 
     companion object {
         const val BASE_URL = "https://api.open-meteo.com/"
+    }
+}
+
+/**
+ * Retrofit interface for the Open-Meteo Marine Weather API.
+ * Used to fetch wave data, which doubles as a sea-access detector for coastal activities.
+ */
+interface MarineApi {
+    /**
+     * Retrieves the daily maximum wave height for a given location.
+     *
+     * Returns null wave-height entries for inland coordinates, which callers use to determine
+     * whether the location supports sea-based activities such as surfing.
+     *
+     * @param latitude The geographic latitude.
+     * @param longitude The geographic longitude.
+     * @param daily Comma-separated list of daily marine variables to query.
+     * @param timezone Timezone for the marine data.
+     * @return The marine response containing daily wave metrics.
+     */
+    @GET("v1/marine")
+    suspend fun getMarine(
+        @Query("latitude") latitude: Double,
+        @Query("longitude") longitude: Double,
+        @Query("daily") daily: String = "wave_height_max",
+        @Query("timezone") timezone: String = "auto"
+    ): MarineResponse
+
+    companion object {
+        const val BASE_URL = "https://marine-api.open-meteo.com/"
     }
 }

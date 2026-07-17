@@ -22,5 +22,8 @@ data class GeocodingLocationDto(
     @SerialName("latitude") val latitude: Double,
     @SerialName("longitude") val longitude: Double,
     @SerialName("country") val country: String? = null,
-    @SerialName("admin1") val admin1: String? = null // State/Region
+    @SerialName("admin1") val admin1: String? = null, // State/Region
+    @SerialName("elevation") val elevation: Double? = null,
+    @SerialName("population") val population: Long? = null,
+    @SerialName("feature_code") val featureCode: String? = null
 )

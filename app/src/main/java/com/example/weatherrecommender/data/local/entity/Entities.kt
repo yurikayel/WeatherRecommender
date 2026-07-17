@@ -15,7 +15,11 @@ data class LocationEntity(
     val longitude: Double,
     val country: String,
     val admin1: String?,
-    val lastUpdated: Long
+    val lastUpdated: Long,
+    val elevation: Double? = null,
+    val population: Long? = null,
+    val featureCode: String? = null,
+    val hasSeaAccess: Boolean = false
 )
 
 /**
@@ -34,5 +38,6 @@ data class DailyForecastEntity(
     val weatherCode: Int,
     val precipitationSum: Double,
     val maxWindSpeed: Double,
-    val snowfallSum: Double
+    val snowfallSum: Double,
+    val waveHeightMax: Double? = null
 )

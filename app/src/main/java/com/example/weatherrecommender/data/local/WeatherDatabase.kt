@@ -12,7 +12,7 @@ import com.example.weatherrecommender.data.local.entity.LocationEntity
  * The Room database for the application.
  * Contains tables for locations and daily forecasts.
  */
-@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 2, exportSchema = true)
+@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 3, exportSchema = true)
 abstract class WeatherDatabase : RoomDatabase() {
     abstract fun weatherDao(): WeatherDao
 
@@ -28,6 +28,22 @@ abstract class WeatherDatabase : RoomDatabase() {
                 db.execSQL(
                     "ALTER TABLE daily_forecast_entity ADD COLUMN snowfallSum REAL NOT NULL DEFAULT 0.0"
                 )
+            }
+        }
+
+        /**
+         * v3 adds geography metadata to locations (elevation, population, featureCode, hasSeaAccess)
+         * and per-day marine [DailyForecastEntity.waveHeightMax], enabling geography-aware activities.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE location_entity ADD COLUMN elevation REAL")
+                db.execSQL("ALTER TABLE location_entity ADD COLUMN population INTEGER")
+                db.execSQL("ALTER TABLE location_entity ADD COLUMN featureCode TEXT")
+                db.execSQL(
+                    "ALTER TABLE location_entity ADD COLUMN hasSeaAccess INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL("ALTER TABLE daily_forecast_entity ADD COLUMN waveHeightMax REAL")
             }
         }
     }
