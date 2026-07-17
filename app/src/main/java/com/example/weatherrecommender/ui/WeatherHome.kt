@@ -28,15 +28,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +53,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.weatherrecommender.R
@@ -67,7 +65,7 @@ import com.example.weatherrecommender.ui.util.weatherCodeIcon
 import kotlin.math.roundToInt
 
 /**
- * Home body below the fixed map: greeting, search, and population-weighted "top picks".
+ * Home body inside the collapsing-map sheet: greeting, search, and population-weighted "top picks".
  * Pull-to-refresh force-refreshes top picks (bypasses the in-memory TTL cache).
  * The map lives in [WeatherScreenContent] so it stays mounted across home↔detail.
  */
@@ -78,9 +76,7 @@ internal fun HomeContent(
     onQueryChanged: (String) -> Unit,
     onLocationSelected: (Location) -> Unit,
     onRefresh: () -> Unit,
-    onCurrentLocationClick: () -> Unit = {},
-    isDarkTheme: Boolean = false,
-    onToggleTheme: () -> Unit = {}
+    onCurrentLocationClick: () -> Unit = {}
 ) {
     PullToRefreshBox(
         isRefreshing = uiState.isRefreshingTopPicks,
@@ -96,9 +92,7 @@ internal fun HomeContent(
             Spacer(Modifier.height(12.dp))
             HomeHeader(
                 currentLocationCity = uiState.deviceLocation?.name,
-                onCurrentLocationClick = onCurrentLocationClick,
-                isDarkTheme = isDarkTheme,
-                onToggleTheme = onToggleTheme
+                onCurrentLocationClick = onCurrentLocationClick
             )
 
             Spacer(Modifier.height(16.dp))
@@ -130,7 +124,7 @@ internal fun HomeContent(
                 Text(
                     text = stringResource(R.string.home_top_picks_title),
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                     modifier = Modifier.semantics { heading() }
                 )
                 Spacer(Modifier.height(12.dp))
@@ -145,7 +139,7 @@ internal fun HomeContent(
                     Text(
                         text = stringResource(R.string.home_history_title),
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                         modifier = Modifier.semantics { heading() }
                     )
                     Spacer(Modifier.height(12.dp))
@@ -156,58 +150,51 @@ internal fun HomeContent(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
+            MapAttributionFooter()
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
 
 @Composable
+private fun MapAttributionFooter() {
+    val attribution = stringResource(R.string.map_attribution)
+    Text(
+        text = attribution,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = attribution }
+    )
+}
+
+@Composable
 private fun HomeHeader(
     currentLocationCity: String?,
-    onCurrentLocationClick: () -> Unit,
-    isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onCurrentLocationClick: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 4.dp)) {
-                Text(
-                    text = stringResource(R.string.home_brand_eyebrow),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.home_greeting_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.semantics { heading() }
-                )
-                Text(
-                    text = stringResource(R.string.home_greeting_subtitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                )
-            }
-            IconButton(onClick = onToggleTheme) {
-                Icon(
-                    imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                    contentDescription = stringResource(
-                        if (isDarkTheme) {
-                            R.string.theme_switch_to_light
-                        } else {
-                            R.string.theme_switch_to_dark
-                        }
-                    ),
-                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
-                )
-            }
-        }
+        Text(
+            text = stringResource(R.string.home_brand_eyebrow),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = stringResource(R.string.home_greeting_title),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.semantics { heading() }
+        )
+        Text(
+            text = stringResource(R.string.home_greeting_subtitle),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        )
         if (currentLocationCity != null) {
             Spacer(Modifier.height(10.dp))
             CurrentLocationChip(

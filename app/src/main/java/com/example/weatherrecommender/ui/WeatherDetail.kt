@@ -77,7 +77,7 @@ private val DayChipWidth = 72.dp
 private val DayChipHeight = 120.dp
 
 /**
- * Detail body below the fixed map: geography chips, day selector, and ranked activities.
+ * Detail body inside the collapsing-map sheet: geography chips, day selector, and ranked activities.
  * The map lives in [WeatherScreenContent] so it stays mounted across home↔detail.
  * Tapping a day re-ranks activities (handled by [WeatherViewModel.onDaySelected]).
  */
@@ -126,7 +126,7 @@ internal fun DetailContent(
                 Text(
                     text = stringResource(R.string.detail_pick_a_day),
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                     modifier = Modifier.semantics { heading() }
                 )
                 Spacer(Modifier.height(12.dp))
@@ -144,7 +144,7 @@ internal fun DetailContent(
                         selectedDay?.let { isoDateToWeekday(it.date) } ?: ""
                     ),
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                     modifier = Modifier.semantics { heading() }
                 )
                 Spacer(Modifier.height(12.dp))
