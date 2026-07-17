@@ -50,6 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -132,6 +133,21 @@ internal fun HomeContent(
                     isLoading = uiState.isLoadingTopPicks,
                     onLocationSelected = onLocationSelected
                 )
+
+                if (uiState.recentHistory.isNotEmpty()) {
+                    Spacer(Modifier.height(28.dp))
+                    Text(
+                        text = stringResource(R.string.home_history_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                        modifier = Modifier.semantics { heading() }
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    HistorySection(
+                        history = uiState.recentHistory,
+                        onLocationSelected = onLocationSelected
+                    )
+                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -350,6 +366,70 @@ private fun TopPickCard(pick: TopPick, onClick: () -> Unit) {
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistorySection(
+    history: List<Location>,
+    onLocationSelected: (Location) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        history.forEach { location ->
+            HistoryRow(location = location, onClick = { onLocationSelected(location) })
+        }
+    }
+}
+
+@Composable
+private fun HistoryRow(location: Location, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "history_press_scale"
+    )
+    val openAgainCd = stringResource(R.string.home_history_item_cd, location.displayName)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .semantics { contentDescription = openAgainCd }
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Text(
+                text = location.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            val subtitle = listOfNotNull(location.admin1, location.country)
+                .filter { it.isNotBlank() }
+                .joinToString(", ")
+            if (subtitle.isNotEmpty()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

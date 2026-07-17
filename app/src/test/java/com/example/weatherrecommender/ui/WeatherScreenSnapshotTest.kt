@@ -1,6 +1,8 @@
 ﻿package com.example.weatherrecommender.ui
 
 import androidx.compose.material3.Typography
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalInspectionMode
 import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
 import com.example.weatherrecommender.domain.model.DailyForecast
@@ -29,15 +31,18 @@ class WeatherScreenSnapshotTest {
         paparazzi.snapshot {
             // Default typography uses downloadable Google Fonts, which spawns an Android-only
             // fetcher thread that crashes under layoutlib; system fonts render deterministically.
-            WeatherRecommenderTheme(darkTheme = darkTheme, typography = Typography()) {
-                WeatherScreenContent(
-                    uiState = state,
-                    onQueryChanged = {},
-                    onLocationSelected = {},
-                    onDaySelected = {},
-                    onBack = {},
-                    onRefresh = {}
-                )
+            // Inspection mode keeps MapLibre off the snapshot path (native libs are unavailable).
+            CompositionLocalProvider(LocalInspectionMode provides true) {
+                WeatherRecommenderTheme(darkTheme = darkTheme, typography = Typography()) {
+                    WeatherScreenContent(
+                        uiState = state,
+                        onQueryChanged = {},
+                        onLocationSelected = {},
+                        onDaySelected = {},
+                        onBack = {},
+                        onRefresh = {}
+                    )
+                }
             }
         }
     }

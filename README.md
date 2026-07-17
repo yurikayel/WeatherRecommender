@@ -6,12 +6,13 @@ This is a native Android app that implements the Concierge Weather Recommender a
 | Scope | What |
 |-------|------|
 | **Core (brief)** | City search, 7-day forecast, per-day activity ranking, offline-first Room cache, Clean Architecture + tests |
-| **Stretch** | Home top picks (`FeaturedCities` + TTL cache), Marine API (surf + sea access), WorkManager location sync, Paparazzi goldens, instrumented CI |
+| **Stretch** | Home top picks (`FeaturedCities` + TTL cache), recently viewed History (Room `lastViewedAt`), Marine API (surf + sea access), WorkManager location sync, Paparazzi goldens, instrumented CI |
 
 Key experience details:
 - **Per-day recommendations**: the detail screen shows a day selector; tapping a day re-ranks its activities. There is no single "week-long" score.
 - **Geography-aware activities**: activities that don't make sense for a location are hidden entirely (e.g. surfing is only offered where there is sea access; skiing only in mountainous terrain or when snow is falling).
 - **Home "top picks"**: the home screen surfaces a randomised, population-weighted set of well-known cities, each with its best activity for today (stretch). Pull-to-refresh on home force-refreshes this feed.
+- **Recently viewed History**: after Top Picks, the home screen lists up to 10 cities the user explicitly opened (search or top-pick tap). Persisted via Room `lastViewedAt` across restarts; top-picks preload alone does not count.
 
 ## b. Platform and Tooling Choices
 - **Language**: Kotlin (AGP built-in Kotlin; `org.jetbrains.kotlin.android` plugin removed)
@@ -62,6 +63,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Bonus | Status | Implementation |
 |-------|--------|----------------|
 | Offline cache | Done | Room SSOT + WorkManager background sync |
+| Recently viewed History | Done | Home section after Top Picks; Room `lastViewedAt`; last 10 explicit selections |
 | Pull-to-refresh | Done | `PullToRefreshBox` on city detail **and** home (force-refresh top picks) |
 | Dark mode | Done | Navy-tinted dark palette, primary containers, system bar icon contrast; light + dark Paparazzi goldens |
 | Advanced UI polish / animation | Done | Home↔detail slide transition, animated day selector, score ring sweep, top-pick press scale, shimmer + crossfade loading |
