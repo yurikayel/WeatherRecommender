@@ -49,6 +49,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.Location
@@ -182,8 +183,8 @@ private fun TopPicksSection(
                     items(3) {
                         Box(
                             modifier = Modifier
-                                .width(220.dp)
-                                .height(150.dp)
+                                .width(TopPickCardWidth)
+                                .height(TopPickCardHeight)
                                 .clip(RoundedCornerShape(20.dp))
                                 .shimmerEffect()
                         )
@@ -210,6 +211,10 @@ private fun TopPicksSection(
     }
 }
 
+/** Fixed dimensions shared by loaded cards and loading skeletons so LazyRow items align. */
+private val TopPickCardWidth = 220.dp
+private val TopPickCardHeight = 150.dp
+
 @Composable
 private fun TopPickCard(pick: TopPick, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -222,7 +227,8 @@ private fun TopPickCard(pick: TopPick, onClick: () -> Unit) {
 
     Card(
         modifier = Modifier
-            .width(220.dp)
+            .width(TopPickCardWidth)
+            .height(TopPickCardHeight)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -232,43 +238,61 @@ private fun TopPickCard(pick: TopPick, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
-                Column(modifier = Modifier.width(120.dp)) {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                     Text(
                         text = pick.location.name,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    pick.location.country?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
+                    // Always reserve one subtitle line so cards stay equal height with/without country.
+                    Text(
+                        text = pick.location.country.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        minLines = 1
+                    )
                 }
-                Column(horizontalAlignment = Alignment.End) {
+                // Fixed weather column so icon + temp always occupy the same space.
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.width(56.dp).height(52.dp),
+                    verticalArrangement = Arrangement.Top
+                ) {
                     Icon(
                         weatherCodeIcon(pick.weatherCode),
                         contentDescription = weatherCodeDescription(pick.weatherCode),
-                        tint = MaterialTheme.colorScheme.onSurface
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(24.dp)
                     )
                     Text(
                         text = stringResource(R.string.temp_degrees, pick.maxTemp.roundToInt()),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
                     )
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Icon(
                     activityIcon(pick.topActivity.activity),
                     contentDescription = null,
@@ -280,7 +304,9 @@ private fun TopPickCard(pick: TopPick, onClick: () -> Unit) {
                     text = pick.topActivity.activity.asUiText().asString(),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
