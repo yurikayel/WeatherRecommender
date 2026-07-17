@@ -11,9 +11,9 @@ data class MapCameraPosition(
 ) {
     companion object {
         /**
-         * Fallback home framing (London) used by Compose previews / snapshot defaults.
-         * Runtime home camera is set by [com.example.weatherrecommender.ui.WeatherViewModel]
-         * to a random capital or the device location.
+         * Default home framing (London), also used by Compose previews / snapshot defaults.
+         * [com.example.weatherrecommender.ui.WeatherViewModel] re-centers the home camera
+         * on the device location when one is available.
          *
          * Zoom values are ~30% further out than the previous 7.0 / 8.5 / 9.0 set
          * (× 0.7) so the visible area grows roughly 30% at each level.

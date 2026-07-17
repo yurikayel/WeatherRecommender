@@ -14,7 +14,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
-import kotlin.random.Random
 
 /**
  * Hilt module for providing application-level dependencies.
@@ -37,9 +36,5 @@ abstract class AppModule {
         fun provideConnectivityObserver(@ApplicationContext context: Context): ConnectivityObserver {
             return NetworkConnectivityObserver(context)
         }
-
-        @Provides
-        @Singleton
-        fun provideRandom(): Random = Random.Default
     }
 }

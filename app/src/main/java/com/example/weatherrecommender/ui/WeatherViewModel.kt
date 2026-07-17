@@ -11,7 +11,6 @@ import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
 import com.example.weatherrecommender.domain.usecase.GetRankedActivitiesUseCase
 import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
-import com.example.weatherrecommender.domain.usecase.WorldCapitals
 import com.example.weatherrecommender.domain.util.ConnectivityObserver
 import com.example.weatherrecommender.domain.util.ConnectivityStatus
 import com.example.weatherrecommender.ui.map.MapCameraPosition
@@ -34,7 +33,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -101,18 +99,14 @@ class WeatherViewModel @Inject constructor(
     private val getRankedActivities: GetRankedActivitiesUseCase,
     private val getTopPicks: GetTopPicksUseCase,
     private val connectivityObserver: ConnectivityObserver,
-    private val worldCapitals: WorldCapitals,
-    private val deviceLocationProvider: DeviceLocationProvider,
-    private val random: Random
+    private val deviceLocationProvider: DeviceLocationProvider
 ) : ViewModel() {
 
-    private val initialHomeCamera = worldCapitals.random(random).toMapCamera(MapCameraPosition.HOME_DEFAULT_ZOOM)
-
-    private val _uiState = MutableStateFlow(WeatherUiState(mapCamera = initialHomeCamera))
+    private val _uiState = MutableStateFlow(WeatherUiState())
     val uiState: StateFlow<WeatherUiState> = _uiState.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = WeatherUiState(mapCamera = initialHomeCamera)
+        initialValue = WeatherUiState()
     )
 
     private val searchQueryFlow = MutableStateFlow("")
@@ -337,12 +331,12 @@ class WeatherViewModel @Inject constructor(
     }
 
     /**
-     * Returns from the detail view to the home screen and centers on a new random capital.
+     * Returns from the detail view to the home screen and re-centers on the device location
+     * when available (static London default otherwise).
      * Keeps [deviceLocation] so the current-location chip stays available.
      */
     fun onBack() {
         forecastJob?.cancel()
-        val capital = worldCapitals.random(random)
         _uiState.update {
             it.copy(
                 selectedLocation = null,
@@ -354,7 +348,8 @@ class WeatherViewModel @Inject constructor(
                 isLoadingForecast = false,
                 error = null,
                 syncError = null,
-                mapCamera = capital.toMapCamera(MapCameraPosition.HOME_DEFAULT_ZOOM),
+                mapCamera = it.deviceLocation?.toMapCamera(MapCameraPosition.HOME_DEFAULT_ZOOM)
+                    ?: MapCameraPosition.DEFAULT,
                 mapPin = null,
                 isResolvingMapTap = false
             )
@@ -364,7 +359,7 @@ class WeatherViewModel @Inject constructor(
     /**
      * Called from the UI after the runtime location permission dialog.
      * When granted, resolves the device city; on first success auto-opens its weather.
-     * When denied, home stays on the random capital and the chip remains hidden.
+     * When denied, home stays on the static default framing and the chip remains hidden.
      */
     fun onLocationPermissionResult(granted: Boolean) {
         if (!granted) return
@@ -385,14 +380,24 @@ class WeatherViewModel @Inject constructor(
 
             repository.reverseGeocode(coords.latitude, coords.longitude).fold(
                 onSuccess = { location ->
-                    _uiState.update { it.copy(deviceLocation = location) }
+                    _uiState.update { state ->
+                        state.copy(
+                            deviceLocation = location,
+                            // Center the home map on the device city; detail keeps its own camera.
+                            mapCamera = if (state.selectedLocation == null) {
+                                location.toMapCamera(MapCameraPosition.HOME_DEFAULT_ZOOM)
+                            } else {
+                                state.mapCamera
+                            }
+                        )
+                    }
                     if (autoSelect && !hasAutoSelectedDeviceLocation) {
                         hasAutoSelectedDeviceLocation = true
                         onLocationSelected(location)
                     }
                 },
                 onError = {
-                    // Keep random capital framing; chip stays hidden without a resolved city.
+                    // Keep the static default framing; chip stays hidden without a resolved city.
                 }
             )
         }

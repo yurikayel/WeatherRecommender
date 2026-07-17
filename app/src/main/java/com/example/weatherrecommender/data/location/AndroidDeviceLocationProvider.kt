@@ -19,7 +19,7 @@ import javax.inject.Singleton
  *
  * Choice vs FusedLocationProvider: avoids the Play Services location artifact while
  * still covering GPS + network + passive providers. Last-known can be null on devices
- * that have never obtained a fix — callers must fall back (e.g. random capital).
+ * that have never obtained a fix — callers must fall back (e.g. static London default).
  */
 @Singleton
 class AndroidDeviceLocationProvider @Inject constructor(
