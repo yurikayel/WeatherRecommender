@@ -1,0 +1,40 @@
+build:
+  maxIssues: 0
+  excludeCorrectable: false
+
+config:
+  validation: true
+
+processors:
+  active: true
+
+console-reports:
+  active: true
+
+style:
+  MagicNumber:
+    active: false
+  MaxLineLength:
+    active: false
+  WildcardImport:
+    active: false
+
+complexity:
+  LongMethod:
+    threshold: 150
+  LongParameterList:
+    active: false
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: false
+
+performance:
+  SpreadOperator:
+    active: false
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated:
+      - Composable
+      - Test
