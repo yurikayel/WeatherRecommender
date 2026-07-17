@@ -11,7 +11,7 @@ This is a native Android app that implements the Concierge Weather Recommender a
 Key experience details:
 - **Per-day recommendations**: the detail screen shows a day selector; tapping a day re-ranks its activities. There is no single "week-long" score.
 - **Geography-aware activities**: activities that don't make sense for a location are hidden entirely (e.g. surfing is only offered where there is sea access; skiing only in mountainous terrain or when snow is falling).
-- **Home "top picks"**: the home screen surfaces a randomised, population-weighted set of well-known cities, each with its best activity for today (stretch). Pull-to-refresh on home (assignment **bonus**, not a core brief item) force-refreshes this feed via PullToRefreshBox. Detail has no PTR.
+- **Home "top picks"**: the home screen surfaces a randomised, population-weighted set of well-known cities, each with its best activity for today (stretch). Pull-to-refresh on home (assignment **bonus**, not a core brief item) force-refreshes this feed — only when the sheet is scrolled to the top **and** the collapsing map header is fully expanded (`modifier.pullToRefresh` `enabled`), so PTR does not fight nested-scroll collapse. Detail has no PTR.
 - **Recently viewed History**: after Top Picks, lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
 - **In-screen map**: MapLibre collapsing AppBar (expanded **square / 1:1**) with a rounded surface sheet that scrolls up to cover the map — classic nested-scroll collapse into a compact toolbar (city name / Concierge). Home↔detail Crossfades only the sheet body (no full-screen slide). Selecting a city updates the map camera in place; back fades home back and resets the camera to the device location (or a static London default without GPS).
 - **Current location**: with permission granted, the last-known GPS fix is reverse-geocoded to a city — home shows a discreet `Current location · {City}` chip and the map centers there; tapping the chip opens that city's weather (GPS never auto-navigates to detail). Denied → chip hidden, static default framing.
@@ -48,7 +48,7 @@ Key experience details:
 Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations.auto-download=true`); the Foojay resolver plugin is configured in `settings.gradle.kts`.
 
 ## e. How to run tests & testing strategy 🧪
-- **Unit tests**: ./gradlew testDebugUnitTest (requires JDK 21+) — ~98 tests across domain, data, and ViewModel (plus Paparazzi below)
+- **Unit tests**: `./gradlew testDebugUnitTest` (requires JDK 21+) — ~98 tests across domain, data, and ViewModel (plus Paparazzi below)
 - **Paparazzi snapshots**: `./gradlew recordPaparazziDebug -Ppaparazzi` (verify with `verifyPaparazziDebug -Ppaparazzi`; 9 golden PNGs live in `app/src/test/snapshots/`)
 - **Lint**: `./gradlew lintDebug`
 - **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify`
@@ -67,7 +67,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 |-------|--------|----------------|
 | Offline cache | Done | Room SSOT + WorkManager background sync (chunked refreshes) |
 | Recently viewed History | Done | Home section after Top Picks; Room `lastViewedAt`; last 10; Nominatim/GeoNames dedupe |
-| Pull-to-refresh | Done (bonus) | Home-only PullToRefreshBox (force-refresh top picks); not on detail |
+| Pull-to-refresh | Done (bonus) | Home-only `modifier.pullToRefresh` (force-refresh top picks); `enabled` only when sheet at top **and** map header fully expanded — not on detail |
 | Dark mode + theme toggle | Done | Navy dark palette; AppBar theme toggle; DataStore preference (system until overridden, then persisted) |
 | Advanced UI polish / animation | Done | Collapsing square (1:1) map AppBar + sheet + home↔detail Crossfade, day selector, score ring, top-pick press scale, shimmer/crossfade; pastel day chips; normalized top-pick cards |
 | Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground) |
