@@ -6,12 +6,9 @@
     <string name="error_api_rate_limit">You are searching too fast. Please slow down.</string>
     <string name="error_api_not_found">City not found. Try a different search.</string>
     <string name="error_unknown">An unknown error occurred. Showing offline data if available.</string>
-    
-    <string name="search_hint">Search a city...</string>
+
+    <string name="search_hint">Search a city…</string>
     <string name="app_title">Concierge Weather</string>
-    <string name="weather_offline_indicator">Offline Mode</string>
-    <string name="weather_forecast_title">7-Day Forecast</string>
-    <string name="recommended_activities_title">Recommended Activities</string>
     <string name="sync_error_prefix">Offline Mode: %1$s</string>
     <string name="error_prefix">Error: %1$s</string>
     <string name="location_result_format">📍 %1$s</string>
@@ -19,15 +16,39 @@
     <string name="clear_search">Clear search</string>
     <string name="search">Search</string>
 
+    <!-- Home screen -->
+    <string name="home_greeting_title">Where to next?</string>
+    <string name="home_greeting_subtitle">Find the best things to do, rain or shine.</string>
+    <string name="home_top_picks_title">Top picks for you</string>
+    <string name="home_top_picks_empty">Connect to the internet to see today\'s suggestions.</string>
+
+    <!-- Detail screen -->
+    <string name="detail_back">Back</string>
+    <string name="detail_pick_a_day">Pick a day</string>
+    <string name="detail_activities_for_day">Best things to do on %1$s</string>
+    <string name="chip_coastal">Coastal</string>
+    <string name="chip_inland">Inland</string>
+    <string name="chip_elevation">%1$d m elevation</string>
+    <string name="temp_degrees">%1$d°</string>
+
+    <!-- Weather accessibility -->
+    <string name="weather_clear">Clear sky</string>
+    <string name="weather_partly_cloudy">Partly cloudy</string>
+    <string name="weather_cloudy">Cloudy</string>
+    <string name="weather_fog">Fog</string>
+    <string name="weather_rain">Rain</string>
+    <string name="weather_snow">Snow</string>
+    <string name="weather_thunderstorm">Thunderstorm</string>
+
     <!-- Activities -->
     <string name="activity_skiing">Skiing</string>
     <string name="activity_surfing">Surfing</string>
     <string name="activity_outdoor_sightseeing">Outdoor Sightseeing</string>
     <string name="activity_indoor_sightseeing">Indoor Sightseeing</string>
 
-    <!-- Activity Reasons -->
-    <string name="reason_surf_ideal">Calm winds (%1$dkm/h) and warm temps make for clean waves.</string>
-    <string name="reason_ski_ideal">Freezing temperatures (%1$d°C) and %2$dcm of snow expected.</string>
-    <string name="reason_outdoor_mild">Mild temps (%1$d°C) and low precipitation make perfect trail conditions.</string>
-    <string name="reason_indoor_bad_weather">Bad weather outside? Perfect time to catch a movie indoors.</string>
+    <!-- Activity Reasons (per day) -->
+    <string name="reason_surf_ideal">Around %1$d cm waves with %2$d km/h winds.</string>
+    <string name="reason_ski_ideal">%1$d°C with %2$d cm of fresh snow.</string>
+    <string name="reason_outdoor_mild">Comfortable %1$d°C and mostly dry — great for exploring.</string>
+    <string name="reason_indoor_bad_weather">A cosy pick when the weather turns.</string>
 </resources>
