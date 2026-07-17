@@ -6,7 +6,7 @@ This is a native Android app that implements the Concierge Weather Recommender a
 | Scope | What |
 |-------|------|
 | **Core (brief)** | City search, 7-day forecast, per-day activity ranking, offline-first Room cache, Clean Architecture + tests |
-| **Stretch** | Home top picks; History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 7-day PNG (+ save to Downloads); square MapLibre map (Nominatim reverse, no Google key); pastel day chips; Paparazzi + instrumented CI |
+| **Stretch** | Home top picks; History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 9:16 weather flyer PNG (+ save to Downloads); square MapLibre map fixed above a Crossfade body (Nominatim reverse, no Google key); GPS current-location chip; pastel day chips; Paparazzi + instrumented CI |
 
 Key experience details:
 - **Per-day recommendations**: the detail screen shows a day selector; tapping a day re-ranks its activities. There is no single "week-long" score.
@@ -14,7 +14,8 @@ Key experience details:
 - **Home "top picks"**: the home screen surfaces a randomised, population-weighted set of well-known cities, each with its best activity for today (stretch). Pull-to-refresh on home force-refreshes this feed.
 - **Recently viewed History**: after Top Picks, lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
 - **In-screen map**: square MapLibre section **fixed above** a Crossfade of home/detail body content (no full-screen slide). Selecting a city updates the map camera in place and fades the body to detail; back fades home back and resets the camera to the device location (or a static London default without GPS).
-- **Share**: detail toolbar exports a branded 7-day weather card PNG via the system share sheet and best-effort saves a copy to Downloads.
+- **Current location**: with permission granted, the last-known GPS fix is reverse-geocoded to a city — home shows a discreet `Current location · {City}` chip, the map centers there, and the first launch auto-opens that city's weather. Denied → chip hidden, static default framing.
+- **Share**: detail toolbar exports a branded 9:16 portrait "weather flyer" PNG (header + selected-day hero + 7-day strip + ranked activities with score bars) via the system share sheet and best-effort saves a copy to Downloads.
 
 ## b. Platform and Tooling Choices
 - **Language**: Kotlin (AGP built-in Kotlin; `org.jetbrains.kotlin.android` plugin removed)
@@ -47,17 +48,17 @@ Key experience details:
 Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations.auto-download=true`); the Foojay resolver plugin is configured in `settings.gradle.kts`.
 
 ## e. How to run tests & testing strategy 🧪
-- **Unit tests**: `./gradlew testDebugUnitTest` (requires JDK 21+) — ~50+ tests across domain, data, and ViewModel (plus Paparazzi below)
-- **Paparazzi snapshots**: `./gradlew recordPaparazziDebug -Ppaparazzi` (verify with `verifyPaparazziDebug -Ppaparazzi`; 6 golden PNGs live in `app/src/test/snapshots/`)
+- **Unit tests**: `./gradlew testDebugUnitTest` (requires JDK 21+) — ~89 tests across domain, data, and ViewModel (plus Paparazzi below)
+- **Paparazzi snapshots**: `./gradlew recordPaparazziDebug -Ppaparazzi` (verify with `verifyPaparazziDebug -Ppaparazzi`; 9 golden PNGs live in `app/src/test/snapshots/`)
 - **Lint**: `./gradlew lintDebug`
 - **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify`
 - **Static analysis**: `./gradlew detekt`
-- **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (~17 Compose UI tests for key flows, plus Room migration tests; also run on CI emulator)
+- **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (19 Compose UI tests for key flows, plus 3 Room migration tests; also run on CI emulator)
 
 **Testing Strategy**:
 - **Domain Layer**: Activity scorers and `GetRankedActivitiesUseCase` are pure Kotlin, unit-tested with JUnit.
 - **Data Layer**: `WeatherRepositoryImpl` tested with MockK for APIs and DAO; `LocationSyncer` and rate-limit retry interceptor covered.
-- **UI Layer**: `WeatherViewModel` tested with Turbine for StateFlow emissions; Compose UI has **substantial coverage of key flows** (~17 instrumented tests: home, search, detail, errors, dark theme smoke) — not claimed as exhaustive full-UI coverage.
+- **UI Layer**: `WeatherViewModel` tested with Turbine for StateFlow emissions; Compose UI has **substantial coverage of key flows** (19 instrumented tests: home, search, detail, errors, dark theme smoke; location permission pre-granted via `GrantPermissionRule`) — not claimed as exhaustive full-UI coverage.
 - **Snapshots**: Paparazzi goldens committed and verified in CI with `-Ppaparazzi`.
 
 ### Bonus features (assignment stretch goals)
@@ -70,10 +71,11 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Dark mode + theme toggle | Done | Navy dark palette; discreet home-header toggle; DataStore preference (system until overridden, then persisted) |
 | Advanced UI polish / animation | Done | Fixed map + home↔detail body Crossfade, day selector, score ring, top-pick press scale, shimmer/crossfade; pastel day chips; normalized top-pick cards |
 | Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground) |
-| Snapshot tests | Done | Paparazzi 2.0.0-alpha05, golden PNGs (home/detail + share card), verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
-| Substantial UI test coverage | Done | ~17 instrumented Compose tests for key flows (home, search, top picks, chips, day selection, back, banners, dark theme) |
-| Share weather card | Done | Detail share → branded 7-day PNG (`GraphicsLayer` + FileProvider); also best-effort save to Downloads |
+| Snapshot tests | Done | Paparazzi 2.0.0-alpha05, 9 golden PNGs (home/detail incl. location chip + history + share flyer), verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
+| Substantial UI test coverage | Done | 19 instrumented Compose tests for key flows (home, search, top picks, chips, day selection, back, banners, dark theme) |
+| Share weather flyer | Done | Detail share → branded 9:16 portrait PNG (`GraphicsLayer` + FileProvider); also best-effort save to Downloads |
 | In-screen map | Done | Square MapLibre + OpenFreeMap (no Google key); home centers on device location (static London fallback, wider zoom); tap → Nominatim reverse; camera/pin in ViewModel |
+| Current-location chip | Done | Runtime permission → LocationManager last-known fix → Nominatim reverse; home header chip; first-launch auto-select |
 
 ## f. API usage notes ☀️
 The application interfaces with three Open-Meteo APIs (No API key required):
