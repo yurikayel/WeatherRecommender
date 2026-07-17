@@ -55,3 +55,15 @@ val PremiumErrorDark = Color(0xFFFFB4AB)
 val PremiumOnErrorDark = Color(0xFF690005)
 val PremiumErrorContainerDark = Color(0xFF93000A)
 val PremiumOnErrorContainerDark = Color(0xFFFFDAD6)
+
+// Weather day-chip pastels (light) — soft tints for unselected day selectors
+val PastelSunnyLight = Color(0xFFFFF4CC)
+val PastelRainLight = Color(0xFFD4DEED)
+val PastelSnowLight = Color(0xFFE0EEF4)
+val PastelThunderLight = Color(0xFFE4DDF0)
+
+// Weather day-chip pastels (dark) — muted surface tints that keep onSurface readable
+val PastelSunnyDark = Color(0xFF3A3420)
+val PastelRainDark = Color(0xFF1E2A3C)
+val PastelSnowDark = Color(0xFF1A2C34)
+val PastelThunderDark = Color(0xFF2A2438)

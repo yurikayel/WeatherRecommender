@@ -13,8 +13,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,11 +40,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -56,14 +55,26 @@ import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
+import com.example.weatherrecommender.theme.PastelRainDark
+import com.example.weatherrecommender.theme.PastelRainLight
+import com.example.weatherrecommender.theme.PastelSnowDark
+import com.example.weatherrecommender.theme.PastelSnowLight
+import com.example.weatherrecommender.theme.PastelSunnyDark
+import com.example.weatherrecommender.theme.PastelSunnyLight
+import com.example.weatherrecommender.theme.PastelThunderDark
+import com.example.weatherrecommender.theme.PastelThunderLight
+import com.example.weatherrecommender.ui.util.WeatherUiCategory
 import com.example.weatherrecommender.ui.util.asUiText
 import com.example.weatherrecommender.ui.util.isoDateToDayOfMonth
 import com.example.weatherrecommender.ui.util.isoDateToWeekday
 import com.example.weatherrecommender.ui.util.weatherCodeDescription
 import com.example.weatherrecommender.ui.util.weatherCodeIcon
+import com.example.weatherrecommender.ui.util.weatherUiCategory
 import kotlin.math.roundToInt
 
 private const val DAY_SWITCH_MS = 320
+private val DayChipWidth = 72.dp
+private val DayChipHeight = 120.dp
 
 /**
  * The city detail screen: geography chips, a per-day selector, and the day's ranked activities.
@@ -217,9 +228,13 @@ private fun DaySelectorCard(
     onClick: () -> Unit
 ) {
     // Animate selection so tapping a day feels responsive rather than a hard swap.
+    // Selected keeps strong primary styling for contrast; unselected uses weather pastels.
     val background by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.surfaceVariant,
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            weatherPastelBackground(day.weatherCode)
+        },
         animationSpec = tween(250),
         label = "day_bg"
     )
@@ -237,7 +252,10 @@ private fun DaySelectorCard(
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
         modifier = Modifier
+            .width(DayChipWidth)
+            .height(DayChipHeight)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -253,33 +271,54 @@ private fun DaySelectorCard(
                 )
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .padding(horizontal = 10.dp, vertical = 12.dp)
     ) {
         Text(
             text = isoDateToWeekday(day.date),
             style = MaterialTheme.typography.labelMedium,
-            color = contentColor.copy(alpha = 0.8f)
+            color = contentColor.copy(alpha = 0.8f),
+            maxLines = 1
         )
         Spacer(Modifier.height(2.dp))
         Text(
             text = isoDateToDayOfMonth(day.date),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = contentColor
+            color = contentColor,
+            maxLines = 1
         )
         Spacer(Modifier.height(8.dp))
         Icon(
             weatherCodeIcon(day.weatherCode),
             contentDescription = weatherCodeDescription(day.weatherCode),
-            tint = contentColor
+            tint = contentColor,
+            modifier = Modifier.size(24.dp)
         )
         Spacer(Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.temp_degrees, day.maxTemp.roundToInt()),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            color = contentColor
+            color = contentColor,
+            maxLines = 1
         )
+    }
+}
+
+/**
+ * Soft pastel container for unselected day chips. Cloudy/fog stay on the neutral
+ * surfaceVariant; other conditions get a light weather-tinted pastel.
+ * Uses [MaterialTheme] luminance so Paparazzi darkTheme overrides are respected.
+ */
+@Composable
+private fun weatherPastelBackground(weatherCode: Int): Color {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    return when (weatherUiCategory(weatherCode)) {
+        WeatherUiCategory.CLEAR -> if (isDark) PastelSunnyDark else PastelSunnyLight
+        WeatherUiCategory.RAIN -> if (isDark) PastelRainDark else PastelRainLight
+        WeatherUiCategory.SNOW -> if (isDark) PastelSnowDark else PastelSnowLight
+        WeatherUiCategory.THUNDERSTORM -> if (isDark) PastelThunderDark else PastelThunderLight
+        WeatherUiCategory.CLOUDY -> MaterialTheme.colorScheme.surfaceVariant
     }
 }
 

@@ -60,7 +60,7 @@ internal fun PremiumShimmerLoadingState() {
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             repeat(5) {
-                Box(Modifier.width(70.dp).height(120.dp).clip(RoundedCornerShape(18.dp)).shimmerEffect())
+                Box(Modifier.width(72.dp).height(120.dp).clip(RoundedCornerShape(18.dp)).shimmerEffect())
             }
         }
         Spacer(Modifier.height(28.dp))

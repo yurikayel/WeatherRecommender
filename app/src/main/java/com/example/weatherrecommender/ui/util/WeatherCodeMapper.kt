@@ -13,6 +13,19 @@ import androidx.compose.ui.res.stringResource
 import com.example.weatherrecommender.R
 
 /**
+ * Maps Open-Meteo WMO weather interpretation codes to a UI category.
+ * @see <a href="https://open-meteo.com/en/docs">Open-Meteo WMO codes</a>
+ */
+fun weatherUiCategory(weatherCode: Int): WeatherUiCategory = when (weatherCode) {
+    0 -> WeatherUiCategory.CLEAR
+    1, 2, 3, 45, 48 -> WeatherUiCategory.CLOUDY
+    51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> WeatherUiCategory.RAIN
+    71, 73, 75, 77, 85, 86 -> WeatherUiCategory.SNOW
+    95, 96, 99 -> WeatherUiCategory.THUNDERSTORM
+    else -> WeatherUiCategory.CLOUDY
+}
+
+/**
  * Maps Open-Meteo WMO weather interpretation codes to Material icons.
  * @see <a href="https://open-meteo.com/en/docs">Open-Meteo WMO codes</a>
  */

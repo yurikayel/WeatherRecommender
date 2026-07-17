@@ -68,7 +68,10 @@ class WeatherScreenSnapshotTest {
             location = lisbon,
             dailyForecasts = listOf(
                 DailyForecast("2026-07-16", 0, 27.0, 19.0, 0.0, 0.0, 10.0, 1.0),
-                DailyForecast("2026-07-17", 61, 22.0, 16.0, 8.0, 0.0, 14.0, 0.8)
+                DailyForecast("2026-07-17", 61, 22.0, 16.0, 8.0, 0.0, 14.0, 0.8),
+                DailyForecast("2026-07-18", 3, 24.0, 17.0, 0.0, 0.0, 12.0, 0.9),
+                DailyForecast("2026-07-19", 71, 2.0, -3.0, 0.0, 5.0, 8.0, 0.5),
+                DailyForecast("2026-07-20", 95, 18.0, 14.0, 12.0, 0.0, 20.0, 1.2)
             )
         ),
         selectedDayIndex = 0,
