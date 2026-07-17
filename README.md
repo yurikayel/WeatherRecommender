@@ -6,14 +6,14 @@ This is a native Android app that implements the Concierge Weather Recommender a
 | Scope | What |
 |-------|------|
 | **Core (brief)** | City search, 7-day forecast, per-day activity ranking, offline-first Room cache, Clean Architecture + tests |
-| **Stretch** | Home top picks; History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 9:16 weather flyer PNG (+ save to Downloads); square MapLibre map fixed above a Crossfade body (Nominatim reverse, no Google key); GPS current-location chip; pastel day chips; Paparazzi + instrumented CI |
+| **Stretch** | Home top picks; History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 9:16 weather flyer PNG (+ save to Downloads); collapsing 3:2 MapLibre map AppBar + Crossfade sheet body (Nominatim reverse, no Google key); GPS current-location chip; pastel day chips; Wikipedia postage-stamp city photo + extract on detail; Paparazzi + instrumented CI |
 
 Key experience details:
 - **Per-day recommendations**: the detail screen shows a day selector; tapping a day re-ranks its activities. There is no single "week-long" score.
 - **Geography-aware activities**: activities that don't make sense for a location are hidden entirely (e.g. surfing is only offered where there is sea access; skiing only in mountainous terrain or when snow is falling).
 - **Home "top picks"**: the home screen surfaces a randomised, population-weighted set of well-known cities, each with its best activity for today (stretch). Pull-to-refresh on home force-refreshes this feed.
 - **Recently viewed History**: after Top Picks, lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
-- **In-screen map**: square MapLibre section **fixed above** a Crossfade of home/detail body content (no full-screen slide). Selecting a city updates the map camera in place and fades the body to detail; back fades home back and resets the camera to the device location (or a static London default without GPS).
+- **In-screen map**: MapLibre collapsing AppBar (expanded **3:2** width:height) with a rounded surface sheet that scrolls up to cover the map — classic nested-scroll collapse into a compact toolbar (city name / Concierge). Home↔detail Crossfades only the sheet body (no full-screen slide). Selecting a city updates the map camera in place; back fades home back and resets the camera to the device location (or a static London default without GPS).
 - **Current location**: with permission granted, the last-known GPS fix is reverse-geocoded to a city — home shows a discreet `Current location · {City}` chip, the map centers there, and the first launch auto-opens that city's weather. Denied → chip hidden, static default framing.
 - **Share**: detail toolbar exports a branded 9:16 portrait "weather flyer" PNG with denser display-scale typography (header + selected-day hero + 7-day strip + ranked activities with score bars) via the system share sheet and best-effort saves a copy to Downloads.
 
@@ -53,7 +53,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 - **Lint**: `./gradlew lintDebug`
 - **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify`
 - **Static analysis**: `./gradlew detekt`
-- **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (19 Compose UI tests for key flows, plus 3 Room migration tests; also run on CI emulator)
+- **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (19 Compose UI tests for key flows, plus 4 Room migration tests; also run on CI emulator)
 
 **Testing Strategy**:
 - **Domain Layer**: Activity scorers and `GetRankedActivitiesUseCase` are pure Kotlin, unit-tested with JUnit.
@@ -68,14 +68,15 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Offline cache | Done | Room SSOT + WorkManager background sync (chunked refreshes) |
 | Recently viewed History | Done | Home section after Top Picks; Room `lastViewedAt`; last 10; Nominatim/GeoNames dedupe |
 | Pull-to-refresh | Done | `PullToRefreshBox` on city detail **and** home (force-refresh top picks) |
-| Dark mode + theme toggle | Done | Navy dark palette; discreet home-header toggle; DataStore preference (system until overridden, then persisted) |
-| Advanced UI polish / animation | Done | Fixed map + home↔detail body Crossfade, day selector, score ring, top-pick press scale, shimmer/crossfade; pastel day chips; normalized top-pick cards |
+| Dark mode + theme toggle | Done | Navy dark palette; AppBar theme toggle; DataStore preference (system until overridden, then persisted) |
+| Advanced UI polish / animation | Done | Collapsing 3:2 map AppBar + sheet + home↔detail Crossfade, day selector, score ring, top-pick press scale, shimmer/crossfade; pastel day chips; normalized top-pick cards |
 | Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground) |
 | Snapshot tests | Done | Paparazzi 2.0.0-alpha05, 9 golden PNGs (home/detail incl. location chip + history + share flyer), verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
 | Substantial UI test coverage | Done | 19 instrumented Compose tests for key flows (home, search, top picks, chips, day selection, back, banners, dark theme) |
 | Share weather flyer | Done | Detail share → branded 9:16 portrait PNG (`GraphicsLayer` + FileProvider); also best-effort save to Downloads |
-| In-screen map | Done | Square MapLibre + OpenFreeMap (no Google key); home centers on device location (static London fallback, wider zoom); tap → Nominatim reverse; camera/pin in ViewModel |
+| In-screen map | Done | Collapsing 3:2 MapLibre AppBar + OpenFreeMap (no Google key); sheet covers map on scroll; home centers on device location (static London fallback, wider zoom); tap → Nominatim reverse; camera/pin in ViewModel |
 | Current-location chip | Done | Runtime permission → LocationManager last-known fix → Nominatim reverse; home header chip; first-launch auto-select |
+| Wikipedia city stamp | Done | Best-effort Wikipedia summary thumbnail + extract (not Open-Meteo); Room-cached; postage-stamp frame under chips; description after activity list; CC BY-SA attribution |
 
 ## f. API usage notes ☀️
 The application interfaces with three Open-Meteo APIs (No API key required):
@@ -83,13 +84,18 @@ The application interfaces with three Open-Meteo APIs (No API key required):
 - **Forecast API**: `https://api.open-meteo.com/v1/forecast` for the 7-day daily forecast (temperature, precipitation, snowfall, wind, weather code).
 - **Marine API**: `https://marine-api.open-meteo.com/v1/marine` for daily `wave_height_max`. This serves a dual purpose: it feeds surf scoring with real wave data, and — because it returns null wave heights for inland coordinates — it acts as a reliable **sea-access detector**. The marine call is best-effort: a failure never fails the primary forecast.
 
+**City images & descriptions (not from Open-Meteo)**
+- Open-Meteo Geocoding / Forecast / Marine and Nominatim **do not** return city photos or long-form place blurbs — only names, coordinates, and geography metadata.
+- Detail enrichment uses the free [Wikipedia REST summary API](https://en.wikipedia.org/api/rest_v1/page/summary/{title}) (`thumbnail.source` + `extract`) with a descriptive `User-Agent`. Lookup is best-effort by city name (then `City, Country`) and **never blocks or fails** the forecast path.
+- Media is cached on the Room `location_entity` (`imageUrl`, `description`, `imageAttribution`) so reopen can show the stamp offline. UI: a compact postage-stamp photo under the geography chips; the extract appears **after** the ranked activities list. Attribution: Wikipedia · CC BY-SA.
+
 **Map and reverse geocoding (no Google Maps key)**
 - **Map rendering**: [MapLibre Compose](https://maplibre.org/maplibre-compose/) with the free [OpenFreeMap](https://openfreemap.org/) Liberty style. No API key and no Google Play Services Maps SDK — any networked emulator/device works. We ship the **OpenGL** MapLibre Android backend for broader AVD support (Vulkan can fail on some emulators).
 - **Forward geocode** (search box): Open-Meteo Geocoding (name → lat/lng). Searching also **centers the map** on the first result.
 - **Reverse geocode** (map tap / long-press): Open-Meteo has no reverse endpoint, so we call [Nominatim](https://nominatim.openstreetmap.org/) (`/reverse`) with a descriptive `User-Agent`, then open the same detail flow as `onLocationSelected`.
-- **Attribution**: OpenStreetMap contributors / OpenFreeMap / Nominatim (shown under the map).
+- **Attribution**: OpenStreetMap contributors / OpenFreeMap / Nominatim — MapLibre logo ornament on the map, plus a discreet footer on the home sheet (and this README). No on-map overlay attribution line.
 
-The map is a **square section fixed at the top of the scaffold**; only the region below Crossfades between home and detail scroll bodies. `mapCamera` / `mapPin` live in `WeatherUiState` and drive the same map instance on select/back. Home centers on the device location when available (static London default otherwise); back returns to that same overview.
+The map is the **background of a collapsing top AppBar** (expanded height = width × 2/3 for a 3:2 aspect). Nested scroll collapses it into a compact toolbar while a rounded elevated sheet (with Crossfade home/detail bodies) slides up to cover it. `mapCamera` / `mapPin` live in `WeatherUiState` and drive the same map instance on select/back. Home centers on the device location when available (static London default otherwise); back returns to that same overview.
 
 ## g. Activity recommendation logic
 `GetRankedActivitiesUseCase(forecast, dayIndex)` evaluates each injected `ActivityScorer` for a **single day**. A scorer first decides whether it is *applicable* to the location's geography; only applicable activities are scored (0-100) and ranked. This prevents nonsensical suggestions such as surfing in a landlocked city.
