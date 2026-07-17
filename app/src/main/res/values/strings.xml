@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">WeatherRecommender</string>
     <string name="error_network_offline">No internet connection. Showing offline data.</string>
@@ -17,10 +18,15 @@
     <string name="search">Search</string>
 
     <!-- Home screen -->
-    <string name="home_greeting_title">Where to next?</string>
-    <string name="home_greeting_subtitle">Find the best things to do, rain or shine.</string>
+    <string name="home_brand_eyebrow">Concierge</string>
+    <string name="home_greeting_title">Plan your day</string>
+    <string name="home_greeting_subtitle">Activities ranked by the forecast.</string>
     <string name="home_top_picks_title">Top picks for you</string>
     <string name="home_top_picks_empty">Connect to the internet to see today\'s suggestions.</string>
+    <string name="home_history_title">Recently viewed</string>
+    <string name="home_history_item_cd">Open %1$s again</string>
+    <string name="theme_switch_to_dark">Switch to dark mode</string>
+    <string name="theme_switch_to_light">Switch to light mode</string>
 
     <!-- Detail screen -->
     <string name="detail_back">Back</string>
@@ -30,6 +36,20 @@
     <string name="chip_inland">Inland</string>
     <string name="chip_elevation">%1$d m elevation</string>
     <string name="temp_degrees">%1$d°</string>
+    <string name="share_weather">Share weather</string>
+    <string name="share_weather_failed">Couldn\'t share the weather card. Please try again.</string>
+    <string name="share_weather_chooser">Share weather</string>
+    <string name="share_weather_subject">Weather in %1$s</string>
+    <string name="share_weather_text">Here\'s the 7-day forecast for %1$s from Concierge Weather.</string>
+    <string name="share_card_forecast_label">Next 7 days</string>
+    <string name="share_card_tip_label">Top activity tip</string>
+    <string name="share_card_footer">Concierge Weather · Open-Meteo</string>
+
+    <!-- Persistent header map -->
+    <string name="map_content_description">Map for choosing a city. Tap or long-press to select a location.</string>
+    <string name="map_attribution">© OpenStreetMap · © OpenFreeMap · Nominatim</string>
+    <string name="map_placeholder_label">Map</string>
+    <string name="map_resolving_location">Looking up that place…</string>
 
     <!-- Weather accessibility -->
     <string name="weather_clear">Clear sky</string>

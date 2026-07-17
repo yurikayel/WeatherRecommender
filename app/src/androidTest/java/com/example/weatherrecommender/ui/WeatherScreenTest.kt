@@ -77,8 +77,9 @@ class WeatherScreenTest {
         setContent(WeatherUiState())
 
         composeTestRule.onNodeWithText("Search a city…").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Where to next?").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Plan your day").assertIsDisplayed()
         composeTestRule.onNodeWithText("Top picks for you").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Switch to dark mode").assertIsDisplayed()
     }
 
     @Test
@@ -197,6 +198,33 @@ class WeatherScreenTest {
         composeTestRule.onNodeWithText("Pick a day").assertIsDisplayed()
         composeTestRule.onNodeWithText("Outdoor Sightseeing").assertIsDisplayed()
         composeTestRule.onNodeWithText("95").assertIsDisplayed()
+    }
+
+    @Test
+    fun detail_showsShareActionWhenForecastLoaded() {
+        setContent(
+            WeatherUiState(
+                selectedLocation = london,
+                forecast = twoDayForecast,
+                selectedDayIndex = 0,
+                rankedActivities = listOf(outdoorActivity)
+            )
+        )
+
+        composeTestRule.onNodeWithContentDescription("Share weather").assertIsDisplayed()
+    }
+
+    @Test
+    fun detail_hidesShareActionWhileForecastLoading() {
+        setContent(
+            WeatherUiState(
+                selectedLocation = london,
+                forecast = null,
+                isLoadingForecast = true
+            )
+        )
+
+        composeTestRule.onNodeWithContentDescription("Share weather").assertDoesNotExist()
     }
 
     @Test

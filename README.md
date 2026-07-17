@@ -66,14 +66,23 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Dark mode | Done | Navy-tinted dark palette, primary containers, system bar icon contrast; light + dark Paparazzi goldens |
 | Advanced UI polish / animation | Done | Home↔detail slide transition, animated day selector, score ring sweep, top-pick press scale, shimmer + crossfade loading |
 | Splash screen | Done | Android 12+ \core-splashscreen\ + branded sun/cloud mark (original vector; also used as launcher foreground) |
-| Snapshot tests | Done | Paparazzi 2.0.0-alpha05, 6 golden PNGs, verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
+| Snapshot tests | Done | Paparazzi 2.0.0-alpha05, golden PNGs (home/detail + share card), verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
 | Substantial UI test coverage | Done | ~17 instrumented Compose tests for key flows (home greeting, search/clear, top picks, geography chips, day selection, back nav, sync/error banners, dark theme) |
+| Share weather card | Done | Detail toolbar share → light branded 7-day PNG card via Compose `GraphicsLayer` + FileProvider `ACTION_SEND` |
+| Persistent header map | Done | MapLibre Compose + OpenFreeMap (no Google API key); tap/long-press → Nominatim reverse geocode; camera/pin in `WeatherViewModel` so the map survives home↔detail |
 
 ## f. API usage notes ☀️
 The application interfaces with three Open-Meteo APIs (No API key required):
 - **Geocoding API**: `https://geocoding-api.open-meteo.com/v1/search` for resolving a city name to coordinates. We also read `elevation`, `population`, and `feature_code` from each result to drive geography-aware activities and home suggestions.
 - **Forecast API**: `https://api.open-meteo.com/v1/forecast` for the 7-day daily forecast (temperature, precipitation, snowfall, wind, weather code).
 - **Marine API**: `https://marine-api.open-meteo.com/v1/marine` for daily `wave_height_max`. This serves a dual purpose: it feeds surf scoring with real wave data, and — because it returns null wave heights for inland coordinates — it acts as a reliable **sea-access detector**. The marine call is best-effort: a failure never fails the primary forecast.
+
+**Map and reverse geocoding (no Google Maps key)**
+- **Map rendering**: [MapLibre Compose](https://maplibre.org/maplibre-compose/) with the free [OpenFreeMap](https://openfreemap.org/) Liberty style. No API key and no Google Play Services Maps SDK — any networked emulator/device works. We ship the **OpenGL** MapLibre Android backend for broader AVD support (Vulkan can fail on some emulators).
+- **Forward geocode** (search box): Open-Meteo Geocoding (name → lat/lng). Searching also **centers the header map** on the first result.
+- **Reverse geocode** (map tap / long-press): Open-Meteo has no reverse endpoint, so we call [Nominatim](https://nominatim.openstreetmap.org/) (`/reverse`) with a descriptive `User-Agent`, then open the same detail flow as `onLocationSelected`. Attribution: OpenStreetMap / OpenFreeMap / Nominatim.
+
+The map lives in the `WeatherScreen` scaffold **above** the home↔detail `AnimatedContent`, so it is not destroyed on navigation. `mapCamera` / `mapPin` are held in `WeatherUiState`.
 
 ## g. Activity recommendation logic
 `GetRankedActivitiesUseCase(forecast, dayIndex)` evaluates each injected `ActivityScorer` for a **single day**. A scorer first decides whether it is *applicable* to the location's geography; only applicable activities are scored (0-100) and ranked. This prevents nonsensical suggestions such as surfing in a landlocked city.
@@ -118,7 +127,8 @@ This solution intentionally went beyond a strict 3–4 hour brief where it impro
 - **Rate limiting (HTTP)**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present); other failures map to localized error strings.
 
 **Deliberately omitted**
-- Device GPS / current-location weather (brief is city search).
+- Device GPS / current-location weather (brief is city search; map tap uses Nominatim reverse geocode instead).
+- Google Maps SDK / paid tile API keys (MapLibre + OpenFreeMap + Nominatim cover the stretch map UX).
 - User accounts, favourites persistence, or multi-city compare.
 - Firebase Crashlytics wiring, Play Store assets, and localization beyond English strings.
 - Exhaustive Compose UI coverage of every edge state (key flows are covered; not every animation/transition).

@@ -1,4 +1,4 @@
-package com.example.weatherrecommender.ui
+﻿package com.example.weatherrecommender.ui
 
 import androidx.compose.material3.Typography
 import app.cash.paparazzi.DeviceConfig
@@ -90,6 +90,20 @@ class WeatherScreenSnapshotTest {
     @Test
     fun homeWithTopPicks() {
         content(WeatherUiState(topPicks = topPicks))
+    }
+
+    @Test
+    fun homeWithTopPicksAndHistory() {
+        content(
+            WeatherUiState(
+                topPicks = topPicks,
+                recentHistory = listOf(
+                    lisbon,
+                    Location(1, "London", 51.5, -0.1, "UK", "England"),
+                    Location(-2, "Sydney", -33.8, 151.2, "Australia", null, hasSeaAccess = true)
+                )
+            )
+        )
     }
 
     @Test
