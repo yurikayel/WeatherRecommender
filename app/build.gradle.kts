@@ -157,6 +157,9 @@ dependencies {
   }
   implementation(libs.maplibre.android.opengl)
 
+  // Remote images (Wikipedia city thumbnails on detail)
+  implementation(libs.coil.compose)
+
   // Extra testing
   testImplementation(libs.turbine)
   testImplementation(libs.mockk)

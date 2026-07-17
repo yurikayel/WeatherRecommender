@@ -72,6 +72,7 @@ class WeatherViewModelTest {
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Available)
         every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
         coEvery { repository.markLocationViewed(any()) } returns Unit
+        coEvery { repository.enrichPlaceMedia(any()) } returns Unit
         coEvery { getTopPicksUseCase(any(), any()) } returns emptyList()
         every { deviceLocationProvider.hasLocationPermission() } returns false
         coEvery { deviceLocationProvider.getLastKnownLocation() } returns null
@@ -209,6 +210,7 @@ class WeatherViewModelTest {
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Unavailable)
         every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
         coEvery { repository.markLocationViewed(any()) } returns Unit
+        coEvery { repository.enrichPlaceMedia(any()) } returns Unit
         viewModel = createViewModel()
         backgroundScope.launch { viewModel.uiState.collect {} }
         advanceUntilIdle()

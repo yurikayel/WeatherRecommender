@@ -21,7 +21,13 @@ data class LocationEntity(
     val featureCode: String? = null,
     val hasSeaAccess: Boolean = false,
     /** Epoch millis when the user last opened this location; 0 means never viewed. */
-    val lastViewedAt: Long = 0L
+    val lastViewedAt: Long = 0L,
+    /** Wikimedia thumbnail URL from Wikipedia enrichment; null when unknown / unavailable. */
+    val imageUrl: String? = null,
+    /** Wikipedia page extract for the city; null when unknown / unavailable. */
+    val description: String? = null,
+    /** Short credit (usually Wikipedia page title) for CC BY-SA attribution. */
+    val imageAttribution: String? = null
 )
 
 /**

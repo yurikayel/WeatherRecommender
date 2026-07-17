@@ -6,6 +6,7 @@ import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
 import com.example.weatherrecommender.data.remote.NominatimApi
 import com.example.weatherrecommender.data.remote.RateLimitRetryInterceptor
+import com.example.weatherrecommender.data.remote.WikipediaApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -26,6 +27,7 @@ import javax.inject.Singleton
  */
 @Module
 @InstallIn(SingletonComponent::class)
+@Suppress("TooManyFunctions")
 object NetworkModule {
 
     @Provides
@@ -120,5 +122,22 @@ object NetworkModule {
     @Singleton
     fun provideNominatimApi(@Named("NominatimRetrofit") retrofit: Retrofit): NominatimApi {
         return retrofit.create(NominatimApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @Named("WikipediaRetrofit")
+    fun provideWikipediaRetrofit(okHttpClient: OkHttpClient, json: Json): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(WikipediaApi.BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideWikipediaApi(@Named("WikipediaRetrofit") retrofit: Retrofit): WikipediaApi {
+        return retrofit.create(WikipediaApi::class.java)
     }
 }

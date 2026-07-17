@@ -6,6 +6,7 @@ import com.example.weatherrecommender.domain.location.DeviceLocationProvider
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
+import com.example.weatherrecommender.domain.model.Result
 import com.example.weatherrecommender.domain.model.TopPick
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
@@ -250,6 +251,8 @@ class WeatherViewModel @Inject constructor(
                         val maxIndex = maxOf(0, forecast.dailyForecasts.lastIndex)
                         val dayIndex = state.selectedDayIndex.coerceIn(0, maxIndex)
                         state.copy(
+                            // Prefer SSOT location so Wikipedia media / sea-access updates flow through.
+                            selectedLocation = forecast.location,
                             forecast = forecast,
                             rankedActivities = getRankedActivities(forecast, dayIndex),
                             selectedDayIndex = dayIndex,
@@ -261,9 +264,12 @@ class WeatherViewModel @Inject constructor(
         }
 
         // Mark viewed before refresh so lastViewedAt is preserved across the Room REPLACE upsert.
+        // Wikipedia media enrichment runs after mark (row exists) and never blocks / fails forecast.
         viewModelScope.launch {
             repository.markLocationViewed(location)
-            repository.refreshForecast(location).fold(
+            launch { repository.enrichPlaceMedia(location) }
+            val refreshResult = repository.refreshForecast(location)
+            refreshResult.fold(
                 onSuccess = { /* Handled by the SSOT flow emission. */ },
                 onError = { err ->
                     _uiState.update { state ->
@@ -276,6 +282,10 @@ class WeatherViewModel @Inject constructor(
                     }
                 }
             )
+            // After refresh so media survives REPLACE and caches for offline reopen.
+            if (refreshResult is Result.Success) {
+                repository.enrichPlaceMedia(location)
+            }
         }
     }
 

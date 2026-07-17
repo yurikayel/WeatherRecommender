@@ -12,7 +12,7 @@ import com.example.weatherrecommender.data.local.entity.LocationEntity
  * The Room database for the application.
  * Contains tables for locations and daily forecasts.
  */
-@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 4, exportSchema = true)
+@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 5, exportSchema = true)
 abstract class WeatherDatabase : RoomDatabase() {
     abstract fun weatherDao(): WeatherDao
 
@@ -56,6 +56,18 @@ abstract class WeatherDatabase : RoomDatabase() {
                 db.execSQL(
                     "ALTER TABLE location_entity ADD COLUMN lastViewedAt INTEGER NOT NULL DEFAULT 0"
                 )
+            }
+        }
+
+        /**
+         * v5 caches optional Wikipedia place media ([LocationEntity.imageUrl], description,
+         * imageAttribution) so detail reopen can show the stamp/blurb offline.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE location_entity ADD COLUMN imageUrl TEXT")
+                db.execSQL("ALTER TABLE location_entity ADD COLUMN description TEXT")
+                db.execSQL("ALTER TABLE location_entity ADD COLUMN imageAttribution TEXT")
             }
         }
     }

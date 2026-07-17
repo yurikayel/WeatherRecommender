@@ -77,7 +77,8 @@ private val DayChipWidth = 72.dp
 private val DayChipHeight = 120.dp
 
 /**
- * Detail body inside the collapsing-map sheet: geography chips, day selector, and ranked activities.
+ * Detail body inside the collapsing-map sheet: geography chips, optional Wikipedia postage stamp,
+ * day selector, ranked activities, and optional city extract.
  * The map lives in [WeatherScreenContent] so it stays mounted across home↔detail.
  * Tapping a day re-ranks activities (handled by [WeatherViewModel.onDaySelected]).
  */
@@ -100,7 +101,17 @@ internal fun DetailContent(
                 .padding(horizontal = 20.dp)
         ) {
             Spacer(Modifier.height(12.dp))
-            uiState.selectedLocation?.let { GeoChipsRow(it) }
+            val location = uiState.selectedLocation
+            location?.let { GeoChipsRow(it) }
+
+            location?.imageUrl?.takeIf { it.isNotBlank() }?.let { imageUrl ->
+                Spacer(Modifier.height(16.dp))
+                CityPostageStamp(
+                    imageUrl = imageUrl,
+                    cityName = location.name,
+                    attribution = location.imageAttribution
+                )
+            }
 
             if (uiState.isLoadingForecast && uiState.forecast == null) {
                 Spacer(Modifier.height(16.dp))
@@ -164,6 +175,16 @@ internal fun DetailContent(
                     ) {
                         activities.forEach { ranked -> ActivityCard(ranked) }
                     }
+                }
+
+                location?.description?.takeIf { it.isNotBlank() }?.let { extract ->
+                    Spacer(Modifier.height(28.dp))
+                    CityDescriptionSection(
+                        cityName = location.name,
+                        description = extract,
+                        attribution = location.imageAttribution,
+                        showAttribution = location.imageUrl.isNullOrBlank()
+                    )
                 }
                 Spacer(Modifier.height(24.dp))
             }

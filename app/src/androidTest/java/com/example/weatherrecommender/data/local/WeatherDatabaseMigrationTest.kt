@@ -217,6 +217,73 @@ class WeatherDatabaseMigrationTest {
         db.close()
     }
 
+    @Test
+    fun migrate4To5_addsWikipediaMediaColumns() {
+        helper.createDatabase(TEST_DB, 4).apply {
+            execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS location_entity (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    latitude REAL NOT NULL,
+                    longitude REAL NOT NULL,
+                    country TEXT NOT NULL,
+                    admin1 TEXT,
+                    lastUpdated INTEGER NOT NULL,
+                    elevation REAL,
+                    population INTEGER,
+                    featureCode TEXT,
+                    hasSeaAccess INTEGER NOT NULL DEFAULT 0,
+                    lastViewedAt INTEGER NOT NULL DEFAULT 0
+                )
+                """.trimIndent()
+            )
+            execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS daily_forecast_entity (
+                    locationId INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    maxTemp REAL NOT NULL,
+                    minTemp REAL NOT NULL,
+                    weatherCode INTEGER NOT NULL DEFAULT 0,
+                    precipitationSum REAL NOT NULL,
+                    maxWindSpeed REAL NOT NULL,
+                    snowfallSum REAL NOT NULL DEFAULT 0.0,
+                    waveHeightMax REAL,
+                    PRIMARY KEY(locationId, date)
+                )
+                """.trimIndent()
+            )
+            execSQL(
+                """
+                INSERT INTO location_entity (
+                    id, name, latitude, longitude, country, admin1, lastUpdated, hasSeaAccess, lastViewedAt
+                ) VALUES (1, 'Lisbon', 38.7, -9.1, 'Portugal', 'Lisbon', 1, 1, 99)
+                """.trimIndent()
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB,
+            5,
+            false,
+            WeatherDatabase.MIGRATION_4_5
+        )
+
+        db.query(
+            "SELECT imageUrl, description, imageAttribution, lastViewedAt FROM location_entity WHERE id = 1"
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertTrue(cursor.getColumnIndex("imageUrl") >= 0)
+            assertTrue(cursor.getColumnIndex("description") >= 0)
+            assertTrue(cursor.getColumnIndex("imageAttribution") >= 0)
+            assertEquals(99L, cursor.getLong(cursor.getColumnIndexOrThrow("lastViewedAt")))
+            assertTrue(cursor.isNull(cursor.getColumnIndexOrThrow("imageUrl")))
+        }
+        db.close()
+    }
+
     private companion object {
         const val TEST_DB = "migration-test"
     }

@@ -68,4 +68,13 @@ interface WeatherRepository {
      * assign different ids (matched by id, ~0.05° proximity, or name+country).
      */
     suspend fun markLocationViewed(location: Location)
+
+    /**
+     * Best-effort Wikipedia enrichment for a city photo + extract.
+     *
+     * Open-Meteo / Nominatim do not provide images. Failures are silent (never fail the
+     * forecast path). When media is found it is written to Room so detail reopen is offline-friendly.
+     * Skips the network call when the cached row already has media.
+     */
+    suspend fun enrichPlaceMedia(location: Location)
 }
