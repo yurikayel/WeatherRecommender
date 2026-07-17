@@ -2,4 +2,17 @@
 <resources>
 
     <style name="Theme.WeatherRecommender" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!--
+      Android 12+ Splash Screen API theme (androidx.core:core-splashscreen).
+      Also sets windowBackground for a clean pre-12 legacy splash.
+    -->
+    <style name="Theme.WeatherRecommender.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_weather_mark</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/splash_icon_background</item>
+        <item name="postSplashScreenTheme">@style/Theme.WeatherRecommender</item>
+        <!-- Legacy (pre-Android 12): solid brand window while activity starts -->
+        <item name="android:windowBackground">@color/splash_background</item>
+    </style>
 </resources>
