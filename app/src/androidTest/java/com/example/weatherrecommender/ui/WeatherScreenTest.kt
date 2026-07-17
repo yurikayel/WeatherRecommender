@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.weatherrecommender.domain.model.DailyForecast
@@ -195,9 +196,9 @@ class WeatherScreenTest {
         )
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Pick a day").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Outdoor Sightseeing").assertIsDisplayed()
-        composeTestRule.onNodeWithText("95").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Pick a day").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Outdoor Sightseeing").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("95").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -237,8 +238,8 @@ class WeatherScreenTest {
             )
         )
 
-        composeTestRule.onNodeWithText("Coastal").assertIsDisplayed()
-        composeTestRule.onNodeWithText("68 m elevation").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Coastal").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("68 m elevation").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -251,7 +252,7 @@ class WeatherScreenTest {
             )
         )
 
-        composeTestRule.onNodeWithText("Inland").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Inland").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -336,6 +337,6 @@ class WeatherScreenTest {
         )
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Outdoor Sightseeing").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Outdoor Sightseeing").performScrollTo().assertIsDisplayed()
     }
 }

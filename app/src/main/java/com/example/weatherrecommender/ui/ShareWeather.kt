@@ -1,6 +1,7 @@
 package com.example.weatherrecommender.ui
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -10,6 +11,7 @@ import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -169,6 +171,8 @@ internal fun saveBitmapToDownloads(context: Context, bitmap: Bitmap, fileName: S
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.Q)
+@SuppressLint("NewApi")
 private fun saveBitmapToDownloadsMediaStore(
     context: Context,
     bitmap: Bitmap,
