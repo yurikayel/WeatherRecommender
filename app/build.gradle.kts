@@ -137,16 +137,24 @@ dependencies {
   implementation(libs.okhttp.logging.interceptor)
   implementation(libs.kotlinx.serialization.json)
 
-  // Room & WorkManager
+  // Room, WorkManager & DataStore
   implementation(libs.androidx.room.runtime)
   implementation(libs.androidx.room.ktx)
   ksp(libs.androidx.room.compiler)
   implementation(libs.androidx.work.runtime.ktx)
+  implementation(libs.androidx.datastore.preferences)
 
   // Hilt
   implementation(libs.hilt.android)
   ksp(libs.hilt.compiler)
   implementation(libs.androidx.hilt.navigation.compose)
+
+  // MapLibre Compose (OSM / OpenFreeMap — no Google Maps API key).
+  // OpenGL backend for broader emulator support (Vulkan can fail on some AVDs).
+  implementation(libs.maplibre.compose) {
+    exclude(group = "org.maplibre.gl", module = "android-sdk")
+  }
+  implementation(libs.maplibre.android.opengl)
 
   // Extra testing
   testImplementation(libs.turbine)

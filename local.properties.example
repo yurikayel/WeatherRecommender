@@ -1,3 +1,6 @@
 # Copy this file to local.properties and set your Android SDK path.
 # local.properties is gitignored and must not be committed.
 sdk.dir=C\:\\Users\\YOUR_USER\\AppData\\Local\\Android\\Sdk
+
+# No Google Maps API key is required.
+# The header map uses MapLibre + OpenFreeMap tiles and Nominatim reverse geocoding.
