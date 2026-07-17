@@ -104,7 +104,6 @@ internal fun HomeContent(
                 .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(Modifier.height(12.dp))
             HomeHeader(
                 currentLocationCity = uiState.deviceLocation?.name,
                 onCurrentLocationClick = onCurrentLocationClick

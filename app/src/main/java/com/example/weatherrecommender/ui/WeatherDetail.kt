@@ -91,7 +91,6 @@ internal fun DetailContent(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
     ) {
-        Spacer(Modifier.height(12.dp))
         val location = uiState.selectedLocation
         location?.let { GeoChipsRow(it) }
 

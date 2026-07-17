@@ -1,4 +1,4 @@
-package com.example.weatherrecommender.ui
+﻿package com.example.weatherrecommender.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -10,33 +10,21 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,9 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -58,7 +44,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -97,8 +82,8 @@ fun WeatherScreen(
 /**
  * Stateless, testable root of the Weather screen.
  *
- * A collapsing map AppBar (1:1 expanded → compact toolbar) stays mounted while a surface sheet
- * below Crossfades home vs detail body content — no full-screen slide, and the map instance is
+ * A collapsing map (1:1 expanded → fully hidden) stays mounted while a surface sheet below
+ * Crossfades home vs detail body content — no full-screen slide, and the map instance is
  * not remounted on select/back. Modes are derived from [WeatherUiState.selectedLocation].
  */
 @Composable
@@ -142,8 +127,8 @@ fun WeatherScreenContent(
         if (!inDetail) shareInProgress = false
     }
 
-    // Top inset is owned by WeatherCollapsingTopBar (WindowInsets.statusBars) so the map can
-    // draw edge-to-edge under the status bar; Scaffold only applies horizontal + bottom safe areas.
+    // Map draws edge-to-edge under the status bar; the sheet header adds status-bar padding
+    // only when the map is fully collapsed. Scaffold applies horizontal + bottom safe areas.
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
@@ -283,23 +268,6 @@ private fun CollapsingMapScaffold(
                 .graphicsLayer { alpha = 1f - collapse.fraction * 0.35f }
         )
 
-        WeatherCollapsingTopBar(
-            title = uiState.selectedLocation?.name
-                ?: stringResource(R.string.app_title),
-            inDetail = inDetail,
-            canShare = canShare,
-            shareInProgress = shareInProgress,
-            collapseFraction = collapse.fraction,
-            isDarkTheme = isDarkTheme,
-            onToggleTheme = onToggleTheme,
-            onBack = onBack,
-            onShare = onShare,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(collapse.collapsedAppBarHeight)
-                .align(Alignment.TopCenter)
-        )
-
         Surface(
             modifier = Modifier
                 .fillMaxSize()
@@ -309,27 +277,48 @@ private fun CollapsingMapScaffold(
             tonalElevation = 1.dp,
             shadowElevation = 6.dp
         ) {
-            Crossfade(
-                targetState = inDetail,
-                animationSpec = tween(BODY_CROSSFADE_MS, easing = FastOutSlowInEasing),
-                modifier = Modifier.fillMaxSize(),
-                label = "home_detail_crossfade"
-            ) { detail ->
-                if (detail) {
-                    DetailContent(
-                        uiState = uiState,
-                        onDaySelected = onDaySelected
-                    )
-                } else {
-                    HomeContent(
-                        uiState = uiState,
-                        onQueryChanged = onQueryChanged,
-                        onLocationSelected = onLocationSelected,
-                        onRefresh = onRefresh,
-                        onCurrentLocationClick = onCurrentLocationClick,
-                        // PTR only when the map is fully open so overscroll doesn't steal collapse.
-                        mapFullyExpanded = collapse.fraction == 0f
-                    )
+            Column(Modifier.fillMaxSize()) {
+                WeatherSheetHeader(
+                    title = if (inDetail) {
+                        uiState.selectedLocation?.name.orEmpty()
+                    } else {
+                        homeSheetTitle(uiState)
+                    },
+                    inDetail = inDetail,
+                    canShare = canShare,
+                    shareInProgress = shareInProgress,
+                    isDarkTheme = isDarkTheme,
+                    mapFullyCollapsed = collapse.fraction >= 1f,
+                    onToggleTheme = onToggleTheme,
+                    onBack = onBack,
+                    onShare = onShare,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 12.dp, bottom = 4.dp)
+                )
+                Crossfade(
+                    targetState = inDetail,
+                    animationSpec = tween(BODY_CROSSFADE_MS, easing = FastOutSlowInEasing),
+                    modifier = Modifier.fillMaxSize(),
+                    label = "home_detail_crossfade"
+                ) { detail ->
+                    if (detail) {
+                        DetailContent(
+                            uiState = uiState,
+                            onDaySelected = onDaySelected
+                        )
+                    } else {
+                        HomeContent(
+                            uiState = uiState,
+                            onQueryChanged = onQueryChanged,
+                            onLocationSelected = onLocationSelected,
+                            onRefresh = onRefresh,
+                            onCurrentLocationClick = onCurrentLocationClick,
+                            // PTR only when the map is fully open so overscroll doesn't steal collapse.
+                            mapFullyExpanded = collapse.fraction == 0f
+                        )
+                    }
                 }
             }
         }
@@ -341,25 +330,16 @@ private class MapCollapseState(
     val headerHeight: Dp,
     val sheetTop: Dp,
     val fraction: Float,
-    val mapInteractive: Boolean,
-    /** Status-bar inset + [TopAppBarDefaults.TopAppBarExpandedHeight] for edge-to-edge layout. */
-    val collapsedAppBarHeight: Dp
+    val mapInteractive: Boolean
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun rememberMapCollapseState(resetKey: Any): MapCollapseState {
     val density = LocalDensity.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
-    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    // Surface height must include statusBars so Material3's inner windowInsetsPadding leaves a
-    // full 64.dp content row — otherwise icons are squeezed below the title.
-    val collapsedAppBarHeight =
-        statusBarHeight + TopAppBarDefaults.TopAppBarExpandedHeight
     val expandedMapHeight = screenWidthDp * MAP_ASPECT_HEIGHT / MAP_ASPECT_WIDTH
     val expandedPx = with(density) { expandedMapHeight.toPx() }
-    val collapsedPx = with(density) { collapsedAppBarHeight.toPx() }
-    val maxCollapsePx = (expandedPx - collapsedPx).coerceAtLeast(1f)
+    val maxCollapsePx = expandedPx.coerceAtLeast(1f)
 
     var toolbarOffsetPx by remember { mutableFloatStateOf(0f) }
 
@@ -400,97 +380,14 @@ private fun rememberMapCollapseState(resetKey: Any): MapCollapseState {
 
     val headerHeight = with(density) { (expandedPx + toolbarOffsetPx).toDp() }
     val fraction = (-toolbarOffsetPx / maxCollapsePx).coerceIn(0f, 1f)
-    val sheetTop = (headerHeight - MapSheetOverlap).coerceAtLeast(collapsedAppBarHeight)
+    val sheetTop = (headerHeight - MapSheetOverlap).coerceAtLeast(0.dp)
 
     return MapCollapseState(
         nestedScrollConnection = nestedScrollConnection,
         headerHeight = headerHeight,
         sheetTop = sheetTop,
         fraction = fraction,
-        mapInteractive = fraction < MAP_INTERACTIVE_COLLAPSE_THRESHOLD,
-        collapsedAppBarHeight = collapsedAppBarHeight
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun WeatherCollapsingTopBar(
-    title: String,
-    inDetail: Boolean,
-    canShare: Boolean,
-    shareInProgress: Boolean,
-    collapseFraction: Float,
-    isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit,
-    onBack: () -> Unit,
-    onShare: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val surface = MaterialTheme.colorScheme.surface
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    // Expanded: light scrim over the map for icon contrast; collapsed: solid AppBar surface.
-    val barColor = lerp(
-        start = Color.Black.copy(alpha = 0.22f),
-        stop = surface,
-        fraction = collapseFraction
-    )
-    val contentColor = lerp(
-        start = Color.White,
-        stop = onSurface,
-        fraction = collapseFraction
-    )
-
-    TopAppBar(
-        modifier = modifier,
-        // Match Surface height (statusBars + TopAppBarExpandedHeight): insets pad the status area,
-        // then navigationIcon / title / actions share one CenterVertically content row.
-        windowInsets = WindowInsets.statusBars,
-        expandedHeight = TopAppBarDefaults.TopAppBarExpandedHeight,
-        title = {
-            Text(
-                text = title,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.graphicsLayer { alpha = 0.35f + collapseFraction * 0.65f }
-            )
-        },
-        navigationIcon = {
-            if (inDetail) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.detail_back)
-                    )
-                }
-            }
-        },
-        actions = {
-            if (canShare) {
-                IconButton(onClick = onShare, enabled = !shareInProgress) {
-                    Icon(
-                        Icons.Filled.Share,
-                        contentDescription = stringResource(R.string.share_weather)
-                    )
-                }
-            }
-            IconButton(onClick = onToggleTheme) {
-                Icon(
-                    imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                    contentDescription = stringResource(
-                        if (isDarkTheme) {
-                            R.string.theme_switch_to_light
-                        } else {
-                            R.string.theme_switch_to_dark
-                        }
-                    )
-                )
-            }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = barColor,
-            titleContentColor = contentColor,
-            navigationIconContentColor = contentColor,
-            actionIconContentColor = contentColor
-        )
+        mapInteractive = fraction < MAP_INTERACTIVE_COLLAPSE_THRESHOLD
     )
 }
 

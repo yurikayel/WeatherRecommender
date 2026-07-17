@@ -15,12 +15,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.DownhillSkiing
 import androidx.compose.material.icons.outlined.Museum
 import androidx.compose.material.icons.outlined.Park
@@ -35,11 +40,14 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.RecommendedActivity
@@ -141,4 +149,88 @@ internal fun CustomSearchBar(
             unfocusedTextColor = MaterialTheme.colorScheme.onSurface
         )
     )
+}
+
+@Composable
+internal fun homeSheetTitle(uiState: WeatherUiState): String =
+    uiState.mapPin?.name
+        ?: uiState.deviceLocation?.name
+        ?: stringResource(R.string.app_title)
+
+/**
+ * First row inside the scrolling sheet: city label + theme toggle on home; back, city, share, and
+ * theme on detail. No chrome is drawn over the map itself.
+ */
+@Composable
+internal fun WeatherSheetHeader(
+    title: String,
+    inDetail: Boolean,
+    canShare: Boolean,
+    shareInProgress: Boolean,
+    isDarkTheme: Boolean,
+    mapFullyCollapsed: Boolean,
+    onToggleTheme: () -> Unit,
+    onBack: () -> Unit,
+    onShare: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.then(
+            if (mapFullyCollapsed) Modifier.statusBarsPadding() else Modifier
+        ),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (inDetail) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.detail_back)
+                    )
+                }
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (canShare) {
+                IconButton(onClick = onShare, enabled = !shareInProgress) {
+                    Icon(
+                        Icons.Filled.Share,
+                        contentDescription = stringResource(R.string.share_weather)
+                    )
+                }
+            }
+            ThemeToggleIcon(isDarkTheme = isDarkTheme, onToggleTheme = onToggleTheme)
+        }
+    }
+}
+
+@Composable
+private fun ThemeToggleIcon(
+    isDarkTheme: Boolean,
+    onToggleTheme: () -> Unit
+) {
+    IconButton(onClick = onToggleTheme) {
+        Icon(
+            imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+            contentDescription = stringResource(
+                if (isDarkTheme) {
+                    R.string.theme_switch_to_light
+                } else {
+                    R.string.theme_switch_to_dark
+                }
+            )
+        )
+    }
 }
