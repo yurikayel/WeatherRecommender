@@ -43,15 +43,37 @@ class LocationSyncerTest {
     @Test
     fun `syncAllLocations returns false when any refresh fails`() = runTest {
         val parisEntity = londonEntity.copy(id = 2, name = "Paris")
-        coEvery { weatherDao.getAllLocations() } returns listOf(londonEntity, parisEntity)
+        val tokyoEntity = londonEntity.copy(id = 3, name = "Tokyo")
+        val sydneyEntity = londonEntity.copy(id = 4, name = "Sydney")
+        coEvery { weatherDao.getAllLocations() } returns listOf(
+            londonEntity,
+            parisEntity,
+            tokyoEntity,
+            sydneyEntity
+        )
         coEvery { repository.refreshForecast(match { it.id == 1L }) } returns Result.Success(Unit)
         coEvery { repository.refreshForecast(match { it.id == 2L }) } returns Result.Error(
             AppError.NetworkError.NoConnectivity
         )
+        coEvery { repository.refreshForecast(match { it.id == 3L }) } returns Result.Success(Unit)
+        coEvery { repository.refreshForecast(match { it.id == 4L }) } returns Result.Success(Unit)
 
         assertFalse(syncer.syncAllLocations())
 
-        coVerify(exactly = 2) { repository.refreshForecast(any()) }
+        coVerify(exactly = 4) { repository.refreshForecast(any()) }
+    }
+
+    @Test
+    fun `syncAllLocations refreshes in chunks of three with stagger between batches`() = runTest {
+        val entities = (1L..4L).map { id ->
+            londonEntity.copy(id = id, name = "City$id")
+        }
+        coEvery { weatherDao.getAllLocations() } returns entities
+        coEvery { repository.refreshForecast(any()) } returns Result.Success(Unit)
+
+        assertTrue(syncer.syncAllLocations())
+
+        coVerify(exactly = 4) { repository.refreshForecast(any()) }
     }
 
     @Test
