@@ -123,6 +123,12 @@ fun WeatherScreenContent(
         onLocationPermissionResult(granted)
     }
 
+    // Leaving detail (e.g. back while a permission dialog was up) must cancel a pending share;
+    // otherwise the stranded flag would auto-trigger a capture on the next city opened.
+    LaunchedEffect(inDetail) {
+        if (!inDetail) shareInProgress = false
+    }
+
     LaunchedEffect(Unit) {
         when {
             hasLocationPermission(context) -> onLocationPermissionResult(true)
