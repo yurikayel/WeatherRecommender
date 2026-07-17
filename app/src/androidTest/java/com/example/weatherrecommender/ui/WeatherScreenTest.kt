@@ -1,8 +1,11 @@
 package com.example.weatherrecommender.ui
 
 import android.Manifest
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -68,7 +71,8 @@ class WeatherScreenTest {
         onQueryChanged: (String) -> Unit = {},
         onLocationSelected: (Location) -> Unit = {},
         onDaySelected: (Int) -> Unit = {},
-        onBack: () -> Unit = {}
+        onBack: () -> Unit = {},
+        onCurrentLocationClick: () -> Unit = {}
     ) {
         composeTestRule.setContent {
             WeatherRecommenderTheme(darkTheme = darkTheme) {
@@ -78,7 +82,8 @@ class WeatherScreenTest {
                     onLocationSelected = onLocationSelected,
                     onDaySelected = onDaySelected,
                     onBack = onBack,
-                    onRefresh = {}
+                    onRefresh = {},
+                    onCurrentLocationClick = onCurrentLocationClick
                 )
             }
         }
@@ -87,13 +92,48 @@ class WeatherScreenTest {
     // --- Home ---
 
     @Test
-    fun home_showsSearchBarAndGreeting() {
+    fun home_showsSearchBarAndTopPicks() {
         setContent(WeatherUiState())
 
-        composeTestRule.onNodeWithText("Search a city…").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Plan your day").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Top picks for you").assertIsDisplayed()
+        // AppBar title stays; the old home hero copy is gone.
+        composeTestRule.onNodeWithText("Concierge Weather").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Plan your day").assertCountEquals(0)
         composeTestRule.onNodeWithContentDescription("Switch to dark mode").assertIsDisplayed()
+        // Square map leaves little sheet viewport — scroll before asserting body content.
+        composeTestRule.onNodeWithText("Search a city…").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Top picks for you").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun home_withDeviceLocation_staysOnHome_andShowsChip() {
+        setContent(
+            WeatherUiState(
+                deviceLocation = lisbon,
+                topPicks = emptyList(),
+                isLoadingTopPicks = false
+            )
+        )
+
+        // GPS resolves the chip only — it must not auto-open detail.
+        composeTestRule.onAllNodesWithContentDescription("Back").assertCountEquals(0)
+        composeTestRule.onNodeWithText("Current location · Lisbon").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Search a city…").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun home_tappingCurrentLocationChip_invokesCallback() {
+        var clicked = false
+        setContent(
+            WeatherUiState(deviceLocation = lisbon),
+            onCurrentLocationClick = { clicked = true }
+        )
+
+        composeTestRule
+            .onNodeWithContentDescription("Check weather for your current location, Lisbon")
+            .performScrollTo()
+            .performClick()
+
+        assertEquals(true, clicked)
     }
 
     @Test
@@ -101,7 +141,7 @@ class WeatherScreenTest {
         var lastQuery = ""
         setContent(WeatherUiState(), onQueryChanged = { lastQuery = it })
 
-        composeTestRule.onNodeWithText("Search a city…").performTextInput("Lis")
+        composeTestRule.onNodeWithText("Search a city…").performScrollTo().performTextInput("Lis")
 
         assertEquals("Lis", lastQuery)
     }
@@ -111,7 +151,7 @@ class WeatherScreenTest {
         var lastQuery = "unchanged"
         setContent(WeatherUiState(query = "Lon"), onQueryChanged = { lastQuery = it })
 
-        composeTestRule.onNodeWithContentDescription("Clear search").performClick()
+        composeTestRule.onNodeWithContentDescription("Clear search").performScrollTo().performClick()
 
         assertEquals("", lastQuery)
     }
@@ -122,6 +162,7 @@ class WeatherScreenTest {
 
         composeTestRule
             .onNodeWithText("Connect to the internet to see today's suggestions.")
+            .performScrollTo()
             .assertIsDisplayed()
     }
 
@@ -137,10 +178,10 @@ class WeatherScreenTest {
         )
         setContent(WeatherUiState(topPicks = picks))
 
-        composeTestRule.onNodeWithText("Lisbon").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Portugal").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Surfing").assertIsDisplayed()
-        composeTestRule.onNodeWithText("27°").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Lisbon").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Portugal").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Surfing").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("27°").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -156,16 +197,31 @@ class WeatherScreenTest {
         )
         setContent(WeatherUiState(topPicks = picks), onLocationSelected = { selected = it })
 
-        composeTestRule.onNodeWithText("Lisbon").performClick()
+        composeTestRule.onNodeWithText("Lisbon").performScrollTo().performClick()
 
         assertEquals(lisbon, selected)
+    }
+
+    @Test
+    fun home_history_isDisplayed() {
+        setContent(
+            WeatherUiState(
+                topPicks = emptyList(),
+                isLoadingTopPicks = false,
+                recentHistory = listOf(london, lisbon)
+            )
+        )
+
+        composeTestRule.onNodeWithText("Recently viewed").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("London").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Lisbon").performScrollTo().assertIsDisplayed()
     }
 
     @Test
     fun home_error_isDisplayed() {
         setContent(WeatherUiState(error = UiText.DynamicString("City not found")))
 
-        composeTestRule.onNodeWithText("Error: City not found").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Error: City not found").performScrollTo().assertIsDisplayed()
     }
 
     // --- Search results ---
@@ -178,8 +234,8 @@ class WeatherScreenTest {
         )
         setContent(WeatherUiState(searchResults = locations, query = "Lon"))
 
-        composeTestRule.onNodeWithText("📍 London, England, UK").assertIsDisplayed()
-        composeTestRule.onNodeWithText("📍 Paris, Ile-de-France, France").assertIsDisplayed()
+        composeTestRule.onNodeWithText("📍 London, England, UK").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("📍 Paris, Ile-de-France, France").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -190,7 +246,7 @@ class WeatherScreenTest {
             onLocationSelected = { selected = it }
         )
 
-        composeTestRule.onNodeWithText("📍 London, England, UK").performClick()
+        composeTestRule.onNodeWithText("📍 London, England, UK").performScrollTo().performClick()
 
         assertEquals(london, selected)
     }
@@ -238,7 +294,7 @@ class WeatherScreenTest {
             )
         )
 
-        composeTestRule.onNodeWithContentDescription("Share weather").assertDoesNotExist()
+        composeTestRule.onAllNodesWithContentDescription("Share weather").assertCountEquals(0)
     }
 
     @Test
