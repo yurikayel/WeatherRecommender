@@ -1,6 +1,7 @@
 *.iml
 .gradle
 .gradle-map-agent/
+.gradle-agent/
 /local.properties
 /.idea/
 .DS_Store
