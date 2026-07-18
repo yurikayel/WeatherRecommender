@@ -1,12 +1,9 @@
 *.iml
 .gradle
+.gradle-map-agent/
+.gradle-agent/
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+/.idea/
 .DS_Store
 /build
 /captures
@@ -16,3 +13,6 @@ local.properties
 sdk_list.txt
 ksp.xml
 .kotlin/
+compile-out*.txt
+test-out.txt
+*.log

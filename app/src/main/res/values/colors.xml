@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches Compose PremiumPrimaryDark / PremiumPrimaryContainerLight -->
+    <color name="splash_background">#FF0B6BC2</color>
+    <color name="splash_icon_background">#FF0A5AAB</color>
+    <color name="ic_launcher_background">#FF0B6BC2</color>
+</resources>

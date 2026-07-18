@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reuses the project weather mark for launcher consistency with splash. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#F5C84C"
+        android:pathData="M68,40m-14,0a14,14 0,1 1,28 0a14,14 0,1 1,-28 0" />
+    <path
+        android:fillColor="#F5C84C"
+        android:pathData="M67,18h2v7h-2z" />
+    <path
+        android:fillColor="#F5C84C"
+        android:pathData="M67,55h2v7h-2z" />
+    <path
+        android:fillColor="#F5C84C"
+        android:pathData="M46,39h7v2h-7z" />
+    <path
+        android:fillColor="#F5C84C"
+        android:pathData="M83,39h7v2h-7z" />
+    <path
+        android:fillColor="#F5C84C"
+        android:pathData="M52.2,24.8l1.4,-1.4l5,5l-1.4,1.4z" />
+    <path
+        android:fillColor="#F5C84C"
+        android:pathData="M77.4,50l1.4,-1.4l5,5l-1.4,1.4z" />
+    <path
+        android:fillColor="#F5C84C"
+        android:pathData="M77.4,26.2l5,-5l1.4,1.4l-5,5z" />
+    <path
+        android:fillColor="#F5C84C"
+        android:pathData="M52.2,51.2l5,-5l1.4,1.4l-5,5z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,68m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,58m-13,0a13,13 0,1 1,26 0a13,13 0,1 1,-26 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M66,60m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M78,68m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,66h44c0,0 0,12 -10,12H44c-10,0 -10,-12 -10,-12z" />
+</vector>
