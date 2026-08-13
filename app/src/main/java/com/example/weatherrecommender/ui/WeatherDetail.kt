@@ -103,28 +103,27 @@ internal fun DetailContent(
             .padding(horizontal = 20.dp)
     ) {
         val location = uiState.selectedLocation
-        location?.let { loc ->
-            if (loc.imageUrl != null) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp)
-                        .padding(bottom = 16.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    AsyncImage(
-                        model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
-                            .data(loc.imageUrl)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                        alpha = 0.9f
-                    )
-                }
+        val imageUrl = location?.imageUrl ?: uiState.forecast?.location?.imageUrl
+        if (imageUrl != null) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .padding(bottom = 16.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    alpha = 0.9f
+                )
             }
         }
 
@@ -153,7 +152,7 @@ internal fun DetailContent(
             
             Spacer(Modifier.height(12.dp))
             Text(
-                text = stringResource(R.string.tab_activities) + " - " + selectedDayName,
+                text = selectedDayName,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,

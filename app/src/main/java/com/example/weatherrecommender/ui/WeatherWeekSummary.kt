@@ -55,13 +55,6 @@ internal fun WeekSummarySection(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = stringResource(R.string.detail_week_summary_title),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-            modifier = Modifier.semantics { heading() }
-        )
-        Spacer(Modifier.size(12.dp))
         forecast.dailyForecasts.forEachIndexed { index, day ->
             val topActivity = weekTopActivities.getOrNull(index)
             WeekSummaryRow(

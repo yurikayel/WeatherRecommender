@@ -16,6 +16,7 @@ data class WikipediaQuery(
 data class WikipediaPage(
     val pageid: Long? = null,
     val title: String? = null,
+    val thumbnail: WikipediaImage? = null,
     val original: WikipediaImage? = null
 )
 

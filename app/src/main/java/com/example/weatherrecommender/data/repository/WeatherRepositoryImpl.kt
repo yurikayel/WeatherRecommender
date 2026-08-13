@@ -247,8 +247,10 @@ class WeatherRepositoryImpl @Inject constructor(
         return try {
             val response = wikipediaApi.getPageImage(titles = cityName)
             val pages = response.query?.pages
-            // The map keys are page IDs. We just want the first valid original image.
-            pages?.values?.firstOrNull()?.original?.source
+            // Prefer the optimized thumbnail size; fallback to original if absent.
+            pages?.values?.firstOrNull()?.let { page ->
+                page.thumbnail?.source ?: page.original?.source
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             null // Best-effort fetching
