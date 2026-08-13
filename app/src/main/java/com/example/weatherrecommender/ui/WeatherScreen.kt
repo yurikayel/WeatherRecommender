@@ -84,7 +84,7 @@ fun WeatherScreen(
  *
  * A collapsing map (1:1 expanded → fully hidden) stays mounted while a surface sheet below
  * Crossfades home vs detail body content — no full-screen slide, and the map instance is
- * not remounted on select/back. Modes are derived from [WeatherUiState.selectedLocation].
+ * not remounted on select/back. Modes are derived from [WeatherUiState.destination].
  */
 @Composable
 fun WeatherScreenContent(
@@ -100,7 +100,7 @@ fun WeatherScreenContent(
     isDarkTheme: Boolean = false,
     onToggleTheme: () -> Unit = {}
 ) {
-    val inDetail = uiState.selectedLocation != null
+    val inDetail = uiState.destination is WeatherDestination.Detail
     val canShare = inDetail &&
         uiState.forecast != null &&
         uiState.forecast.dailyForecasts.isNotEmpty()

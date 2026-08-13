@@ -53,6 +53,7 @@ import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
+import com.example.weatherrecommender.domain.model.ScoringThresholds
 import com.example.weatherrecommender.theme.PastelRainDark
 import com.example.weatherrecommender.theme.PastelRainLight
 import com.example.weatherrecommender.theme.PastelSnowDark
@@ -115,6 +116,14 @@ internal fun DetailContent(
         val forecast = uiState.forecast
         if (forecast != null) {
             Spacer(Modifier.height(20.dp))
+            WeekSummarySection(
+                forecast = forecast,
+                weekTopActivities = uiState.weekTopActivities,
+                selectedDayIndex = uiState.selectedDayIndex,
+                onDaySelected = onDaySelected
+            )
+
+            Spacer(Modifier.height(24.dp))
             Text(
                 text = stringResource(R.string.detail_pick_a_day),
                 style = MaterialTheme.typography.titleMedium,
@@ -360,8 +369,8 @@ private fun ActivityCard(rankedActivity: RankedActivity) {
                     modifier = Modifier.fillMaxSize(),
                     strokeWidth = 6.dp,
                     color = when {
-                        rankedActivity.score > 75 -> MaterialTheme.colorScheme.primary
-                        rankedActivity.score > 40 -> MaterialTheme.colorScheme.secondary
+                        rankedActivity.score > ScoringThresholds.SCORE_HIGH -> MaterialTheme.colorScheme.primary
+                        rankedActivity.score > ScoringThresholds.SCORE_MID -> MaterialTheme.colorScheme.secondary
                         else -> MaterialTheme.colorScheme.error
                     },
                     trackColor = MaterialTheme.colorScheme.surface
