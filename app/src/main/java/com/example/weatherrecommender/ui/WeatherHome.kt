@@ -278,22 +278,21 @@ private fun TopPicksSection(
     isLoading: Boolean,
     onLocationSelected: (Location) -> Unit
 ) {
-    // Crossfade from skeleton to content so the feed appears without a hard pop.
     Crossfade(targetState = isLoading, label = "top_picks_fade") { loading ->
         when {
             loading -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(3) {
+                    repeat(3) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(72.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .height(110.dp)
+                                .clip(RoundedCornerShape(16.dp))
                                 .shimmerEffect()
                         )
-                        Spacer(Modifier.height(8.dp))
                     }
                 }
             }
@@ -307,55 +306,12 @@ private fun TopPicksSection(
             }
 
             else -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 280.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(topPicks) { pick ->
-                        ListItem(
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = {
-                                Text(
-                                    pick.location.displayName,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            supportingContent = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        weatherCodeIcon(pick.weatherCode),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        stringResource(R.string.temp_degrees, pick.maxTemp.roundToInt()),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Icon(
-                                        activityIcon(pick.topActivity.activity),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        pick.topActivity.activity.asUiText().asString(),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-                            },
-                            modifier = Modifier.clickable { onLocationSelected(pick.location) }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
+                    topPicks.forEach { pick ->
+                        TopPickCard(pick = pick, onClick = { onLocationSelected(pick.location) })
                     }
                 }
             }
@@ -363,7 +319,136 @@ private fun TopPicksSection(
     }
 }
 
-// TopPickCard removed as user requested a vertical list of cities
+@Composable
+private fun TopPickCard(pick: TopPick, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "pick_press_scale"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(110.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            val hasImage = pick.location.imageUrl != null
+            if (hasImage) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(pick.location.imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.2f),
+                                    Color.Black.copy(alpha = 0.8f)
+                                )
+                            )
+                        )
+                )
+            }
+
+            val contentColor = if (hasImage) Color.White else MaterialTheme.colorScheme.onSurface
+            val iconTint = if (hasImage) Color.White else MaterialTheme.colorScheme.primary
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 12.dp),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = pick.location.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    val subtitle = listOfNotNull(pick.location.admin1, pick.location.country)
+                        .filter { it.isNotBlank() }
+                        .joinToString(", ")
+                    if (subtitle.isNotEmpty()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            activityIcon(pick.topActivity.activity),
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = pick.topActivity.activity.asUiText().asString(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = contentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        weatherCodeIcon(pick.weatherCode),
+                        contentDescription = weatherCodeDescription(pick.weatherCode),
+                        tint = contentColor,
+                        modifier = Modifier.size(26.dp)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.temp_degrees, pick.maxTemp.roundToInt()),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun HistorySection(
     history: List<Location>,
