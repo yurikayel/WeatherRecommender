@@ -1,4 +1,4 @@
-﻿package com.example.weatherrecommender.ui
+package com.example.weatherrecommender.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -249,6 +249,15 @@ private fun CollapsingMapScaffold(
     modifier: Modifier = Modifier
 ) {
     val collapse = rememberMapCollapseState(resetKey = inDetail)
+    var showInfoDialog by remember { mutableStateOf(false) }
+
+    val loc = uiState.selectedLocation
+    if (showInfoDialog && loc != null) {
+        LocationInfoDialog(
+            location = loc,
+            onDismiss = { showInfoDialog = false }
+        )
+    }
 
     Box(
         modifier = modifier
@@ -279,11 +288,7 @@ private fun CollapsingMapScaffold(
         ) {
             Column(Modifier.fillMaxSize()) {
                 WeatherSheetHeader(
-                    title = if (inDetail) {
-                        uiState.selectedLocation?.name.orEmpty()
-                    } else {
-                        homeSheetTitle(uiState)
-                    },
+                    title = if (inDetail) uiState.selectedLocation?.name.orEmpty() else "",
                     inDetail = inDetail,
                     canShare = canShare,
                     shareInProgress = shareInProgress,
@@ -292,6 +297,10 @@ private fun CollapsingMapScaffold(
                     onToggleTheme = onToggleTheme,
                     onBack = onBack,
                     onShare = onShare,
+                    searchQuery = uiState.query,
+                    isSearching = uiState.isSearching,
+                    onQueryChange = onQueryChanged,
+                    onInfoClick = { showInfoDialog = true },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp)

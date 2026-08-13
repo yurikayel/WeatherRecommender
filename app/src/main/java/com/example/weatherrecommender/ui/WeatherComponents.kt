@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -151,11 +153,7 @@ internal fun CustomSearchBar(
     )
 }
 
-@Composable
-internal fun homeSheetTitle(uiState: WeatherUiState): String =
-    uiState.mapPin?.name
-        ?: uiState.deviceLocation?.name
-        ?: stringResource(R.string.app_title)
+
 
 /**
  * First row inside the scrolling sheet: city label + theme toggle on home; back, city, share, and
@@ -172,6 +170,10 @@ internal fun WeatherSheetHeader(
     onToggleTheme: () -> Unit,
     onBack: () -> Unit,
     onShare: () -> Unit,
+    searchQuery: String = "",
+    isSearching: Boolean = false,
+    onQueryChange: (String) -> Unit = {},
+    onInfoClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -192,17 +194,34 @@ internal fun WeatherSheetHeader(
                         contentDescription = stringResource(R.string.detail_back)
                     )
                 }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            } else {
+                CustomSearchBar(
+                    query = searchQuery,
+                    onQueryChange = onQueryChange,
+                    isSearching = isSearching,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 8.dp)
+                )
             }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (inDetail && onInfoClick != null) {
+                IconButton(onClick = onInfoClick) {
+                    Icon(
+                        Icons.Filled.Info,
+                        contentDescription = stringResource(R.string.detail_info)
+                    )
+                }
+            }
             if (canShare) {
                 IconButton(onClick = onShare, enabled = !shareInProgress) {
                     Icon(

@@ -10,6 +10,7 @@ import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
 import com.example.weatherrecommender.data.remote.NominatimApi
+import com.example.weatherrecommender.data.remote.WikipediaApi
 import com.example.weatherrecommender.data.remote.dto.DailyForecastDto
 import com.example.weatherrecommender.data.remote.dto.ForecastResponse
 import com.example.weatherrecommender.data.remote.dto.GeocodingLocationDto
@@ -78,6 +79,7 @@ class WeatherIntegrationTest {
     private val forecastApi: ForecastApi = mockk()
     private val marineApi: MarineApi = mockk()
     private val nominatimApi: NominatimApi = mockk()
+    private val wikipediaApi: WikipediaApi = mockk()
     private val getTopPicksUseCase: GetTopPicksUseCase = mockk(relaxed = true)
     private val connectivityObserver: ConnectivityObserver = mockk()
     private val deviceLocationProvider: DeviceLocationProvider = mockk(relaxed = true)
@@ -112,9 +114,10 @@ class WeatherIntegrationTest {
             .build()
         weatherDao = database.weatherDao()
 
-        repository = WeatherRepositoryImpl(geocodingApi, forecastApi, marineApi, nominatimApi, weatherDao)
+        repository = WeatherRepositoryImpl(geocodingApi, forecastApi, marineApi, nominatimApi, wikipediaApi, weatherDao)
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Available)
         coEvery { marineApi.getMarine(any(), any()) } returns MarineResponse(51.5, -0.1, null)
+        coEvery { wikipediaApi.getPageImage(any(), any(), any(), any(), any()) } returns com.example.weatherrecommender.data.remote.dto.WikipediaResponse(null)
         coEvery { forecastApi.getForecast(any(), any()) } returns sevenDayForecastResponse()
         coEvery { getTopPicksUseCase(any(), any()) } returns emptyList()
     }

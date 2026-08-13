@@ -21,7 +21,9 @@ data class LocationEntity(
     val featureCode: String? = null,
     val hasSeaAccess: Boolean = false,
     /** Epoch millis when the user last opened this location; 0 means never viewed. */
-    val lastViewedAt: Long = 0L
+    val lastViewedAt: Long = 0L,
+    /** URL to a background image for this city, usually fetched from Wikipedia. */
+    val imageUrl: String? = null
 )
 
 /**

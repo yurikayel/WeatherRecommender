@@ -9,6 +9,7 @@ import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
 import com.example.weatherrecommender.data.remote.NominatimApi
+import com.example.weatherrecommender.data.remote.WikipediaApi
 import com.example.weatherrecommender.data.remote.dto.NominatimResponse
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.AppResult
@@ -41,6 +42,7 @@ class WeatherRepositoryImpl @Inject constructor(
     private val forecastApi: ForecastApi,
     private val marineApi: MarineApi,
     private val nominatimApi: NominatimApi,
+    private val wikipediaApi: WikipediaApi,
     private val weatherDao: WeatherDao
 ) : WeatherRepository {
 
@@ -216,6 +218,11 @@ class WeatherRepositoryImpl @Inject constructor(
         val waveByDate = fetchWaveHeightsByDate(location)
         val hasSeaAccess = waveByDate?.values?.any { it != null } ?: location.hasSeaAccess
 
+        var imageUrl = location.imageUrl
+        if (imageUrl == null) {
+            imageUrl = fetchWikipediaImageUrl(location.name)
+        }
+
         val dailyForecasts = daily.time.indices.map { i ->
             val date = daily.time.getOrNull(i) ?: ""
             DailyForecast(
@@ -231,9 +238,21 @@ class WeatherRepositoryImpl @Inject constructor(
         }
 
         return WeatherForecast(
-            location = location.copy(hasSeaAccess = hasSeaAccess),
+            location = location.copy(hasSeaAccess = hasSeaAccess, imageUrl = imageUrl),
             dailyForecasts = dailyForecasts
         )
+    }
+
+    private suspend fun fetchWikipediaImageUrl(cityName: String): String? {
+        return try {
+            val response = wikipediaApi.getPageImage(titles = cityName)
+            val pages = response.query?.pages
+            // The map keys are page IDs. We just want the first valid original image.
+            pages?.values?.firstOrNull()?.original?.source
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null // Best-effort fetching
+        }
     }
 
     /**

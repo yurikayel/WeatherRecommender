@@ -111,7 +111,7 @@ private fun WeatherMapLibre(
                 target = Position(longitude = camera.longitude, latitude = camera.latitude),
                 zoom = camera.zoom
             ),
-            duration = 450.milliseconds
+            duration = 1200.milliseconds
         )
     }
 

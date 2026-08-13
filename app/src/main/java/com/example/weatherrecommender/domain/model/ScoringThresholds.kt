@@ -62,6 +62,7 @@ object ScoringThresholds {
     /** ASHRAE-style mild comfort band for outdoor activity. */
     const val OUTDOOR_TEMP_MILD_MIN = 14.0
 
+    /** Upper bound of the ASHRAE-style mild comfort band. Above this, it starts feeling warm. */
     const val OUTDOOR_TEMP_MILD_MAX = 26.0
 
     /** Extreme heat for extended walking (> 32 °C). */

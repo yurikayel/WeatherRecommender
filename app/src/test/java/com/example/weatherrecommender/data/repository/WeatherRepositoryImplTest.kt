@@ -6,6 +6,7 @@ import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
 import com.example.weatherrecommender.data.remote.NominatimApi
+import com.example.weatherrecommender.data.remote.WikipediaApi
 import com.example.weatherrecommender.data.remote.dto.DailyForecastDto
 import com.example.weatherrecommender.data.remote.dto.ForecastResponse
 import com.example.weatherrecommender.data.remote.dto.GeocodingLocationDto
@@ -40,6 +41,7 @@ class WeatherRepositoryImplTest {
     private val forecastApi: ForecastApi = mockk()
     private val marineApi: MarineApi = mockk()
     private val nominatimApi: NominatimApi = mockk()
+    private val wikipediaApi: WikipediaApi = mockk()
     private val weatherDao: WeatherDao = mockk(relaxed = true)
 
     private lateinit var repository: WeatherRepositoryImpl
@@ -64,10 +66,11 @@ class WeatherRepositoryImplTest {
     @Before
     fun setup() {
         repository = WeatherRepositoryImpl(
-            geocodingApi, forecastApi, marineApi, nominatimApi, weatherDao
+            geocodingApi, forecastApi, marineApi, nominatimApi, wikipediaApi, weatherDao
         )
         // Default: inland (no marine data) unless a test overrides it.
         coEvery { marineApi.getMarine(any(), any()) } returns MarineResponse(51.5, -0.1, null)
+        coEvery { wikipediaApi.getPageImage(any(), any(), any(), any(), any()) } returns com.example.weatherrecommender.data.remote.dto.WikipediaResponse(null)
     }
 
     @Test

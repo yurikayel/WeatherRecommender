@@ -141,7 +141,7 @@ private fun WeekSummaryRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.weight(1f)
         ) {
-            Column(modifier = Modifier.width(52.dp)) {
+            Column(modifier = Modifier.width(80.dp)) {
                 Text(
                     text = weekday,
                     style = MaterialTheme.typography.labelMedium,

@@ -111,6 +111,11 @@ class WeatherViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WeatherUiState())
+    
+    /**
+     * The single source of truth for the UI state.
+     * Combines search results, home data, and detail forecast data into a reactive stream.
+     */
     val uiState: StateFlow<WeatherUiState> = _uiState.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -219,6 +224,10 @@ class WeatherViewModel @Inject constructor(
         const val HISTORY_LIMIT = 10
     }
 
+    /**
+     * Called when the user types in the search bar.
+     * Debounces the query and triggers geocoding searches automatically.
+     */
     fun onQueryChanged(query: String) {
         _uiState.update { it.copy(query = query, error = null) }
         searchQueryFlow.value = query
@@ -228,6 +237,10 @@ class WeatherViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Initiates the Detail view for the given location.
+     * Handles resetting the UI, fetching the forecast, and updating the history cache.
+     */
     fun onLocationSelected(location: Location) {
         _uiState.update {
             it.copy(

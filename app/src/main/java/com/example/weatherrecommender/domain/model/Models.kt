@@ -13,6 +13,7 @@ package com.example.weatherrecommender.domain.model
  * @property population Number of inhabitants, when known (used to weight "top pick" suggestions).
  * @property featureCode GeoNames feature code (e.g., "PPLC" for a capital).
  * @property hasSeaAccess True when the coordinate is close enough to open water to support surfing.
+ * @property imageUrl URL to a background image for this city, usually fetched from Wikipedia.
  */
 data class Location(
     val id: Long,
@@ -24,7 +25,9 @@ data class Location(
     val elevation: Double? = null,
     val population: Long? = null,
     val featureCode: String? = null,
-    val hasSeaAccess: Boolean = false
+    val hasSeaAccess: Boolean = false,
+    /** URL to a background image for this city, usually fetched from Wikipedia. */
+    val imageUrl: String? = null
 ) {
     /**
      * Formats the location properties into a presentable string (e.g., "Paris, Île-de-France, France").

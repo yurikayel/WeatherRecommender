@@ -39,9 +39,13 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Tab
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -50,6 +54,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -86,6 +93,7 @@ internal fun HomeContent(
 ) {
     val scrollState = rememberScrollState()
     val pullToRefreshState = rememberPullToRefreshState()
+    var selectedHomeTabIndex by remember { mutableIntStateOf(0) }
     // Material3 1.3.x PullToRefreshBox has no `enabled`; use Modifier.pullToRefresh instead.
     val canPullToRefresh = mapFullyExpanded && scrollState.value == 0
     Box(
@@ -109,13 +117,6 @@ internal fun HomeContent(
                 onCurrentLocationClick = onCurrentLocationClick
             )
 
-            Spacer(Modifier.height(16.dp))
-            CustomSearchBar(
-                query = uiState.query,
-                onQueryChange = onQueryChanged,
-                isSearching = uiState.isSearching,
-                modifier = Modifier.fillMaxWidth()
-            )
 
             uiState.error?.let { error ->
                 Spacer(Modifier.height(12.dp))
@@ -134,29 +135,34 @@ internal fun HomeContent(
             }
 
             if (uiState.searchResults.isEmpty()) {
-                Spacer(Modifier.height(28.dp))
-                Text(
-                    text = stringResource(R.string.home_top_picks_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    modifier = Modifier.semantics { heading() }
-                )
-                Spacer(Modifier.height(12.dp))
-                TopPicksSection(
-                    topPicks = uiState.topPicks,
-                    isLoading = uiState.isLoadingTopPicks,
-                    onLocationSelected = onLocationSelected
-                )
-
-                if (uiState.recentHistory.isNotEmpty()) {
-                    Spacer(Modifier.height(28.dp))
-                    Text(
-                        text = stringResource(R.string.home_history_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.semantics { heading() }
+                Spacer(Modifier.height(24.dp))
+                PrimaryTabRow(
+                    selectedTabIndex = selectedHomeTabIndex,
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ) {
+                    Tab(
+                        selected = selectedHomeTabIndex == 0,
+                        onClick = { selectedHomeTabIndex = 0 },
+                        text = { Text(stringResource(R.string.tab_top_picks)) }
                     )
-                    Spacer(Modifier.height(12.dp))
+                    if (uiState.recentHistory.isNotEmpty()) {
+                        Tab(
+                            selected = selectedHomeTabIndex == 1,
+                            onClick = { selectedHomeTabIndex = 1 },
+                            text = { Text(stringResource(R.string.tab_recent)) }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                
+                if (selectedHomeTabIndex == 0) {
+                    TopPicksSection(
+                        topPicks = uiState.topPicks,
+                        isLoading = uiState.isLoadingTopPicks,
+                        onLocationSelected = onLocationSelected
+                    )
+                } else if (selectedHomeTabIndex == 1 && uiState.recentHistory.isNotEmpty()) {
                     HistorySection(
                         history = uiState.recentHistory,
                         onLocationSelected = onLocationSelected
@@ -324,7 +330,7 @@ private fun TopPickCard(pick: TopPick, onClick: () -> Unit) {
 
     Card(
         modifier = Modifier
-            .width(TopPickCardWidth)
+            .fillMaxWidth()
             .height(TopPickCardHeight)
             .graphicsLayer {
                 scaleX = scale
@@ -335,76 +341,106 @@ private fun TopPickCard(pick: TopPick, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+        Box(modifier = Modifier.fillMaxSize()) {
+            val hasImage = pick.location.imageUrl != null
+            if (hasImage) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(pick.location.imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.2f),
+                                    Color.Black.copy(alpha = 0.8f)
+                                )
+                            )
+                        )
+                )
+            }
+            
+            val contentColor = if (hasImage) Color.White else MaterialTheme.colorScheme.onSurface
+            val iconTint = if (hasImage) Color.White else MaterialTheme.colorScheme.primary
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text(
+                            text = pick.location.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = contentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        // Always reserve one subtitle line so cards stay equal height with/without country.
+                        Text(
+                            text = pick.location.country.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            minLines = 1
+                        )
+                    }
+                    // Fixed weather column so icon + temp always occupy the same space.
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        modifier = Modifier.width(56.dp).height(52.dp),
+                        verticalArrangement = Arrangement.Top
+                    ) {
+                        Icon(
+                            weatherCodeIcon(pick.weatherCode),
+                            contentDescription = weatherCodeDescription(pick.weatherCode),
+                            tint = contentColor,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.temp_degrees, pick.maxTemp.roundToInt()),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = contentColor,
+                            maxLines = 1
+                        )
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        activityIcon(pick.topActivity.activity),
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        text = pick.location.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        text = pick.topActivity.activity.asUiText().asString(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = contentColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    // Always reserve one subtitle line so cards stay equal height with/without country.
-                    Text(
-                        text = pick.location.country.orEmpty(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        minLines = 1
-                    )
                 }
-                // Fixed weather column so icon + temp always occupy the same space.
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    modifier = Modifier.width(56.dp).height(52.dp),
-                    verticalArrangement = Arrangement.Top
-                ) {
-                    Icon(
-                        weatherCodeIcon(pick.weatherCode),
-                        contentDescription = weatherCodeDescription(pick.weatherCode),
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.temp_degrees, pick.maxTemp.roundToInt()),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1
-                    )
-                }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    activityIcon(pick.topActivity.activity),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = pick.topActivity.activity.asUiText().asString(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
@@ -420,13 +456,13 @@ private fun HistorySection(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         history.forEach { location ->
-            HistoryRow(location = location, onClick = { onLocationSelected(location) })
+            HistoryCard(location = location, onClick = { onLocationSelected(location) })
         }
     }
 }
 
 @Composable
-private fun HistoryRow(location: Location, onClick: () -> Unit) {
+private fun HistoryCard(location: Location, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -439,6 +475,7 @@ private fun HistoryRow(location: Location, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .height(110.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -449,26 +486,59 @@ private fun HistoryRow(location: Location, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            Text(
-                text = location.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            val subtitle = listOfNotNull(location.admin1, location.country)
-                .filter { it.isNotBlank() }
-                .joinToString(", ")
-            if (subtitle.isNotEmpty()) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            val hasImage = location.imageUrl != null
+            if (hasImage) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(location.imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.2f),
+                                    Color.Black.copy(alpha = 0.8f)
+                                )
+                            )
+                        )
+                )
+            }
+            
+            val contentColor = if (hasImage) Color.White else MaterialTheme.colorScheme.onSurface
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
                 Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    text = location.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                val subtitle = listOfNotNull(location.admin1, location.country).filter { it.isNotBlank() }.joinToString(", ")
+                if (subtitle.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = contentColor.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

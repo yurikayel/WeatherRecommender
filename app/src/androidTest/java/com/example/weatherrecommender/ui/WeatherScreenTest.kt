@@ -217,7 +217,8 @@ class WeatherScreenTest {
             )
         )
 
-        composeTestRule.onNodeWithText("Recently viewed").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Recent").performClick()
+        composeTestRule.onNodeWithText("Recent").assertIsDisplayed()
         composeTestRule.onNodeWithText("London").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Lisbon").performScrollTo().assertIsDisplayed()
     }
@@ -359,11 +360,6 @@ class WeatherScreenTest {
 
         // Invoke OnClick via semantics so the collapsing map/sheet header cannot steal the touch.
         composeTestRule.onNodeWithTag("week_summary_day_1")
-            .performSemanticsAction(SemanticsActions.OnClick)
-        assertEquals(1, selectedDay)
-
-        selectedDay = -1
-        composeTestRule.onNodeWithTag("day_chip_1")
             .performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(1, selectedDay)
     }

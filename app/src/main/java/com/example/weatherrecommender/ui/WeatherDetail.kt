@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -35,17 +36,25 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.material3.Tab
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import coil.compose.AsyncImage
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -73,8 +82,6 @@ import com.example.weatherrecommender.ui.util.weatherUiCategory
 import kotlin.math.roundToInt
 
 private const val DAY_SWITCH_MS = 320
-private val DayChipWidth = 72.dp
-private val DayChipHeight = 120.dp
 
 /**
  * Detail body inside the collapsing-map sheet: geography chips, day selector, and ranked activities.
@@ -94,7 +101,30 @@ internal fun DetailContent(
             .padding(horizontal = 20.dp)
     ) {
         val location = uiState.selectedLocation
-        location?.let { GeoChipsRow(it) }
+        location?.let { loc ->
+            if (loc.imageUrl != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    AsyncImage(
+                        model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                            .data(loc.imageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                        alpha = 0.9f
+                    )
+                }
+            }
+        }
 
         if (uiState.isLoadingForecast && uiState.forecast == null) {
             Spacer(Modifier.height(16.dp))
@@ -116,42 +146,19 @@ internal fun DetailContent(
 
         val forecast = uiState.forecast
         if (forecast != null) {
-            Spacer(Modifier.height(20.dp))
-            WeekSummarySection(
-                forecast = forecast,
-                weekTopActivities = uiState.weekTopActivities,
-                selectedDayIndex = uiState.selectedDayIndex,
-                onDaySelected = onDaySelected
-            )
-
-            Spacer(Modifier.height(24.dp))
-            Text(
-                text = stringResource(R.string.detail_pick_a_day),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                modifier = Modifier.semantics { heading() }
-            )
-            Spacer(Modifier.height(12.dp))
-            DaySelectorRow(
-                days = forecast.dailyForecasts,
-                selectedIndex = uiState.selectedDayIndex,
-                onDaySelected = onDaySelected
-            )
-
             val selectedDay = forecast.dailyForecasts.getOrNull(uiState.selectedDayIndex)
-            Spacer(Modifier.height(28.dp))
+            val selectedDayName = selectedDay?.let { isoDateToWeekday(it.date) } ?: ""
+            
+            Spacer(Modifier.height(12.dp))
             Text(
-                text = stringResource(
-                    R.string.detail_activities_for_day,
-                    selectedDay?.let { isoDateToWeekday(it.date) } ?: ""
-                ),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                text = stringResource(R.string.tab_activities) + " - " + selectedDayName,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.semantics { heading() }
             )
-            Spacer(Modifier.height(12.dp))
-
-            // Slide-up + fade when the selected day changes so the re-ranking reads as new content.
+            Spacer(Modifier.height(16.dp))
+            
             AnimatedContent(
                 targetState = uiState.selectedDayIndex to uiState.rankedActivities,
                 transitionSpec = {
@@ -161,172 +168,76 @@ internal fun DetailContent(
                 label = "day_activities"
             ) { (_, activities) ->
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.animateContentSize()
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth().animateContentSize()
                 ) {
-                    activities.forEach { ranked -> ActivityCard(ranked) }
+                    activities.forEach { ranked ->
+                        ActivityCard(ranked)
+                    }
                 }
             }
+            
+            Spacer(Modifier.height(32.dp))
+            
+            Text(
+                text = stringResource(R.string.tab_7_day),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() }
+            )
+            Spacer(Modifier.height(16.dp))
+
+            WeekSummarySection(
+                forecast = forecast,
+                weekTopActivities = uiState.weekTopActivities,
+                selectedDayIndex = uiState.selectedDayIndex,
+                onDaySelected = onDaySelected
+            )
             Spacer(Modifier.height(24.dp))
         }
     }
 }
 
 @Composable
-private fun GeoChipsRow(location: Location) {
-    Spacer(Modifier.height(4.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        val subtitle = listOfNotNull(location.admin1, location.country).joinToString(", ")
-        if (subtitle.isNotBlank()) {
-            InfoChip(text = subtitle)
-        }
-        InfoChip(
-            text = stringResource(
-                if (location.hasSeaAccess) R.string.chip_coastal else R.string.chip_inland
-            )
-        )
-        location.elevation?.let {
-            InfoChip(text = stringResource(R.string.chip_elevation, it.roundToInt()))
-        }
-    }
-}
-
-@Composable
-private fun InfoChip(text: String) {
-    Box(
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-        )
-    }
-}
-
-@Composable
-private fun DaySelectorRow(
-    days: List<DailyForecast>,
-    selectedIndex: Int,
-    onDaySelected: (Int) -> Unit
+internal fun LocationInfoDialog(
+    location: Location,
+    onDismiss: () -> Unit
 ) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        itemsIndexed(days) { index, day ->
-            DaySelectorCard(
-                day = day,
-                dayIndex = index,
-                selected = index == selectedIndex,
-                onClick = { onDaySelected(index) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun DaySelectorCard(
-    day: DailyForecast,
-    dayIndex: Int,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    // Animate selection so tapping a day feels responsive rather than a hard swap.
-    // Selected keeps strong primary styling for contrast; unselected uses weather pastels.
-    val background by animateColorAsState(
-        targetValue = if (selected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            weatherPastelBackground(day.weatherCode)
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(text = location.name)
         },
-        animationSpec = tween(250),
-        label = "day_bg"
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.onPrimary
-        else MaterialTheme.colorScheme.onSurface,
-        animationSpec = tween(250),
-        label = "day_content"
-    )
-    val scale by animateFloatAsState(
-        targetValue = if (selected) 1.06f else 1f,
-        animationSpec = tween(250, easing = FastOutSlowInEasing),
-        label = "day_scale"
-    )
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .width(DayChipWidth)
-            .height(DayChipHeight)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clip(RoundedCornerShape(18.dp))
-            .background(background)
-            .then(
-                if (selected) Modifier
-                else Modifier.border(
-                    1.dp,
-                    MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
-                    RoundedCornerShape(18.dp)
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val subtitle = listOfNotNull(location.admin1, location.country).joinToString(", ")
+                if (subtitle.isNotBlank()) {
+                    Text(text = subtitle, style = MaterialTheme.typography.bodyLarge)
+                }
+                Text(
+                    text = stringResource(
+                        if (location.hasSeaAccess) R.string.chip_coastal else R.string.chip_inland
+                    ),
+                    style = MaterialTheme.typography.bodyLarge
                 )
-            )
-            .clickable(onClick = onClick)
-            .testTag("day_chip_$dayIndex")
-            .padding(horizontal = 10.dp, vertical = 12.dp)
-    ) {
-        Text(
-            text = isoDateToWeekday(day.date),
-            style = MaterialTheme.typography.labelMedium,
-            color = contentColor.copy(alpha = 0.8f),
-            maxLines = 1
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = isoDateToDayOfMonth(day.date),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = contentColor,
-            maxLines = 1
-        )
-        Spacer(Modifier.height(8.dp))
-        Icon(
-            weatherCodeIcon(day.weatherCode),
-            contentDescription = weatherCodeDescription(day.weatherCode),
-            tint = contentColor,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.temp_degrees, day.maxTemp.roundToInt()),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = contentColor,
-            maxLines = 1
-        )
-    }
+                location.elevation?.let {
+                    Text(
+                        text = stringResource(R.string.chip_elevation, it.roundToInt()),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(android.R.string.ok))
+            }
+        }
+    )
 }
 
-/**
- * Soft pastel container for unselected day chips. Cloudy/fog stay on the neutral
- * surfaceVariant; other conditions get a light weather-tinted pastel.
- * Uses [MaterialTheme] luminance so Paparazzi darkTheme overrides are respected.
- */
-@Composable
-private fun weatherPastelBackground(weatherCode: Int): Color {
-    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    return when (weatherUiCategory(weatherCode)) {
-        WeatherUiCategory.CLEAR -> if (isDark) PastelSunnyDark else PastelSunnyLight
-        WeatherUiCategory.RAIN -> if (isDark) PastelRainDark else PastelRainLight
-        WeatherUiCategory.SNOW -> if (isDark) PastelSnowDark else PastelSnowLight
-        WeatherUiCategory.THUNDERSTORM -> if (isDark) PastelThunderDark else PastelThunderLight
-        WeatherUiCategory.CLOUDY -> MaterialTheme.colorScheme.surfaceVariant
-    }
-}
+
 
 @Composable
 private fun SyncErrorBanner(message: String) {
@@ -346,70 +257,46 @@ private fun SyncErrorBanner(message: String) {
         )
     }
 }
-
 @Composable
 private fun ActivityCard(rankedActivity: RankedActivity) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics(mergeDescendants = true) {},
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
-            modifier = Modifier.padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // The ring sweeps up to its value on first composition and eases between values on re-rank.
-            val animatedScore by animateFloatAsState(
-                targetValue = rankedActivity.score / 100f,
-                animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
-                label = "score_ring"
-            )
-            Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(
-                    progress = { animatedScore },
-                    modifier = Modifier.fillMaxSize(),
-                    strokeWidth = 6.dp,
-                    color = when {
-                        rankedActivity.score > ScoringThresholds.SCORE_HIGH -> MaterialTheme.colorScheme.primary
-                        rankedActivity.score > ScoringThresholds.SCORE_MID -> MaterialTheme.colorScheme.secondary
-                        else -> MaterialTheme.colorScheme.error
-                    },
-                    trackColor = MaterialTheme.colorScheme.surface
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    activityIcon(rankedActivity.activity),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(24.dp)
                 )
+                Spacer(Modifier.width(12.dp))
                 Text(
-                    text = rankedActivity.score.toString(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    text = rankedActivity.activity.asUiText().asString(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             }
-            Spacer(Modifier.width(20.dp))
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        activityIcon(rankedActivity.activity),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = rankedActivity.activity.asUiText().asString(),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+            Text(
+                text = rankedActivity.score.toString(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    rankedActivity.score > ScoringThresholds.SCORE_HIGH -> MaterialTheme.colorScheme.primary
+                    rankedActivity.score > ScoringThresholds.SCORE_MID -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.error
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = rankedActivity.reasonKey.asUiText(rankedActivity.reasonArgs).asString(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
-            }
+            )
         }
     }
 }
