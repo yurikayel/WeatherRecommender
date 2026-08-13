@@ -167,26 +167,19 @@ internal fun DetailContent(
                 },
                 label = "day_activities"
             ) { (_, activities) ->
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
                     modifier = Modifier.fillMaxWidth().animateContentSize()
                 ) {
                     activities.forEach { ranked ->
-                        ActivityCard(ranked)
+                        ActivityItem(ranked)
                     }
                 }
             }
             
-            Spacer(Modifier.height(32.dp))
             
-            Text(
-                text = stringResource(R.string.tab_7_day),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.semantics { heading() }
-            )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(32.dp))
+
 
             WeekSummarySection(
                 forecast = forecast,
@@ -258,45 +251,34 @@ private fun SyncErrorBanner(message: String) {
     }
 }
 @Composable
-private fun ActivityCard(rankedActivity: RankedActivity) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+private fun ActivityItem(rankedActivity: RankedActivity) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    activityIcon(rankedActivity.activity),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = rankedActivity.activity.asUiText().asString(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                )
+        Icon(
+            activityIcon(rankedActivity.activity),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(24.dp)
+        )
+        Text(
+            text = rankedActivity.activity.asUiText().asString(),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        Text(
+            text = rankedActivity.score.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = when {
+                rankedActivity.score > ScoringThresholds.SCORE_HIGH -> MaterialTheme.colorScheme.primary
+                rankedActivity.score > ScoringThresholds.SCORE_MID -> MaterialTheme.colorScheme.secondary
+                else -> MaterialTheme.colorScheme.error
             }
-            Text(
-                text = rankedActivity.score.toString(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = when {
-                    rankedActivity.score > ScoringThresholds.SCORE_HIGH -> MaterialTheme.colorScheme.primary
-                    rankedActivity.score > ScoringThresholds.SCORE_MID -> MaterialTheme.colorScheme.secondary
-                    else -> MaterialTheme.colorScheme.error
-                }
-            )
-        }
+        )
     }
 }
