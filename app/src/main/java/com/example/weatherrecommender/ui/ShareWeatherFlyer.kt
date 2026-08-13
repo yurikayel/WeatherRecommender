@@ -414,81 +414,45 @@ private fun FlyerActivities(day: DailyForecast, activities: List<RankedActivity>
         stringResource(R.string.detail_activities_for_day, isoDateToWeekday(day.date))
     )
     Spacer(Modifier.height(4.dp))
-    Column(
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
     ) {
-        activities.take(MAX_FLYER_ACTIVITIES).forEach { ranked ->
-            FlyerActivityRow(ranked)
+        activities.sortedByDescending { it.score }.take(MAX_FLYER_ACTIVITIES).forEach { ranked ->
+            FlyerActivityItem(ranked)
         }
     }
 }
 
 @Composable
-private fun FlyerActivityRow(ranked: RankedActivity) {
+private fun FlyerActivityItem(ranked: RankedActivity) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(11.dp))
-            .background(FlyerSurface.copy(alpha = 0.9f))
-            .padding(horizontal = 10.dp, vertical = 5.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(PremiumPrimary.copy(alpha = 0.3f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = activityIcon(ranked.activity),
-                contentDescription = null,
-                tint = FlyerAccent,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = ranked.activity.asUiText().asString(),
-                style = FlyerType.activityName,
-                color = FlyerInk,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = ranked.reasonKey.asUiText(ranked.reasonArgs).asString(),
-                style = FlyerType.activityReason,
-                color = FlyerMuted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(2.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(FlyerChip)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(ranked.score.coerceIn(0, 100) / 100f)
-                        .height(3.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(flyerScoreColor(ranked.score))
-                )
-            }
-        }
-        Spacer(Modifier.width(8.dp))
+        Icon(
+            imageVector = activityIcon(ranked.activity),
+            contentDescription = null,
+            tint = FlyerInk,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(
+            text = ranked.activity.asUiText().asString(),
+            style = FlyerType.activityName,
+            color = FlyerInk,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
         Text(
             text = ranked.score.toString(),
-            style = FlyerType.score,
+            style = FlyerType.activityName,
+            fontWeight = FontWeight.Bold,
             color = flyerScoreColor(ranked.score)
         )
     }
 }
+
 
 @Composable
 private fun FlyerSectionLabel(text: String) {

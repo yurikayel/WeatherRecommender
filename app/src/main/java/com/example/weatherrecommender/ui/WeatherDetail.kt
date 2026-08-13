@@ -13,6 +13,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -169,9 +171,12 @@ internal fun DetailContent(
             ) { (_, activities) ->
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    modifier = Modifier.fillMaxWidth().animateContentSize()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .animateContentSize()
                 ) {
-                    activities.forEach { ranked ->
+                    activities.sortedByDescending { it.score }.forEach { ranked ->
                         ActivityItem(ranked)
                     }
                 }
@@ -179,6 +184,15 @@ internal fun DetailContent(
             
             
             Spacer(Modifier.height(32.dp))
+
+            Text(
+                text = stringResource(R.string.tab_7_day),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() }
+            )
+            Spacer(Modifier.height(16.dp))
 
 
             WeekSummarySection(
