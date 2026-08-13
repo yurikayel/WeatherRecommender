@@ -7,6 +7,13 @@ import kotlinx.serialization.Serializable
  * Reverse-geocode payload from the Nominatim (OpenStreetMap) API.
  *
  * Open-Meteo Geocoding is forward-only (name → coordinates), so map taps use Nominatim.
+ *
+ * @property placeId Unique OpenStreetMap identifier for the place.
+ * @property lat Latitude coordinate as a decimal string.
+ * @property lon Longitude coordinate as a decimal string.
+ * @property displayName Full formatted address string.
+ * @property name Localized name of the feature or place.
+ * @property address Breakdown of address components (city, state, country, etc.).
  */
 @Serializable
 data class NominatimResponse(
@@ -18,6 +25,17 @@ data class NominatimResponse(
     @SerialName("address") val address: NominatimAddress? = null
 )
 
+/**
+ * Detailed breakdown of address components returned by Nominatim reverse geocoding.
+ *
+ * @property city Name of the city (if applicable).
+ * @property town Name of the town (if applicable).
+ * @property village Name of the village (if applicable).
+ * @property municipality Name of the municipality (if applicable).
+ * @property county Name of the county or district (if applicable).
+ * @property state Name of the state, province, or region.
+ * @property country Name of the country.
+ */
 @Serializable
 data class NominatimAddress(
     @SerialName("city") val city: String? = null,

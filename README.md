@@ -1,21 +1,52 @@
 # Concierge Weather Recommender
 
 ## a. Project Overview 📱
-This is a native Android app that implements the Concierge Weather Recommender assignment brief: search for a city and see, **for each of the next 7 days**, a ranked list of activities (Skiing, Surfing, Outdoor sightseeing, Indoor sightseeing) suited to that day's Open-Meteo forecast. Several polish features below are **stretch** beyond a minimal brief and should be scored as such.
+This is a native Android app that implements the Concierge Weather Recommender assignment brief: search for a city and see a **7-Day Forecast** dashboard — for each of the next 7 days, weather conditions plus the **best-ranked activity** for that day — then drill into per-day ranked activities (Skiing, Surfing, Outdoor sightseeing, Indoor sightseeing) suited to that day's Open-Meteo forecast. Several polish features below are **stretch** beyond a minimal brief and should be scored as such.
 
 | Scope | What |
 |-------|------|
-| **Core (brief)** | City search, 7-day forecast, per-day activity ranking, offline-first Room cache, Clean Architecture + tests |
-| **Stretch** | Home top picks; History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 9:16 weather flyer PNG (+ save to Downloads); collapsing square (1:1) MapLibre map background + sheet header + Crossfade body (Nominatim reverse, no Google key); GPS current-location chip; pastel day chips; Paparazzi + instrumented CI |
+| **Core (brief)** | City search, **7-day summary with top activity per day**, per-day activity ranking, offline-first Room cache, Clean Architecture + tests |
+| **Stretch** | Home top picks (postcard cards + Top Picks / Recent tabs); History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; Wikipedia city thumbnails (Room v7 `imageUrl`); WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 9:16 weather flyer PNG (+ city-image background, save to Downloads); collapsing square (1:1) MapLibre map background + sheet header + Crossfade body (Nominatim reverse, no Google key); GPS current-location chip; Paparazzi + instrumented CI |
 
 Key experience details:
-- **Per-day recommendations**: the detail screen shows a day selector; tapping a day re-ranks its activities. There is no single "week-long" score.
+- **7-Day Forecast (core)**: detail shows compact ranked activities for the selected day, then a **7-Day** dashboard (weather icon, high/low, precipitation, top activity + score per row). Tapping a week row re-ranks that day's activities. There are no separate "Pick a day" chips.
+- **Per-day recommendations**: a compact horizontal activity row (icon + name + score) reflects `selectedDayIndex`. There is no single "week-long" score.
 - **Geography-aware activities**: activities that don't make sense for a location are hidden entirely (e.g. surfing is only offered where there is sea access; skiing only in mountainous terrain or when snow is falling).
-- **Home "top picks"**: the home screen surfaces a randomised, population-weighted set of well-known cities, each with its best activity for today (stretch). Pull-to-refresh on home (assignment **bonus**, not a core brief item) force-refreshes this feed — only when the sheet is scrolled to the top **and** the collapsing map header is fully expanded (`modifier.pullToRefresh` `enabled`), so PTR does not fight nested-scroll collapse. Detail has no PTR.
-- **Recently viewed History**: after Top Picks, lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
-- **In-screen map**: MapLibre collapsing map background (expanded **square / 1:1**) with a rounded surface sheet that scrolls up to cover it — no overlay AppBar; the sheet header row shows city name + theme toggle (home) or back + city + share + theme (detail). Home↔detail Crossfades only the sheet body (no full-screen slide). Selecting a city updates the map camera in place; back fades home back and resets the camera to the device location (or a static London default without GPS).
+- **Home "top picks"**: vertical postcard cards (city name, best activity, temp; Wikipedia thumbnail when available), behind a **Top Picks / Recent** tab row (stretch). Pull-to-refresh on home (assignment **bonus**) force-refreshes this feed — only when the sheet is scrolled to the top **and** the collapsing map header is fully expanded (`modifier.pullToRefresh` `enabled`). Detail has no PTR.
+- **Recently viewed History**: the **Recent** tab lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
+- **In-screen map**: MapLibre collapsing map background (expanded **square / 1:1**) with a rounded surface sheet — no overlay AppBar. Sheet header: **search field + theme** on home; **back + city + info + share + theme** on detail. Geography chips (coastal/inland/elevation) live in the **Info** dialog. Home↔detail Crossfades only the sheet body. Selecting a city updates the map camera in place; back resets to the device location (or static London without GPS).
 - **Current location**: with permission granted, the last-known GPS fix is reverse-geocoded to a city — home shows a discreet `Current location · {City}` chip and the map centers there; tapping the chip opens that city's weather (GPS never auto-navigates to detail). Denied → chip hidden, static default framing.
 - **Share**: detail sheet header share action exports a branded 9:16 portrait "weather flyer" PNG with denser display-scale typography (header + selected-day hero + 7-day strip + ranked activities with score bars) via the system share sheet and best-effort saves a copy to Downloads.
+
+## PR Review Guide
+
+**Suggested review order**
+1. Home → search in the sheet header (e.g. Lisbon) → detail.
+2. Compact activity row for the selected day, then **7-Day** rows (weather, temps, precip, best activity).
+3. Tap a week row → activities re-rank. Open **Info** for coastal/inland/elevation.
+4. Share flyer still exports a 9:16 poster (city image when cached).
+
+**Where to look in code**
+| Topic | Location |
+|-------|----------|
+| 7-day dashboard UI | `WeatherWeekSummary.kt` → `WeekSummarySection` |
+| Top activity per day | `WeatherViewModel.kt` → `weekTopActivities` |
+| Per-day ranking | `GetRankedActivitiesUseCase` + `ActivityScorer` strategies |
+| Offline SSOT | `WeatherRepositoryImpl` + Room `WeatherDao` |
+| Score thresholds | `ScoringThresholds.kt` (domain) + README §g |
+
+**Run manually**: `./gradlew installDebug` → search in header → detail → tap week rows → Info dialog → toggle dark mode → share.
+
+**Pull requests**: [PR #1](https://github.com/yurikayel/WeatherRecommender/pull/1) (original delivery) · PR #2 `feat/review-feedback` (review feedback follow-up).
+
+**Review feedback mapping (3.8 → this PR)**
+
+| Gap | Response |
+|-----|----------|
+| Missing 7-day forecast summary | `WeekSummarySection` on detail with weather, temps, precip, and top activity per day |
+| Magic numbers without justification | `ScoringThresholds` + KDoc + table in §g |
+| README PR Review / KMP | this guide + expanded §k |
+| No integration tests | Robolectric `WeatherIntegrationTest` (VM + Room) and instrumented `RoomDaoIntegrationTest` |
 
 ## b. Platform and Tooling Choices
 - **Language**: Kotlin (AGP built-in Kotlin; `org.jetbrains.kotlin.android` plugin removed)
@@ -25,7 +56,7 @@ Key experience details:
 - **Local Persistence**: Room Database (Offline-First / SSOT)
 - **Dependency Injection**: Dagger Hilt
 - **Concurrency**: Kotlin Coroutines and StateFlow
-- **Testing**: JUnit 4, MockK, Turbine, Paparazzi 2.x (CI runs with `-Ppaparazzi`)
+- **Testing**: JUnit 4, MockK, Turbine, Robolectric (ViewModel + Room integration), Paparazzi 2.x (CI runs with `-Ppaparazzi`)
 - **Quality**: detekt, Kover coverage, Android Lint
 
 ## c. Architecture and Technical Decisions 🏗️
@@ -48,17 +79,18 @@ Key experience details:
 Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations.auto-download=true`); the Foojay resolver plugin is configured in `settings.gradle.kts`.
 
 ## e. How to run tests & testing strategy 🧪
-- **Unit tests**: `./gradlew testDebugUnitTest` (requires JDK 21+) — ~98 tests across domain, data, and ViewModel (plus Paparazzi below)
+- **Unit tests**: `./gradlew testDebugUnitTest` (requires JDK 21+) — domain, data, ViewModel, and Robolectric integration (`WeatherIntegrationTest`)
 - **Paparazzi snapshots**: `./gradlew recordPaparazziDebug -Ppaparazzi` (verify with `verifyPaparazziDebug -Ppaparazzi`; 9 golden PNGs live in `app/src/test/snapshots/`)
 - **Lint**: `./gradlew lintDebug`
 - **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify`
 - **Static analysis**: `./gradlew detekt`
-- **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (22 Compose UI tests for key flows, plus 5 Room migration tests; also run on CI emulator)
+- **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (Compose UI flows + Room DAO integration + migration tests; also run on CI emulator)
 
 **Testing Strategy**:
 - **Domain Layer**: Activity scorers and `GetRankedActivitiesUseCase` are pure Kotlin, unit-tested with JUnit.
 - **Data Layer**: `WeatherRepositoryImpl` tested with MockK for APIs and DAO; `LocationSyncer` and rate-limit retry interceptor covered.
-- **UI Layer**: `WeatherViewModel` tested with Turbine for StateFlow emissions; Compose UI has **substantial coverage of key flows** (22 instrumented tests: home, search, detail, errors, dark theme smoke, current-location chip; location permission pre-granted via `GrantPermissionRule`) — not claimed as exhaustive full-UI coverage.
+- **UI Layer**: `WeatherViewModel` tested with Turbine; Robolectric `WeatherIntegrationTest` exercises VM + real Room + mocked APIs; Compose UI has **substantial coverage of key flows** (instrumented tests: home, search, detail incl. 7-Day Forecast, errors, dark theme, current-location chip; location permission pre-granted via `GrantPermissionRule`) — not claimed as exhaustive full-UI coverage.
+- **Integration**: `RoomDaoIntegrationTest` (instrumented) covers insert/retrieve, `lastViewedAt` preservation, eviction, and forecast flow emissions.
 - **Snapshots**: Paparazzi goldens committed and verified in CI with `-Ppaparazzi`.
 
 ### Bonus features (assignment stretch goals)
@@ -66,14 +98,14 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Bonus | Status | Implementation |
 |-------|--------|----------------|
 | Offline cache | Done | Room SSOT + WorkManager background sync (chunked refreshes) |
-| Recently viewed History | Done | Home section after Top Picks; Room `lastViewedAt`; last 10; Nominatim/GeoNames dedupe |
+| Recently viewed History | Done | Home **Recent** tab; Room `lastViewedAt`; last 10; Nominatim/GeoNames dedupe |
 | Pull-to-refresh | Done (bonus) | Home-only `modifier.pullToRefresh` (force-refresh top picks); `enabled` only when sheet at top **and** map header fully expanded — not on detail |
 | Dark mode + theme toggle | Done | Navy dark palette; sheet-header theme toggle; DataStore preference (system until overridden, then persisted) |
-| Advanced UI polish / animation | Done | Collapsing square (1:1) map background + sheet header + home↔detail Crossfade, day selector, score ring, top-pick press scale, shimmer/crossfade; pastel day chips; normalized top-pick cards |
+| Advanced UI polish / animation | Done | Collapsing square (1:1) map + sheet header + home↔detail Crossfade; compact activity row; postcard Top Picks; score ring; press scale; shimmer/crossfade |
 | Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground) |
 | Snapshot tests | Done | Paparazzi 2.0.0-alpha05, 9 golden PNGs (home/detail incl. location chip + history + share flyer), verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
-| Substantial UI test coverage | Done | 22 instrumented Compose tests for key flows (home, search, top picks, chips, day selection, back, banners, dark theme, current-location chip) |
-| Share weather flyer | Done | Detail share → branded 9:16 portrait PNG (`GraphicsLayer` + FileProvider); also best-effort save to Downloads |
+| Substantial UI test coverage | Done | 22 instrumented Compose tests for key flows (home, header search, top picks, week-row day selection, Info dialog, back, banners, dark theme, current-location chip) |
+| Share weather flyer | Done | Detail share → branded 9:16 portrait PNG (`GraphicsLayer` + FileProvider); city-image background when cached; best-effort save to Downloads |
 | In-screen map | Done | Collapsing square (1:1) MapLibre background + sheet header (no overlay AppBar) + OpenFreeMap (no Google key); sheet covers map on scroll; home centers on device location (static London fallback, wider zoom); tap → Nominatim reverse; camera/pin in ViewModel |
 | Current-location chip | Done | Runtime permission → LocationManager last-known fix → Nominatim reverse; home header chip (opt-in tap); map centers on fix |
 
@@ -107,6 +139,28 @@ The map is a **collapsing 1:1 background** (expanded height = screen width). Nes
 - **Indoor Sightseeing**: the wet-weather fallback — rises with rain/snow and cold, so it climbs the ranking exactly when outdoor options fall.
 
 Because scoring is per-day, the top activity for a city legitimately changes across the week (e.g. Outdoor on a sunny day, Indoor on a stormy one).
+
+**Centralised thresholds** (`ScoringThresholds.kt`): all scorer cut-offs and UI score bands (≥75 primary, >40 secondary) live in one object with meteorological KDoc. Scores are 0–100; each scorer's `BASE_SCORE` sets a neutral starting point before weather adjustments, so rankings are **relative within a day**.
+
+| Threshold | Value | Justification | Reference |
+|-----------|-------|---------------|-----------|
+| `SCORE_HIGH` / `SCORE_MID` | 75 / 40 | UI colour bands for activity suitability | Product convention |
+| `SURF_WAVE_MIN_RIDEABLE` | 0.4 m | Below ~40 cm chop is not rideable | Surf guides / Beaufort |
+| `SURF_WAVE_IDEAL_MAX` | 2.5 m | Hazardous for recreational surfers above this | Surf safety guides |
+| `SURF_WIND_IDEAL_MAX` | 20 km/h | Keeps a clean wave face | Surf / wind charts |
+| `SURF_WIND_BAD_MIN` | 35 km/h | Beaufort 5+; unsafe for casual surf | Beaufort scale |
+| `SURF_TEMP_WARM_MIN` | 18 °C | Comfort without wetsuit | Recreational surf |
+| `SKI_ELEVATION_MOUNTAIN_MIN` | 800 m | Typical Alpine / Pyrenees resort altitude | Mountain geography |
+| `SKI_SNOW_IDEAL_MIN` | 3 cm | Minimum fresh snow for a decent run | Ski resort ops |
+| `SKI_TEMP_FREEZING_MAX` | 0 °C | Preserves snow quality | Snow science |
+| `SKI_TEMP_MELTING_MIN` | 6 °C | Rapid melt above this | Snow melt heuristic |
+| `OUTDOOR_PRECIP_BAD_MIN` | 5 mm | Moderate rain discourages walking | Daily precip bands |
+| `OUTDOOR_TEMP_MILD_MIN/MAX` | 14–26 °C | Thermal comfort for walking | ASHRAE comfort band |
+| `OUTDOOR_TEMP_HOT_MIN` | 32 °C | Extreme heat for extended walking | Heat stress |
+| `OUTDOOR_WIND_STRONG_MIN` | 35 km/h | Beaufort 5+ | Beaufort scale |
+| `INDOOR_PRECIP_BAD_MIN` | 4 mm | Indoor rises sooner than outdoor threshold | Wet-weather fallback |
+| `INDOOR_SNOW_BAD_MIN` | 1 cm | Any snow nudges indoor | Winter tourism |
+| `INDOOR_TEMP_COLD_MAX` | 4 °C | Uncomfortable waiting outdoors | Cold exposure |
 
 ## h. Assumptions made ✅
 - Recommendations are made **per day**, not aggregated across the week.
@@ -157,7 +211,38 @@ Before Play Store release:
 2. Add store listing assets (screenshots, feature graphic).
 
 ## k. Cross-platform delivery notes
-If transitioning to Kotlin Multiplatform (KMP), the Domain layer (`GetRankedActivitiesUseCase`, `WeatherRepository` interface) and Data layer (Ktor instead of Retrofit, `kotlinx.serialization`, Room/SQLDelight) can be entirely shared. Only the UI layer (Compose Android vs Compose Multiplatform/SwiftUI) and platform-specific DI (e.g., Koin instead of Hilt) would need distinct implementations.
+If transitioning to Kotlin Multiplatform (KMP), most of the stack below moves into `commonMain`; only platform bindings differ.
+
+| Layer | `commonMain` | `androidMain` | `iosMain` |
+|-------|--------------|---------------|-----------|
+| Domain use cases + scorers | ✅ | — | — |
+| Repository interfaces + DTOs/mappers | ✅ | — | — |
+| Compose UI + MapLibre | — | ✅ | Compose MP or SwiftUI |
+| Networking | — | Retrofit + OkHttp | Ktor |
+| Local DB | — | Room | SQLDelight |
+| DI | — | Hilt | Koin |
+
+**Shareable modules**: `GetRankedActivitiesUseCase`, all `ActivityScorer` implementations, `ScoringThresholds`, `WeatherRepository` interface, kotlinx-serialization DTOs, and mapper logic.
+
+**Typical substitutions**: Retrofit → Ktor; Room → SQLDelight; Hilt → Koin; MapLibre Compose on Android vs MapLibre Native / Apple Maps on iOS.
+
+```mermaid
+flowchart TB
+  subgraph commonMain [commonMain]
+    domain[Domain use cases + scorers]
+    dataContracts[Repository interfaces + DTOs]
+  end
+  subgraph androidMain [androidMain]
+    androidUI[Compose UI + MapLibre]
+    androidData[Retrofit Room WorkManager Hilt]
+  end
+  subgraph iosMain [iosMain]
+    iosUI[Compose MP or SwiftUI]
+    iosData[Ktor SQLDelight Koin]
+  end
+  commonMain --> androidMain
+  commonMain --> iosMain
+```
 
 ## l. AGP 9 / Gradle 9 migration notes
 This project runs on **AGP 9.3.0** with the **new DSL** and **built-in Kotlin** (no `android.newDsl=false` / `android.builtInKotlin=false` opt-outs). Key changes:

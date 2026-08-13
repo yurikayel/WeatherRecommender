@@ -23,7 +23,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class AndroidDeviceLocationProvider @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : DeviceLocationProvider {
 
     override fun hasLocationPermission(): Boolean {

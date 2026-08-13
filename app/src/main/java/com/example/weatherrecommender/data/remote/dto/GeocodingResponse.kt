@@ -5,6 +5,8 @@ import kotlinx.serialization.Serializable
 
 /**
  * Data Transfer Object (DTO) for the Open-Meteo geocoding API response.
+ *
+ * @property results List of matching location search results, or null if no matches were found.
  */
 @Serializable
 data class GeocodingResponse(
@@ -14,6 +16,16 @@ data class GeocodingResponse(
 
 /**
  * Represents a single location match from the geocoding search.
+ *
+ * @property id Unique GeoNames identifier for the place.
+ * @property name Primary name of the location.
+ * @property latitude Geographic latitude coordinate.
+ * @property longitude Geographic longitude coordinate.
+ * @property country Country name (optional).
+ * @property admin1 Primary administrative division or state/region (optional).
+ * @property elevation Ground elevation in meters (optional).
+ * @property population Estimated population count (optional).
+ * @property featureCode GeoNames feature classification code (optional).
  */
 @Serializable
 data class GeocodingLocationDto(

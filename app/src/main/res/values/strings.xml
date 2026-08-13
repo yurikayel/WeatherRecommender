@@ -29,7 +29,14 @@
 
     <!-- Detail screen -->
     <string name="detail_back">Back</string>
-    <string name="detail_pick_a_day">Pick a day</string>
+    <string name="tab_top_picks">Top Picks</string>
+    <string name="tab_recent">Recent</string>
+    <string name="tab_7_day">7-Day</string>
+    <string name="tab_activities">Activities</string>
+    <string name="detail_week_summary_title">7-Day Forecast</string>
+    <string name="week_summary_precip">%1$d mm</string>
+    <string name="week_summary_temp_range">%1$d° / %2$d°</string>
+    <string name="week_summary_row_cd">%1$s %2$s, high %3$d low %4$d, best %5$s score %6$d</string>
     <string name="detail_activities_for_day">Best things to do on %1$s</string>
     <string name="chip_coastal">Coastal</string>
     <string name="chip_inland">Inland</string>
@@ -66,12 +73,13 @@
     <!-- Activities -->
     <string name="activity_skiing">Skiing</string>
     <string name="activity_surfing">Surfing</string>
-    <string name="activity_outdoor_sightseeing">Outdoor Sightseeing</string>
-    <string name="activity_indoor_sightseeing">Indoor Sightseeing</string>
+    <string name="activity_outdoor_sightseeing">Outdoor</string>
+    <string name="activity_indoor_sightseeing">Indoor</string>
 
     <!-- Activity Reasons (per day) -->
     <string name="reason_surf_ideal">Around %1$d cm waves with %2$d km/h winds.</string>
     <string name="reason_ski_ideal">%1$d°C with %2$d cm of fresh snow.</string>
     <string name="reason_outdoor_mild">Comfortable %1$d°C and mostly dry — great for exploring.</string>
     <string name="reason_indoor_bad_weather">A cosy pick when the weather turns.</string>
+    <string name="detail_info">Info</string>
 </resources>

@@ -1,4 +1,4 @@
-﻿package com.example.weatherrecommender.ui
+package com.example.weatherrecommender.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -84,7 +84,7 @@ fun WeatherScreen(
  *
  * A collapsing map (1:1 expanded → fully hidden) stays mounted while a surface sheet below
  * Crossfades home vs detail body content — no full-screen slide, and the map instance is
- * not remounted on select/back. Modes are derived from [WeatherUiState.selectedLocation].
+ * not remounted on select/back. Modes are derived from [WeatherUiState.destination].
  */
 @Composable
 fun WeatherScreenContent(
@@ -100,7 +100,7 @@ fun WeatherScreenContent(
     isDarkTheme: Boolean = false,
     onToggleTheme: () -> Unit = {}
 ) {
-    val inDetail = uiState.selectedLocation != null
+    val inDetail = uiState.destination is WeatherDestination.Detail
     val canShare = inDetail &&
         uiState.forecast != null &&
         uiState.forecast.dailyForecasts.isNotEmpty()
@@ -249,6 +249,15 @@ private fun CollapsingMapScaffold(
     modifier: Modifier = Modifier
 ) {
     val collapse = rememberMapCollapseState(resetKey = inDetail)
+    var showInfoDialog by remember { mutableStateOf(false) }
+
+    val loc = uiState.selectedLocation
+    if (showInfoDialog && loc != null) {
+        LocationInfoDialog(
+            location = loc,
+            onDismiss = { showInfoDialog = false }
+        )
+    }
 
     Box(
         modifier = modifier
@@ -279,11 +288,7 @@ private fun CollapsingMapScaffold(
         ) {
             Column(Modifier.fillMaxSize()) {
                 WeatherSheetHeader(
-                    title = if (inDetail) {
-                        uiState.selectedLocation?.name.orEmpty()
-                    } else {
-                        homeSheetTitle(uiState)
-                    },
+                    title = if (inDetail) uiState.selectedLocation?.name.orEmpty() else "",
                     inDetail = inDetail,
                     canShare = canShare,
                     shareInProgress = shareInProgress,
@@ -292,6 +297,10 @@ private fun CollapsingMapScaffold(
                     onToggleTheme = onToggleTheme,
                     onBack = onBack,
                     onShare = onShare,
+                    searchQuery = uiState.query,
+                    isSearching = uiState.isSearching,
+                    onQueryChange = onQueryChanged,
+                    onInfoClick = { showInfoDialog = true },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp)
@@ -311,7 +320,6 @@ private fun CollapsingMapScaffold(
                     } else {
                         HomeContent(
                             uiState = uiState,
-                            onQueryChanged = onQueryChanged,
                             onLocationSelected = onLocationSelected,
                             onRefresh = onRefresh,
                             onCurrentLocationClick = onCurrentLocationClick,

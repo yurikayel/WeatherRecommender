@@ -89,7 +89,7 @@ class WeatherScreenSnapshotTest {
     )
 
     private val detailState = WeatherUiState(
-        selectedLocation = lisbon,
+        destination = WeatherDestination.Detail(lisbon),
         forecast = WeatherForecast(
             location = lisbon,
             dailyForecasts = listOf(
@@ -105,6 +105,13 @@ class WeatherScreenSnapshotTest {
             RankedActivity(RecommendedActivity.SURFING, 88, ReasonKey.SURF_IDEAL, listOf(100, 10)),
             RankedActivity(RecommendedActivity.OUTDOOR_SIGHTSEEING, 80, ReasonKey.OUTDOOR_MILD, listOf(23)),
             RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 45, ReasonKey.INDOOR_BAD_WEATHER)
+        ),
+        weekTopActivities = listOf(
+            RankedActivity(RecommendedActivity.SURFING, 88, ReasonKey.SURF_IDEAL, listOf(100, 10)),
+            RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 85, ReasonKey.INDOOR_BAD_WEATHER),
+            RankedActivity(RecommendedActivity.OUTDOOR_SIGHTSEEING, 80, ReasonKey.OUTDOOR_MILD, listOf(23)),
+            RankedActivity(RecommendedActivity.SKIING, 70, ReasonKey.SKI_IDEAL, listOf(-3, 5)),
+            RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 90, ReasonKey.INDOOR_BAD_WEATHER)
         )
     )
 

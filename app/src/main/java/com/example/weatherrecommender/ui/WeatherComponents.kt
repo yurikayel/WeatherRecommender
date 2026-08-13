@@ -7,6 +7,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,15 +15,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -60,21 +64,45 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
     RecommendedActivity.SKIING -> Icons.Outlined.DownhillSkiing
 }
 
-/** Skeleton placeholder shown while a city's forecast loads. */
+/** Skeleton placeholder shown while a city's forecast loads. Mirrors the loaded detail body. */
 @Composable
 internal fun PremiumShimmerLoadingState() {
     Column {
-        Box(Modifier.width(200.dp).height(40.dp).clip(RoundedCornerShape(12.dp)).shimmerEffect())
+        Box(Modifier.width(120.dp).height(28.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
         Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            repeat(5) {
-                Box(Modifier.width(72.dp).height(120.dp).clip(RoundedCornerShape(18.dp)).shimmerEffect())
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+        ) {
+            listOf(108.dp, 96.dp, 58.dp, 48.dp).forEach { nameWidth ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(Modifier.size(24.dp).clip(CircleShape).shimmerEffect())
+                    Box(
+                        Modifier.width(nameWidth).height(16.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect()
+                    )
+                    Box(Modifier.width(24.dp).height(18.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
+                }
             }
         }
-        Spacer(Modifier.height(28.dp))
-        repeat(3) {
-            Box(Modifier.fillMaxWidth().height(110.dp).clip(RoundedCornerShape(16.dp)).shimmerEffect())
-            Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(32.dp))
+        Box(Modifier.width(72.dp).height(28.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
+        Spacer(Modifier.height(16.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            repeat(7) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .shimmerEffect()
+                )
+            }
         }
     }
 }
@@ -151,11 +179,7 @@ internal fun CustomSearchBar(
     )
 }
 
-@Composable
-internal fun homeSheetTitle(uiState: WeatherUiState): String =
-    uiState.mapPin?.name
-        ?: uiState.deviceLocation?.name
-        ?: stringResource(R.string.app_title)
+
 
 /**
  * First row inside the scrolling sheet: city label + theme toggle on home; back, city, share, and
@@ -172,6 +196,10 @@ internal fun WeatherSheetHeader(
     onToggleTheme: () -> Unit,
     onBack: () -> Unit,
     onShare: () -> Unit,
+    searchQuery: String = "",
+    isSearching: Boolean = false,
+    onQueryChange: (String) -> Unit = {},
+    onInfoClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -192,17 +220,34 @@ internal fun WeatherSheetHeader(
                         contentDescription = stringResource(R.string.detail_back)
                     )
                 }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            } else {
+                CustomSearchBar(
+                    query = searchQuery,
+                    onQueryChange = onQueryChange,
+                    isSearching = isSearching,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 8.dp)
+                )
             }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (inDetail && onInfoClick != null) {
+                IconButton(onClick = onInfoClick) {
+                    Icon(
+                        Icons.Filled.Info,
+                        contentDescription = stringResource(R.string.detail_info)
+                    )
+                }
+            }
             if (canShare) {
                 IconButton(onClick = onShare, enabled = !shareInProgress) {
                     Icon(

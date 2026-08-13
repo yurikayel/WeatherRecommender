@@ -6,10 +6,13 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -95,13 +98,11 @@ class WeatherScreenTest {
     fun home_showsSearchBarAndTopPicks() {
         setContent(WeatherUiState())
 
-        // Title lives in the fixed sheet header below the map — not inside the scrollable body.
-        composeTestRule.onNodeWithText("Concierge Weather").assertIsDisplayed()
         composeTestRule.onAllNodesWithText("Plan your day").assertCountEquals(0)
         composeTestRule.onNodeWithContentDescription("Switch to dark mode").assertIsDisplayed()
-        // Square map leaves little sheet viewport — scroll before asserting body content.
-        composeTestRule.onNodeWithText("Search a city…").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Top picks for you").performScrollTo().assertIsDisplayed()
+        // Search lives in the fixed sheet header — not inside the scrollable body.
+        composeTestRule.onNodeWithText("Search a city…").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Top Picks").assertIsDisplayed()
     }
 
     @Test
@@ -116,10 +117,8 @@ class WeatherScreenTest {
 
         // GPS resolves the chip only — it must not auto-open detail.
         composeTestRule.onAllNodesWithContentDescription("Back").assertCountEquals(0)
-        // Device location name is shown in the fixed sheet header (homeSheetTitle), not scrollable body.
-        composeTestRule.onNodeWithText("Lisbon").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Search a city…").assertIsDisplayed()
         composeTestRule.onNodeWithText("Current location · Lisbon").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Search a city…").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -143,7 +142,7 @@ class WeatherScreenTest {
         var lastQuery = ""
         setContent(WeatherUiState(), onQueryChanged = { lastQuery = it })
 
-        composeTestRule.onNodeWithText("Search a city…").performScrollTo().performTextInput("Lis")
+        composeTestRule.onNodeWithText("Search a city…").performTextInput("Lis")
 
         assertEquals("Lis", lastQuery)
     }
@@ -153,7 +152,7 @@ class WeatherScreenTest {
         var lastQuery = "unchanged"
         setContent(WeatherUiState(query = "Lon"), onQueryChanged = { lastQuery = it })
 
-        composeTestRule.onNodeWithContentDescription("Clear search").performScrollTo().performClick()
+        composeTestRule.onNodeWithContentDescription("Clear search").performClick()
 
         assertEquals("", lastQuery)
     }
@@ -181,7 +180,7 @@ class WeatherScreenTest {
         setContent(WeatherUiState(topPicks = picks))
 
         composeTestRule.onNodeWithText("Lisbon").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Portugal").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Lisbon, Portugal").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Surfing").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("27°").performScrollTo().assertIsDisplayed()
     }
@@ -214,7 +213,8 @@ class WeatherScreenTest {
             )
         )
 
-        composeTestRule.onNodeWithText("Recently viewed").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Recent").performClick()
+        composeTestRule.onNodeWithText("Recent").assertIsDisplayed()
         composeTestRule.onNodeWithText("London").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Lisbon").performScrollTo().assertIsDisplayed()
     }
@@ -256,10 +256,25 @@ class WeatherScreenTest {
     // --- Detail ---
 
     @Test
+    fun detail_showsWeekSummaryHeading() {
+        setContent(
+            WeatherUiState(
+                destination = WeatherDestination.Detail(london),
+                forecast = twoDayForecast,
+                selectedDayIndex = 0,
+                rankedActivities = listOf(outdoorActivity),
+                weekTopActivities = listOf(outdoorActivity, outdoorActivity)
+            )
+        )
+
+        composeTestRule.onNodeWithText("7-Day").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun detail_showsCityTitleDaySelectorAndActivities() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 selectedDayIndex = 0,
                 rankedActivities = listOf(outdoorActivity)
@@ -267,16 +282,16 @@ class WeatherScreenTest {
         )
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Pick a day").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Outdoor Sightseeing").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("95").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("7-Day").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Outdoor").assertIsDisplayed()
+        composeTestRule.onNodeWithText("95").assertIsDisplayed()
     }
 
     @Test
     fun detail_showsShareActionWhenForecastLoaded() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 selectedDayIndex = 0,
                 rankedActivities = listOf(outdoorActivity)
@@ -290,7 +305,7 @@ class WeatherScreenTest {
     fun detail_hidesShareActionWhileForecastLoading() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = null,
                 isLoadingForecast = true
             )
@@ -303,27 +318,29 @@ class WeatherScreenTest {
     fun detail_showsGeographyChips() {
         setContent(
             WeatherUiState(
-                selectedLocation = lisbon,
+                destination = WeatherDestination.Detail(lisbon),
                 forecast = twoDayForecast.copy(location = lisbon),
                 rankedActivities = listOf(outdoorActivity)
             )
         )
 
-        composeTestRule.onNodeWithText("Coastal").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("68 m elevation").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Info").performClick()
+        composeTestRule.onNodeWithText("Coastal").assertIsDisplayed()
+        composeTestRule.onNodeWithText("68 m elevation").assertIsDisplayed()
     }
 
     @Test
     fun detail_inlandCity_showsInlandChip() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 rankedActivities = listOf(outdoorActivity)
             )
         )
 
-        composeTestRule.onNodeWithText("Inland").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Info").performClick()
+        composeTestRule.onNodeWithText("Inland").assertIsDisplayed()
     }
 
     @Test
@@ -331,7 +348,7 @@ class WeatherScreenTest {
         var selectedDay = -1
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 selectedDayIndex = 0,
                 rankedActivities = listOf(outdoorActivity)
@@ -339,9 +356,9 @@ class WeatherScreenTest {
             onDaySelected = { selectedDay = it }
         )
 
-        // Day-of-month "17" belongs to the second forecast day.
-        composeTestRule.onNodeWithText("17").performClick()
-
+        // Invoke OnClick via semantics so the collapsing map/sheet header cannot steal the touch.
+        composeTestRule.onNodeWithTag("week_summary_day_1")
+            .performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(1, selectedDay)
     }
 
@@ -350,7 +367,7 @@ class WeatherScreenTest {
         var backCalled = false
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 rankedActivities = listOf(outdoorActivity)
             ),
@@ -366,7 +383,7 @@ class WeatherScreenTest {
     fun detail_syncError_showsBanner() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 rankedActivities = listOf(outdoorActivity),
                 syncError = UiText.DynamicString("No internet connection. Showing offline data.")
@@ -385,7 +402,7 @@ class WeatherScreenTest {
     fun detail_blockingError_isDisplayed() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 isLoadingForecast = false,
                 error = UiText.DynamicString("Server error")
             )
@@ -400,7 +417,7 @@ class WeatherScreenTest {
     fun darkTheme_rendersHomeAndDetail() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 rankedActivities = listOf(outdoorActivity)
             ),
@@ -408,6 +425,6 @@ class WeatherScreenTest {
         )
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Outdoor Sightseeing").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Outdoor").assertIsDisplayed()
     }
 }

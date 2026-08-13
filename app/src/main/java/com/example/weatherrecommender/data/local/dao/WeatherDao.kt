@@ -16,36 +16,78 @@ import kotlinx.coroutines.flow.Flow
 @Suppress("TooManyFunctions")
 @Dao
 interface WeatherDao {
+    /**
+     * Inserts or replaces a [LocationEntity] into the database.
+     * This is typically called after fetching fresh geocoding data.
+     */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLocation(location: LocationEntity)
 
+    /**
+     * Inserts or replaces a list of [DailyForecastEntity] for a location.
+     * Replaces existing forecasts for the same date and location.
+     */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDailyForecasts(forecasts: List<DailyForecastEntity>)
 
+    /**
+     * Observes a specific location by its [locationId], emitting updates whenever
+     * the underlying database record changes.
+     */
     @Query("SELECT * FROM location_entity WHERE id = :locationId")
     fun getLocationFlow(locationId: Long): Flow<LocationEntity?>
 
+    /**
+     * Observes the daily forecasts for a specific location, ordered chronologically.
+     * Emits a new list whenever the forecasts for this location are updated.
+     */
     @Query("SELECT * FROM daily_forecast_entity WHERE locationId = :locationId ORDER BY date ASC")
     fun getDailyForecastsFlow(locationId: Long): Flow<List<DailyForecastEntity>>
 
+    /**
+     * Retrieves a single location by its [locationId] for one-shot reads (e.g., workers).
+     */
     @Query("SELECT * FROM location_entity WHERE id = :locationId")
     suspend fun getLocation(locationId: Long): LocationEntity?
 
+    /**
+     * Retrieves all cached locations, ordered by when they were last updated (newest first).
+     * Used mainly for cache synchronization and maintenance workers.
+     */
     @Query("SELECT * FROM location_entity ORDER BY lastUpdated DESC")
     suspend fun getAllLocations(): List<LocationEntity>
     
+    /**
+     * Observes all cached locations, emitting updates whenever any location is added,
+     * updated, or removed. Ordered by last update time (newest first).
+     */
     @Query("SELECT * FROM location_entity ORDER BY lastUpdated DESC")
     fun getAllLocationsFlow(): Flow<List<LocationEntity>>
 
+    /**
+     * Deletes all forecasts associated with the specified [locationId].
+     * Typically called before inserting a fresh set of forecasts for the location.
+     */
     @Query("DELETE FROM daily_forecast_entity WHERE locationId = :locationId")
     suspend fun deleteForecastsForLocation(locationId: Long)
 
+    /**
+     * Deletes a specific location from the database by its [locationId].
+     */
     @Query("DELETE FROM location_entity WHERE id = :locationId")
     suspend fun deleteLocation(locationId: Long)
 
+    /**
+     * Counts the total number of distinct locations currently stored in the database.
+     * Useful for enforcing local cache limits.
+     */
     @Query("SELECT COUNT(*) FROM location_entity")
     suspend fun getLocationCount(): Int
 
+    /**
+     * Retrieves the IDs of the oldest (least recently updated) locations, limited by [count].
+     * Used by cache eviction policies to identify stale data.
+     */
     @Query("SELECT id FROM location_entity ORDER BY lastUpdated ASC LIMIT :count")
     suspend fun getOldestLocationIds(count: Int): List<Long>
 
@@ -64,6 +106,10 @@ interface WeatherDao {
     )
     fun getRecentLocationsFlow(limit: Int): Flow<List<LocationEntity>>
 
+    /**
+     * Updates the timestamp for when a location was last viewed by the user.
+     * This ensures the location bubbles to the top of the Home History section.
+     */
     @Query("UPDATE location_entity SET lastViewedAt = :timestamp WHERE id = :locationId")
     suspend fun updateLastViewedAt(locationId: Long, timestamp: Long)
 
@@ -100,12 +146,20 @@ interface WeatherDao {
         country: String
     ): List<LocationEntity>
 
+    /**
+     * Atomically deletes a location and its associated daily forecasts.
+     * Guaranteed to execute within a single SQLite transaction.
+     */
     @Transaction
     suspend fun deleteLocationWithForecasts(locationId: Long) {
         deleteForecastsForLocation(locationId)
         deleteLocation(locationId)
     }
 
+    /**
+     * Atomically inserts a location and its associated daily forecasts, clearing out
+     * any existing forecasts for that location to avoid stale overlaps.
+     */
     @Transaction
     suspend fun insertLocationWithForecast(
         location: LocationEntity,

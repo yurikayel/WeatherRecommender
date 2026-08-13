@@ -39,9 +39,9 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * Immutable state representing the entire Weather UI.
  *
- * The screen has two modes derived from [selectedLocation]:
- *  - **Home** (`selectedLocation == null`): a search bar plus a feed of [topPicks].
- *  - **Detail** (`selectedLocation != null`): the forecast with a per-day selector; [rankedActivities]
+ * The screen has two modes derived from [destination]:
+ *  - **Home** ([WeatherDestination.Home]): a search bar plus a feed of [topPicks].
+ *  - **Detail** ([WeatherDestination.Detail]): the forecast with a per-day selector; [rankedActivities]
  *    always reflects [selectedDayIndex].
  *
  * The map is driven by [mapCamera] / [mapPin]; [WeatherScreenContent] keeps a single map instance
@@ -50,11 +50,13 @@ import kotlin.time.Duration.Companion.milliseconds
  * @property query The current search query.
  * @property isSearching True if a search request is in-flight.
  * @property searchResults List of geocoding results matching the query.
- * @property selectedLocation The location currently selected by the user, or null on the home screen.
+ * @property destination Explicit home vs detail navigation target.
+ * @property selectedLocation The location shown in detail, derived from [destination].
  * @property forecast The 7-day forecast for the selected location.
  * @property isLoadingForecast True while the forecast for the selected location is loading.
  * @property selectedDayIndex Index of the day whose activities are currently shown.
  * @property rankedActivities Applicable activities for [selectedDayIndex], sorted by score.
+ * @property weekTopActivities Top-ranked activity per forecast day (#1 each day); stable until forecast changes.
  * @property topPicks Population-weighted featured suggestions shown on the home screen.
  * @property isLoadingTopPicks True while the home suggestions are loading (initial skeleton).
  * @property isRefreshingTopPicks True while pull-to-refresh is force-refreshing top picks.
@@ -70,11 +72,12 @@ data class WeatherUiState(
     val query: String = "",
     val isSearching: Boolean = false,
     val searchResults: List<Location> = emptyList(),
-    val selectedLocation: Location? = null,
+    val destination: WeatherDestination = WeatherDestination.Home,
     val forecast: WeatherForecast? = null,
     val isLoadingForecast: Boolean = false,
     val selectedDayIndex: Int = 0,
     val rankedActivities: List<RankedActivity> = emptyList(),
+    val weekTopActivities: List<RankedActivity?> = emptyList(),
     val topPicks: List<TopPick> = emptyList(),
     val isLoadingTopPicks: Boolean = false,
     val isRefreshingTopPicks: Boolean = false,
@@ -85,7 +88,11 @@ data class WeatherUiState(
     val deviceLocation: Location? = null,
     val error: UiText? = null,
     val syncError: UiText? = null
-)
+) {
+    /** Convenience accessor for detail mode; null on [WeatherDestination.Home]. */
+    val selectedLocation: Location?
+        get() = (destination as? WeatherDestination.Detail)?.location
+}
 
 /**
  * Orchestrates the UI logic and state for the main Weather Screen.
@@ -104,6 +111,11 @@ class WeatherViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WeatherUiState())
+    
+    /**
+     * The single source of truth for the UI state.
+     * Combines search results, home data, and detail forecast data into a reactive stream.
+     */
     val uiState: StateFlow<WeatherUiState> = _uiState.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -212,6 +224,10 @@ class WeatherViewModel @Inject constructor(
         const val HISTORY_LIMIT = 10
     }
 
+    /**
+     * Called when the user types in the search bar.
+     * Debounces the query and triggers geocoding searches automatically.
+     */
     fun onQueryChanged(query: String) {
         _uiState.update { it.copy(query = query, error = null) }
         searchQueryFlow.value = query
@@ -221,14 +237,19 @@ class WeatherViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Initiates the Detail view for the given location.
+     * Handles resetting the UI, fetching the forecast, and updating the history cache.
+     */
     fun onLocationSelected(location: Location) {
         _uiState.update {
             it.copy(
-                selectedLocation = location,
+                destination = WeatherDestination.Detail(location),
                 searchResults = emptyList(),
                 query = "",
                 forecast = null,
                 rankedActivities = emptyList(),
+                weekTopActivities = emptyList(),
                 selectedDayIndex = 0,
                 isLoadingForecast = true,
                 error = null,
@@ -249,9 +270,10 @@ class WeatherViewModel @Inject constructor(
                         val dayIndex = state.selectedDayIndex.coerceIn(0, maxIndex)
                         state.copy(
                             // Prefer SSOT location so sea-access / geography updates flow through.
-                            selectedLocation = forecast.location,
+                            destination = WeatherDestination.Detail(forecast.location),
                             forecast = forecast,
                             rankedActivities = getRankedActivities(forecast, dayIndex),
+                            weekTopActivities = computeWeekTopActivities(forecast),
                             selectedDayIndex = dayIndex,
                             isLoadingForecast = false
                         )
@@ -340,9 +362,10 @@ class WeatherViewModel @Inject constructor(
         forecastJob?.cancel()
         _uiState.update {
             it.copy(
-                selectedLocation = null,
+                destination = WeatherDestination.Home,
                 forecast = null,
                 rankedActivities = emptyList(),
+                weekTopActivities = emptyList(),
                 selectedDayIndex = 0,
                 query = "",
                 searchResults = emptyList(),
@@ -386,7 +409,7 @@ class WeatherViewModel @Inject constructor(
                         state.copy(
                             deviceLocation = location,
                             // Center the home map on the device city; detail keeps its own camera.
-                            mapCamera = if (state.selectedLocation == null) {
+                            mapCamera = if (state.destination is WeatherDestination.Home) {
                                 location.toMapCamera(MapCameraPosition.HOME_DEFAULT_ZOOM)
                             } else {
                                 state.mapCamera
@@ -428,6 +451,11 @@ class WeatherViewModel @Inject constructor(
             }
         }
     }
+
+    private fun computeWeekTopActivities(forecast: WeatherForecast): List<RankedActivity?> =
+        forecast.dailyForecasts.indices.map { dayIndex ->
+            getRankedActivities(forecast, dayIndex).firstOrNull()
+        }
 }
 
 private fun Location.toMapCamera(zoom: Double) = MapCameraPosition(

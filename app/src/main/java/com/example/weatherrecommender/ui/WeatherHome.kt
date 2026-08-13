@@ -39,9 +39,13 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Tab
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -50,6 +54,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -78,7 +85,6 @@ import kotlin.math.roundToInt
 @Composable
 internal fun HomeContent(
     uiState: WeatherUiState,
-    onQueryChanged: (String) -> Unit,
     onLocationSelected: (Location) -> Unit,
     onRefresh: () -> Unit,
     onCurrentLocationClick: () -> Unit = {},
@@ -86,6 +92,7 @@ internal fun HomeContent(
 ) {
     val scrollState = rememberScrollState()
     val pullToRefreshState = rememberPullToRefreshState()
+    var selectedHomeTabIndex by remember { mutableIntStateOf(0) }
     // Material3 1.3.x PullToRefreshBox has no `enabled`; use Modifier.pullToRefresh instead.
     val canPullToRefresh = mapFullyExpanded && scrollState.value == 0
     Box(
@@ -109,13 +116,6 @@ internal fun HomeContent(
                 onCurrentLocationClick = onCurrentLocationClick
             )
 
-            Spacer(Modifier.height(16.dp))
-            CustomSearchBar(
-                query = uiState.query,
-                onQueryChange = onQueryChanged,
-                isSearching = uiState.isSearching,
-                modifier = Modifier.fillMaxWidth()
-            )
 
             uiState.error?.let { error ->
                 Spacer(Modifier.height(12.dp))
@@ -134,29 +134,34 @@ internal fun HomeContent(
             }
 
             if (uiState.searchResults.isEmpty()) {
-                Spacer(Modifier.height(28.dp))
-                Text(
-                    text = stringResource(R.string.home_top_picks_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    modifier = Modifier.semantics { heading() }
-                )
-                Spacer(Modifier.height(12.dp))
-                TopPicksSection(
-                    topPicks = uiState.topPicks,
-                    isLoading = uiState.isLoadingTopPicks,
-                    onLocationSelected = onLocationSelected
-                )
-
-                if (uiState.recentHistory.isNotEmpty()) {
-                    Spacer(Modifier.height(28.dp))
-                    Text(
-                        text = stringResource(R.string.home_history_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.semantics { heading() }
+                Spacer(Modifier.height(24.dp))
+                PrimaryTabRow(
+                    selectedTabIndex = selectedHomeTabIndex,
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ) {
+                    Tab(
+                        selected = selectedHomeTabIndex == 0,
+                        onClick = { selectedHomeTabIndex = 0 },
+                        text = { Text(stringResource(R.string.tab_top_picks)) }
                     )
-                    Spacer(Modifier.height(12.dp))
+                    if (uiState.recentHistory.isNotEmpty()) {
+                        Tab(
+                            selected = selectedHomeTabIndex == 1,
+                            onClick = { selectedHomeTabIndex = 1 },
+                            text = { Text(stringResource(R.string.tab_recent)) }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                
+                if (selectedHomeTabIndex == 0) {
+                    TopPicksSection(
+                        topPicks = uiState.topPicks,
+                        isLoading = uiState.isLoadingTopPicks,
+                        onLocationSelected = onLocationSelected
+                    )
+                } else if (selectedHomeTabIndex == 1 && uiState.recentHistory.isNotEmpty()) {
                     HistorySection(
                         history = uiState.recentHistory,
                         onLocationSelected = onLocationSelected
@@ -272,17 +277,19 @@ private fun TopPicksSection(
     isLoading: Boolean,
     onLocationSelected: (Location) -> Unit
 ) {
-    // Crossfade from skeleton to content so the feed appears without a hard pop.
     Crossfade(targetState = isLoading, label = "top_picks_fade") { loading ->
         when {
             loading -> {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(3) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    repeat(3) {
                         Box(
                             modifier = Modifier
-                                .width(TopPickCardWidth)
-                                .height(TopPickCardHeight)
-                                .clip(RoundedCornerShape(20.dp))
+                                .fillMaxWidth()
+                                .height(110.dp)
+                                .clip(RoundedCornerShape(16.dp))
                                 .shimmerEffect()
                         )
                     }
@@ -298,8 +305,11 @@ private fun TopPicksSection(
             }
 
             else -> {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(topPicks) { pick ->
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    topPicks.forEach { pick ->
                         TopPickCard(pick = pick, onClick = { onLocationSelected(pick.location) })
                     }
                 }
@@ -308,103 +318,131 @@ private fun TopPicksSection(
     }
 }
 
-/** Fixed dimensions shared by loaded cards and loading skeletons so LazyRow items align. */
-private val TopPickCardWidth = 220.dp
-private val TopPickCardHeight = 150.dp
-
 @Composable
 private fun TopPickCard(pick: TopPick, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
         label = "pick_press_scale"
     )
 
     Card(
         modifier = Modifier
-            .width(TopPickCardWidth)
-            .height(TopPickCardHeight)
+            .fillMaxWidth()
+            .height(110.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            val hasImage = pick.location.imageUrl != null
+            if (hasImage) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(pick.location.imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.2f),
+                                    Color.Black.copy(alpha = 0.8f)
+                                )
+                            )
+                        )
+                )
+            }
+
+            val contentColor = if (hasImage) Color.White else MaterialTheme.colorScheme.onSurface
+            val iconTint = if (hasImage) Color.White else MaterialTheme.colorScheme.primary
+
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 12.dp),
+                    verticalArrangement = Arrangement.Center
+                ) {
                     Text(
                         text = pick.location.name,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = contentColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    // Always reserve one subtitle line so cards stay equal height with/without country.
-                    Text(
-                        text = pick.location.country.orEmpty(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        minLines = 1
-                    )
+                    val subtitle = listOfNotNull(pick.location.admin1, pick.location.country)
+                        .filter { it.isNotBlank() }
+                        .joinToString(", ")
+                    if (subtitle.isNotEmpty()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            activityIcon(pick.topActivity.activity),
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = pick.topActivity.activity.asUiText().asString(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = contentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
-                // Fixed weather column so icon + temp always occupy the same space.
+
                 Column(
                     horizontalAlignment = Alignment.End,
-                    modifier = Modifier.width(56.dp).height(52.dp),
-                    verticalArrangement = Arrangement.Top
+                    verticalArrangement = Arrangement.Center
                 ) {
                     Icon(
                         weatherCodeIcon(pick.weatherCode),
                         contentDescription = weatherCodeDescription(pick.weatherCode),
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(24.dp)
+                        tint = contentColor,
+                        modifier = Modifier.size(26.dp)
                     )
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.temp_degrees, pick.maxTemp.roundToInt()),
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor,
                         maxLines = 1
                     )
                 }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    activityIcon(pick.topActivity.activity),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = pick.topActivity.activity.asUiText().asString(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
@@ -420,13 +458,13 @@ private fun HistorySection(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         history.forEach { location ->
-            HistoryRow(location = location, onClick = { onLocationSelected(location) })
+            HistoryCard(location = location, onClick = { onLocationSelected(location) })
         }
     }
 }
 
 @Composable
-private fun HistoryRow(location: Location, onClick: () -> Unit) {
+private fun HistoryCard(location: Location, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -439,6 +477,7 @@ private fun HistoryRow(location: Location, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .height(110.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -449,26 +488,59 @@ private fun HistoryRow(location: Location, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            Text(
-                text = location.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            val subtitle = listOfNotNull(location.admin1, location.country)
-                .filter { it.isNotBlank() }
-                .joinToString(", ")
-            if (subtitle.isNotEmpty()) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            val hasImage = location.imageUrl != null
+            if (hasImage) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(location.imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.2f),
+                                    Color.Black.copy(alpha = 0.8f)
+                                )
+                            )
+                        )
+                )
+            }
+            
+            val contentColor = if (hasImage) Color.White else MaterialTheme.colorScheme.onSurface
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
                 Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    text = location.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                val subtitle = listOfNotNull(location.admin1, location.country).filter { it.isNotBlank() }.joinToString(", ")
+                if (subtitle.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = contentColor.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
