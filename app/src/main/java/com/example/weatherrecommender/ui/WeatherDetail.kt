@@ -41,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -216,6 +217,7 @@ private fun DaySelectorRow(
         itemsIndexed(days) { index, day ->
             DaySelectorCard(
                 day = day,
+                dayIndex = index,
                 selected = index == selectedIndex,
                 onClick = { onDaySelected(index) }
             )
@@ -226,6 +228,7 @@ private fun DaySelectorRow(
 @Composable
 private fun DaySelectorCard(
     day: DailyForecast,
+    dayIndex: Int,
     selected: Boolean,
     onClick: () -> Unit
 ) {
@@ -273,6 +276,7 @@ private fun DaySelectorCard(
                 )
             )
             .clickable(onClick = onClick)
+            .testTag("day_chip_$dayIndex")
             .padding(horizontal = 10.dp, vertical = 12.dp)
     ) {
         Text(

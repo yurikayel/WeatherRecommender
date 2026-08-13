@@ -6,10 +6,13 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -354,16 +357,14 @@ class WeatherScreenTest {
             onDaySelected = { selectedDay = it }
         )
 
-        // "17" appears on both the week-summary row and the compact day chip.
-        // The row's merged content description is unique; tapping it (or the chip) selects day 1.
-        composeTestRule
-            .onNodeWithContentDescription("Fri 17", substring = true)
-            .performScrollTo()
-            .performClick()
+        // Invoke OnClick via semantics so the collapsing map/sheet header cannot steal the touch.
+        composeTestRule.onNodeWithTag("week_summary_day_1")
+            .performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(1, selectedDay)
 
         selectedDay = -1
-        composeTestRule.onAllNodesWithText("17")[1].performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("day_chip_1")
+            .performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(1, selectedDay)
     }
 

@@ -27,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,6 +66,7 @@ internal fun WeekSummarySection(
             val topActivity = weekTopActivities.getOrNull(index)
             WeekSummaryRow(
                 day = day,
+                dayIndex = index,
                 topActivity = topActivity,
                 selected = index == selectedDayIndex,
                 onClick = { onDaySelected(index) }
@@ -79,6 +81,7 @@ internal fun WeekSummarySection(
 @Composable
 private fun WeekSummaryRow(
     day: DailyForecast,
+    dayIndex: Int,
     topActivity: RankedActivity?,
     selected: Boolean,
     onClick: () -> Unit
@@ -126,7 +129,10 @@ private fun WeekSummaryRow(
                 )
             )
             .clickable(onClick = onClick)
-            .semantics(mergeDescendants = true) { contentDescription = rowLabel }
+            .semantics(mergeDescendants = true) {
+                contentDescription = rowLabel
+                testTag = "week_summary_day_$dayIndex"
+            }
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
