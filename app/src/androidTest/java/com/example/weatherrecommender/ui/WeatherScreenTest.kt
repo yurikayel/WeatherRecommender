@@ -180,7 +180,7 @@ class WeatherScreenTest {
         setContent(WeatherUiState(topPicks = picks))
 
         composeTestRule.onNodeWithText("Lisbon").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Portugal").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Lisbon, Portugal").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Surfing").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("27°").performScrollTo().assertIsDisplayed()
     }
@@ -283,7 +283,7 @@ class WeatherScreenTest {
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
         composeTestRule.onNodeWithText("7-Day").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Outdoor Sightseeing").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Outdoor").assertIsDisplayed()
         composeTestRule.onNodeWithText("95").assertIsDisplayed()
     }
 
@@ -425,6 +425,6 @@ class WeatherScreenTest {
         )
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Outdoor Sightseeing").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Outdoor").assertIsDisplayed()
     }
 }

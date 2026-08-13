@@ -7,6 +7,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -62,21 +64,45 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
     RecommendedActivity.SKIING -> Icons.Outlined.DownhillSkiing
 }
 
-/** Skeleton placeholder shown while a city's forecast loads. */
+/** Skeleton placeholder shown while a city's forecast loads. Mirrors the loaded detail body. */
 @Composable
 internal fun PremiumShimmerLoadingState() {
     Column {
-        Box(Modifier.width(200.dp).height(40.dp).clip(RoundedCornerShape(12.dp)).shimmerEffect())
+        Box(Modifier.width(120.dp).height(28.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
         Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            repeat(5) {
-                Box(Modifier.width(72.dp).height(120.dp).clip(RoundedCornerShape(18.dp)).shimmerEffect())
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+        ) {
+            listOf(108.dp, 96.dp, 58.dp, 48.dp).forEach { nameWidth ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(Modifier.size(24.dp).clip(CircleShape).shimmerEffect())
+                    Box(
+                        Modifier.width(nameWidth).height(16.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect()
+                    )
+                    Box(Modifier.width(24.dp).height(18.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
+                }
             }
         }
-        Spacer(Modifier.height(28.dp))
-        repeat(3) {
-            Box(Modifier.fillMaxWidth().height(110.dp).clip(RoundedCornerShape(16.dp)).shimmerEffect())
-            Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(32.dp))
+        Box(Modifier.width(72.dp).height(28.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
+        Spacer(Modifier.height(16.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            repeat(7) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .shimmerEffect()
+                )
+            }
         }
     }
 }
