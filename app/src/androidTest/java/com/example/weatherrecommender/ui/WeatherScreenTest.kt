@@ -354,9 +354,16 @@ class WeatherScreenTest {
             onDaySelected = { selectedDay = it }
         )
 
-        // Day-of-month "17" belongs to the second forecast day.
-        composeTestRule.onNodeWithText("17").performClick()
+        // "17" appears on both the week-summary row and the compact day chip.
+        // The row's merged content description is unique; tapping it (or the chip) selects day 1.
+        composeTestRule
+            .onNodeWithContentDescription("Fri 17", substring = true)
+            .performScrollTo()
+            .performClick()
+        assertEquals(1, selectedDay)
 
+        selectedDay = -1
+        composeTestRule.onAllNodesWithText("17")[1].performScrollTo().performClick()
         assertEquals(1, selectedDay)
     }
 
