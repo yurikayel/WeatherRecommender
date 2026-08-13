@@ -6,25 +6,25 @@ This is a native Android app that implements the Concierge Weather Recommender a
 | Scope | What |
 |-------|------|
 | **Core (brief)** | City search, **7-day summary with top activity per day**, per-day activity ranking, offline-first Room cache, Clean Architecture + tests |
-| **Stretch** | Home top picks; History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 9:16 weather flyer PNG (+ save to Downloads); collapsing square (1:1) MapLibre map background + sheet header + Crossfade body (Nominatim reverse, no Google key); GPS current-location chip; pastel day chips; Paparazzi + instrumented CI |
+| **Stretch** | Home top picks (postcard cards + Top Picks / Recent tabs); History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; Wikipedia city thumbnails (Room v7 `imageUrl`); WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 9:16 weather flyer PNG (+ city-image background, save to Downloads); collapsing square (1:1) MapLibre map background + sheet header + Crossfade body (Nominatim reverse, no Google key); GPS current-location chip; Paparazzi + instrumented CI |
 
 Key experience details:
-- **7-Day Forecast (core)**: the detail screen opens with a consolidated week dashboard (weather icon, high/low temps, precipitation, top activity + score per day). Tapping a row or the compact day chips below re-ranks activities for that day.
-- **Per-day recommendations**: below the week summary, a day selector and ranked activity cards reflect the selected day. There is no single "week-long" score.
+- **7-Day Forecast (core)**: detail shows compact ranked activities for the selected day, then a **7-Day** dashboard (weather icon, high/low, precipitation, top activity + score per row). Tapping a week row re-ranks that day's activities. There are no separate "Pick a day" chips.
+- **Per-day recommendations**: a compact horizontal activity row (icon + name + score) reflects `selectedDayIndex`. There is no single "week-long" score.
 - **Geography-aware activities**: activities that don't make sense for a location are hidden entirely (e.g. surfing is only offered where there is sea access; skiing only in mountainous terrain or when snow is falling).
-- **Home "top picks"**: the home screen surfaces a randomised, population-weighted set of well-known cities, each with its best activity for today (stretch). Pull-to-refresh on home (assignment **bonus**, not a core brief item) force-refreshes this feed — only when the sheet is scrolled to the top **and** the collapsing map header is fully expanded (`modifier.pullToRefresh` `enabled`), so PTR does not fight nested-scroll collapse. Detail has no PTR.
-- **Recently viewed History**: after Top Picks, lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
-- **In-screen map**: MapLibre collapsing map background (expanded **square / 1:1**) with a rounded surface sheet that scrolls up to cover it — no overlay AppBar; the sheet header row shows city name + theme toggle (home) or back + city + share + theme (detail). Home↔detail Crossfades only the sheet body (no full-screen slide). Selecting a city updates the map camera in place; back fades home back and resets the camera to the device location (or a static London default without GPS).
+- **Home "top picks"**: vertical postcard cards (city name, best activity, temp; Wikipedia thumbnail when available), behind a **Top Picks / Recent** tab row (stretch). Pull-to-refresh on home (assignment **bonus**) force-refreshes this feed — only when the sheet is scrolled to the top **and** the collapsing map header is fully expanded (`modifier.pullToRefresh` `enabled`). Detail has no PTR.
+- **Recently viewed History**: the **Recent** tab lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
+- **In-screen map**: MapLibre collapsing map background (expanded **square / 1:1**) with a rounded surface sheet — no overlay AppBar. Sheet header: **search field + theme** on home; **back + city + info + share + theme** on detail. Geography chips (coastal/inland/elevation) live in the **Info** dialog. Home↔detail Crossfades only the sheet body. Selecting a city updates the map camera in place; back resets to the device location (or static London without GPS).
 - **Current location**: with permission granted, the last-known GPS fix is reverse-geocoded to a city — home shows a discreet `Current location · {City}` chip and the map centers there; tapping the chip opens that city's weather (GPS never auto-navigates to detail). Denied → chip hidden, static default framing.
 - **Share**: detail sheet header share action exports a branded 9:16 portrait "weather flyer" PNG with denser display-scale typography (header + selected-day hero + 7-day strip + ranked activities with score bars) via the system share sheet and best-effort saves a copy to Downloads.
 
 ## PR Review Guide
 
 **Suggested review order**
-1. Home → search a city (e.g. Lisbon) → detail opens with geography chips.
-2. Scroll to **7-Day Forecast** — seven rows with weather, temps, precip, and best activity per day.
-3. Tap a week row → activities re-rank; compact **Pick a day** chips stay in sync.
-4. Share flyer still exports the horizontal 7-day strip (independent of the vertical week dashboard).
+1. Home → search in the sheet header (e.g. Lisbon) → detail.
+2. Compact activity row for the selected day, then **7-Day** rows (weather, temps, precip, best activity).
+3. Tap a week row → activities re-rank. Open **Info** for coastal/inland/elevation.
+4. Share flyer still exports a 9:16 poster (city image when cached).
 
 **Where to look in code**
 | Topic | Location |
@@ -35,7 +35,7 @@ Key experience details:
 | Offline SSOT | `WeatherRepositoryImpl` + Room `WeatherDao` |
 | Score thresholds | `ScoringThresholds.kt` (domain) + README §g |
 
-**Run manually**: `./gradlew installDebug` → search → detail → tap week rows and day chips → toggle dark mode → share.
+**Run manually**: `./gradlew installDebug` → search in header → detail → tap week rows → Info dialog → toggle dark mode → share.
 
 **Pull requests**: [PR #1](https://github.com/yurikayel/WeatherRecommender/pull/1) (original delivery) · PR #2 `feat/review-feedback` (review feedback follow-up).
 
@@ -98,14 +98,14 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Bonus | Status | Implementation |
 |-------|--------|----------------|
 | Offline cache | Done | Room SSOT + WorkManager background sync (chunked refreshes) |
-| Recently viewed History | Done | Home section after Top Picks; Room `lastViewedAt`; last 10; Nominatim/GeoNames dedupe |
+| Recently viewed History | Done | Home **Recent** tab; Room `lastViewedAt`; last 10; Nominatim/GeoNames dedupe |
 | Pull-to-refresh | Done (bonus) | Home-only `modifier.pullToRefresh` (force-refresh top picks); `enabled` only when sheet at top **and** map header fully expanded — not on detail |
 | Dark mode + theme toggle | Done | Navy dark palette; sheet-header theme toggle; DataStore preference (system until overridden, then persisted) |
-| Advanced UI polish / animation | Done | Collapsing square (1:1) map background + sheet header + home↔detail Crossfade, day selector, score ring, top-pick press scale, shimmer/crossfade; pastel day chips; normalized top-pick cards |
+| Advanced UI polish / animation | Done | Collapsing square (1:1) map + sheet header + home↔detail Crossfade; compact activity row; postcard Top Picks; score ring; press scale; shimmer/crossfade |
 | Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground) |
 | Snapshot tests | Done | Paparazzi 2.0.0-alpha05, 9 golden PNGs (home/detail incl. location chip + history + share flyer), verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
-| Substantial UI test coverage | Done | 22 instrumented Compose tests for key flows (home, search, top picks, chips, day selection, back, banners, dark theme, current-location chip) |
-| Share weather flyer | Done | Detail share → branded 9:16 portrait PNG (`GraphicsLayer` + FileProvider); also best-effort save to Downloads |
+| Substantial UI test coverage | Done | 22 instrumented Compose tests for key flows (home, header search, top picks, week-row day selection, Info dialog, back, banners, dark theme, current-location chip) |
+| Share weather flyer | Done | Detail share → branded 9:16 portrait PNG (`GraphicsLayer` + FileProvider); city-image background when cached; best-effort save to Downloads |
 | In-screen map | Done | Collapsing square (1:1) MapLibre background + sheet header (no overlay AppBar) + OpenFreeMap (no Google key); sheet covers map on scroll; home centers on device location (static London fallback, wider zoom); tap → Nominatim reverse; camera/pin in ViewModel |
 | Current-location chip | Done | Runtime permission → LocationManager last-known fix → Nominatim reverse; home header chip (opt-in tap); map centers on fix |
 
