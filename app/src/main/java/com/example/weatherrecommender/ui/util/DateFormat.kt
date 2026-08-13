@@ -14,6 +14,9 @@ private const val ISO_PATTERN = "yyyy-MM-dd"
 /** Returns a full localized weekday for an ISO date, e.g. "Sunday". */
 fun isoDateToWeekday(isoDate: String): String = formatIso(isoDate, "EEEE") ?: isoDate.takeLast(5)
 
+/** Returns an abbreviated localized weekday for an ISO date, e.g. "Sun". */
+fun isoDateToShortWeekday(isoDate: String): String = formatIso(isoDate, "EEE") ?: isoDate.takeLast(3)
+
 /** Returns the day-of-month for an ISO date, e.g. "17". */
 fun isoDateToDayOfMonth(isoDate: String): String = formatIso(isoDate, "d") ?: isoDate.takeLast(2)
 
