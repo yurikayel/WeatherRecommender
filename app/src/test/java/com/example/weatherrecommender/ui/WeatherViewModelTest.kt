@@ -75,6 +75,13 @@ class WeatherViewModelTest {
         coEvery { getTopPicksUseCase(any(), any()) } returns emptyList()
         every { deviceLocationProvider.hasLocationPermission() } returns false
         coEvery { deviceLocationProvider.getLastKnownLocation() } returns null
+        every { getRankedActivitiesUseCase.invoke(any(), any()) } answers {
+            when (invocation.args[1] as Int) {
+                0 -> day0Activities
+                1 -> day1Activities
+                else -> emptyList()
+            }
+        }
         viewModel = createViewModel()
     }
 
@@ -134,7 +141,6 @@ class WeatherViewModelTest {
     fun `location selection loads forecast and ranks the first day`() = runTest {
         every { repository.getForecastFlow(location) } returns flowOf(forecast)
         coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
-        every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
 
         backgroundScope.launch { viewModel.uiState.collect {} }
 
@@ -142,10 +148,14 @@ class WeatherViewModelTest {
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
+        assertTrue(state.destination is WeatherDestination.Detail)
         assertEquals(location, state.selectedLocation)
         assertNotNull(state.forecast)
         assertEquals(0, state.selectedDayIndex)
         assertEquals(day0Activities, state.rankedActivities)
+        assertEquals(2, state.weekTopActivities.size)
+        assertEquals(day0Activities.first(), state.weekTopActivities[0])
+        assertEquals(day1Activities.first(), state.weekTopActivities[1])
     }
 
     @Test
@@ -375,6 +385,7 @@ class WeatherViewModelTest {
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
+        assertEquals(WeatherDestination.Home, state.destination)
         assertNull(state.selectedLocation)
         assertNull(state.mapPin)
         assertEquals(MapCameraPosition.DEFAULT, state.mapCamera)
@@ -403,6 +414,7 @@ class WeatherViewModelTest {
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
+        assertEquals(WeatherDestination.Home, state.destination)
         assertNull(state.selectedLocation)
         assertNull(state.mapPin)
         assertEquals(deviceCity, state.deviceLocation)

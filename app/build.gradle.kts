@@ -49,6 +49,12 @@ android {
         warningsAsErrors = false
     }
 
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
+
     sourceSets {
         getByName("androidTest").assets.directories.add("$projectDir/schemas")
     }
@@ -123,6 +129,8 @@ dependencies {
   // Local tests: jUnit, coroutines, Android runner
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
+  testImplementation(libs.androidx.test.core)
+  testImplementation(libs.androidx.arch.core.testing)
 
   // Instrumented tests: jUnit rules and runners
   androidTestImplementation(libs.androidx.test.core)
@@ -162,8 +170,10 @@ dependencies {
   testImplementation(libs.turbine)
   testImplementation(libs.mockk)
   testImplementation(libs.okhttp.mockwebserver)
+  testImplementation(libs.robolectric)
 
   androidTestImplementation(libs.androidx.room.testing)
+  androidTestImplementation(libs.kotlinx.coroutines.test)
 }
 
 tasks.withType<Test>().configureEach {

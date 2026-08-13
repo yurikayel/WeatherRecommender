@@ -256,10 +256,25 @@ class WeatherScreenTest {
     // --- Detail ---
 
     @Test
+    fun detail_showsWeekSummaryHeading() {
+        setContent(
+            WeatherUiState(
+                destination = WeatherDestination.Detail(london),
+                forecast = twoDayForecast,
+                selectedDayIndex = 0,
+                rankedActivities = listOf(outdoorActivity),
+                weekTopActivities = listOf(outdoorActivity, outdoorActivity)
+            )
+        )
+
+        composeTestRule.onNodeWithText("7-Day Forecast").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun detail_showsCityTitleDaySelectorAndActivities() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 selectedDayIndex = 0,
                 rankedActivities = listOf(outdoorActivity)
@@ -276,7 +291,7 @@ class WeatherScreenTest {
     fun detail_showsShareActionWhenForecastLoaded() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 selectedDayIndex = 0,
                 rankedActivities = listOf(outdoorActivity)
@@ -290,7 +305,7 @@ class WeatherScreenTest {
     fun detail_hidesShareActionWhileForecastLoading() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = null,
                 isLoadingForecast = true
             )
@@ -303,7 +318,7 @@ class WeatherScreenTest {
     fun detail_showsGeographyChips() {
         setContent(
             WeatherUiState(
-                selectedLocation = lisbon,
+                destination = WeatherDestination.Detail(lisbon),
                 forecast = twoDayForecast.copy(location = lisbon),
                 rankedActivities = listOf(outdoorActivity)
             )
@@ -317,7 +332,7 @@ class WeatherScreenTest {
     fun detail_inlandCity_showsInlandChip() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 rankedActivities = listOf(outdoorActivity)
             )
@@ -331,7 +346,7 @@ class WeatherScreenTest {
         var selectedDay = -1
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 selectedDayIndex = 0,
                 rankedActivities = listOf(outdoorActivity)
@@ -350,7 +365,7 @@ class WeatherScreenTest {
         var backCalled = false
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 rankedActivities = listOf(outdoorActivity)
             ),
@@ -366,7 +381,7 @@ class WeatherScreenTest {
     fun detail_syncError_showsBanner() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 rankedActivities = listOf(outdoorActivity),
                 syncError = UiText.DynamicString("No internet connection. Showing offline data.")
@@ -385,7 +400,7 @@ class WeatherScreenTest {
     fun detail_blockingError_isDisplayed() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 isLoadingForecast = false,
                 error = UiText.DynamicString("Server error")
             )
@@ -400,7 +415,7 @@ class WeatherScreenTest {
     fun darkTheme_rendersHomeAndDetail() {
         setContent(
             WeatherUiState(
-                selectedLocation = london,
+                destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 rankedActivities = listOf(outdoorActivity)
             ),
