@@ -14,6 +14,9 @@ import com.example.weatherrecommender.data.local.entity.LocationEntity
  */
 @Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 7, exportSchema = true)
 abstract class WeatherDatabase : RoomDatabase() {
+    /**
+     * Retrieves the primary [WeatherDao] for executing database transactions.
+     */
     abstract fun weatherDao(): WeatherDao
 
     companion object {

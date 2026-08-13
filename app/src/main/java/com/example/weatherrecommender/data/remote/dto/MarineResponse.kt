@@ -9,6 +9,10 @@ import kotlinx.serialization.Serializable
  * The Marine API only returns meaningful values for coordinates near open water; for inland
  * coordinates the [MarineDailyDto.waveHeightMax] entries come back as nulls. This makes the
  * presence of non-null wave heights a reliable "has sea access" signal.
+ *
+ * @property latitude Geographic latitude of the query point.
+ * @property longitude Geographic longitude of the query point.
+ * @property daily Encapsulated daily marine metrics, or null for inland coordinates.
  */
 @Serializable
 data class MarineResponse(
@@ -19,6 +23,9 @@ data class MarineResponse(
 
 /**
  * Encapsulates the daily marine metrics array. Each list is aligned by date with the forecast.
+ *
+ * @property time List of ISO-8601 date strings.
+ * @property waveHeightMax List of daily maximum wave heights in meters (null for days without marine data).
  */
 @Serializable
 data class MarineDailyDto(
