@@ -21,7 +21,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import coil.compose.AsyncImage
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -172,8 +175,7 @@ internal fun ShareWeatherFlyer(
 ) {
     val forecastDays = days.take(MAX_FLYER_DAYS)
     val selectedDay = forecastDays.getOrNull(selectedDayIndex) ?: forecastDays.firstOrNull()
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Box(
         modifier = modifier
             .width(FlyerWidth)
             .height(FlyerHeight)
@@ -182,29 +184,59 @@ internal fun ShareWeatherFlyer(
                     colors = listOf(PremiumPrimaryContainerLight, FlyerSurface, FlyerSurface)
                 )
             )
-            .padding(horizontal = 18.dp, vertical = 14.dp)
     ) {
-        FlyerHeader(location = location, days = forecastDays)
-
-        Spacer(Modifier.weight(1f))
-        selectedDay?.let { FlyerHero(day = it) }
-
-        Spacer(Modifier.weight(1f))
-        FlyerForecastStrip(days = forecastDays)
-
-        if (rankedActivities.isNotEmpty() && selectedDay != null) {
-            Spacer(Modifier.weight(1f))
-            FlyerActivities(day = selectedDay, activities = rankedActivities)
+        if (location.imageUrl != null) {
+            AsyncImage(
+                model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                    .data(location.imageUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.3f),
+                                Color.Black.copy(alpha = 0.8f)
+                            )
+                        )
+                    )
+            )
         }
 
-        Spacer(Modifier.weight(1f))
-        Text(
-            text = stringResource(R.string.share_card_footer),
-            style = FlyerType.footer,
-            color = FlyerMuted.copy(alpha = 0.85f),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 18.dp, vertical = 14.dp)
+        ) {
+            FlyerHeader(location = location, days = forecastDays)
+
+            Spacer(Modifier.weight(1f))
+            selectedDay?.let { FlyerHero(day = it) }
+
+            Spacer(Modifier.weight(1f))
+            FlyerForecastStrip(days = forecastDays)
+
+            if (rankedActivities.isNotEmpty() && selectedDay != null) {
+                Spacer(Modifier.weight(1f))
+                FlyerActivities(day = selectedDay, activities = rankedActivities)
+            }
+
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = stringResource(R.string.share_card_footer),
+                style = FlyerType.footer,
+                color = if (location.imageUrl != null) Color.White.copy(alpha = 0.7f) else FlyerMuted.copy(alpha = 0.85f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 
