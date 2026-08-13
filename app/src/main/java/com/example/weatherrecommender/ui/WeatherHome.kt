@@ -85,7 +85,6 @@ import kotlin.math.roundToInt
 @Composable
 internal fun HomeContent(
     uiState: WeatherUiState,
-    onQueryChanged: (String) -> Unit,
     onLocationSelected: (Location) -> Unit,
     onRefresh: () -> Unit,
     onCurrentLocationClick: () -> Unit = {},

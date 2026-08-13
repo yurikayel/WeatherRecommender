@@ -98,13 +98,11 @@ class WeatherScreenTest {
     fun home_showsSearchBarAndTopPicks() {
         setContent(WeatherUiState())
 
-        // Title lives in the fixed sheet header below the map — not inside the scrollable body.
-        composeTestRule.onNodeWithText("Concierge Weather").assertIsDisplayed()
         composeTestRule.onAllNodesWithText("Plan your day").assertCountEquals(0)
         composeTestRule.onNodeWithContentDescription("Switch to dark mode").assertIsDisplayed()
-        // Square map leaves little sheet viewport — scroll before asserting body content.
-        composeTestRule.onNodeWithText("Search a city…").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Top picks for you").performScrollTo().assertIsDisplayed()
+        // Search lives in the fixed sheet header — not inside the scrollable body.
+        composeTestRule.onNodeWithText("Search a city…").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Top Picks").assertIsDisplayed()
     }
 
     @Test
@@ -119,10 +117,8 @@ class WeatherScreenTest {
 
         // GPS resolves the chip only — it must not auto-open detail.
         composeTestRule.onAllNodesWithContentDescription("Back").assertCountEquals(0)
-        // Device location name is shown in the fixed sheet header (homeSheetTitle), not scrollable body.
-        composeTestRule.onNodeWithText("Lisbon").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Search a city…").assertIsDisplayed()
         composeTestRule.onNodeWithText("Current location · Lisbon").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Search a city…").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -146,7 +142,7 @@ class WeatherScreenTest {
         var lastQuery = ""
         setContent(WeatherUiState(), onQueryChanged = { lastQuery = it })
 
-        composeTestRule.onNodeWithText("Search a city…").performScrollTo().performTextInput("Lis")
+        composeTestRule.onNodeWithText("Search a city…").performTextInput("Lis")
 
         assertEquals("Lis", lastQuery)
     }
@@ -156,7 +152,7 @@ class WeatherScreenTest {
         var lastQuery = "unchanged"
         setContent(WeatherUiState(query = "Lon"), onQueryChanged = { lastQuery = it })
 
-        composeTestRule.onNodeWithContentDescription("Clear search").performScrollTo().performClick()
+        composeTestRule.onNodeWithContentDescription("Clear search").performClick()
 
         assertEquals("", lastQuery)
     }
@@ -271,7 +267,7 @@ class WeatherScreenTest {
             )
         )
 
-        composeTestRule.onNodeWithText("7-Day Forecast").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("7-Day").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -286,9 +282,9 @@ class WeatherScreenTest {
         )
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Pick a day").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Outdoor Sightseeing").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("95").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("7-Day").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Outdoor Sightseeing").assertIsDisplayed()
+        composeTestRule.onNodeWithText("95").assertIsDisplayed()
     }
 
     @Test
@@ -328,8 +324,9 @@ class WeatherScreenTest {
             )
         )
 
-        composeTestRule.onNodeWithText("Coastal").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("68 m elevation").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Info").performClick()
+        composeTestRule.onNodeWithText("Coastal").assertIsDisplayed()
+        composeTestRule.onNodeWithText("68 m elevation").assertIsDisplayed()
     }
 
     @Test
@@ -342,7 +339,8 @@ class WeatherScreenTest {
             )
         )
 
-        composeTestRule.onNodeWithText("Inland").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Info").performClick()
+        composeTestRule.onNodeWithText("Inland").assertIsDisplayed()
     }
 
     @Test
@@ -427,6 +425,6 @@ class WeatherScreenTest {
         )
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Outdoor Sightseeing").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Outdoor Sightseeing").assertIsDisplayed()
     }
 }

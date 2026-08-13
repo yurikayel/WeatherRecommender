@@ -251,8 +251,7 @@ class WeatherRepositoryImpl @Inject constructor(
             pages?.values?.firstOrNull()?.let { page ->
                 page.thumbnail?.source ?: page.original?.source
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (_: Exception) {
             null // Best-effort fetching
         }
     }

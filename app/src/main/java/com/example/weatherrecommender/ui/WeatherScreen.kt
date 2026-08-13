@@ -320,7 +320,6 @@ private fun CollapsingMapScaffold(
                     } else {
                         HomeContent(
                             uiState = uiState,
-                            onQueryChanged = onQueryChanged,
                             onLocationSelected = onLocationSelected,
                             onRefresh = onRefresh,
                             onCurrentLocationClick = onCurrentLocationClick,
