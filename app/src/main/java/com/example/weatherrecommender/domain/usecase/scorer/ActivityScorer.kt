@@ -1,9 +1,30 @@
 package com.example.weatherrecommender.domain.usecase.scorer
 
 import com.example.weatherrecommender.domain.model.ActivityContext
-import com.example.weatherrecommender.domain.model.ReasonKey
 import com.example.weatherrecommender.domain.model.RankedActivity
+import com.example.weatherrecommender.domain.model.ReasonKey
 import com.example.weatherrecommender.domain.model.RecommendedActivity
+import com.example.weatherrecommender.domain.model.ScoringThresholds.INDOOR_BASE_SCORE
+import com.example.weatherrecommender.domain.model.ScoringThresholds.INDOOR_PRECIP_BAD_MIN
+import com.example.weatherrecommender.domain.model.ScoringThresholds.INDOOR_SNOW_BAD_MIN
+import com.example.weatherrecommender.domain.model.ScoringThresholds.INDOOR_TEMP_COLD_MAX
+import com.example.weatherrecommender.domain.model.ScoringThresholds.OUTDOOR_BASE_SCORE
+import com.example.weatherrecommender.domain.model.ScoringThresholds.OUTDOOR_PRECIP_BAD_MIN
+import com.example.weatherrecommender.domain.model.ScoringThresholds.OUTDOOR_TEMP_HOT_MIN
+import com.example.weatherrecommender.domain.model.ScoringThresholds.OUTDOOR_TEMP_MILD_MAX
+import com.example.weatherrecommender.domain.model.ScoringThresholds.OUTDOOR_TEMP_MILD_MIN
+import com.example.weatherrecommender.domain.model.ScoringThresholds.OUTDOOR_WIND_STRONG_MIN
+import com.example.weatherrecommender.domain.model.ScoringThresholds.SKI_BASE_SCORE
+import com.example.weatherrecommender.domain.model.ScoringThresholds.SKI_ELEVATION_MOUNTAIN_MIN
+import com.example.weatherrecommender.domain.model.ScoringThresholds.SKI_SNOW_IDEAL_MIN
+import com.example.weatherrecommender.domain.model.ScoringThresholds.SKI_TEMP_FREEZING_MAX
+import com.example.weatherrecommender.domain.model.ScoringThresholds.SKI_TEMP_MELTING_MIN
+import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_BASE_SCORE
+import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_TEMP_WARM_MIN
+import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WAVE_IDEAL_MAX
+import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WAVE_MIN_RIDEABLE
+import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WIND_BAD_MIN
+import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WIND_IDEAL_MAX
 import kotlin.math.roundToInt
 
 /**
@@ -39,35 +60,26 @@ interface ActivityScorer {
 class SurfScorer : ActivityScorer {
     override val activityType = RecommendedActivity.SURFING
 
-    companion object {
-        private const val BASE_SCORE = 45
-        private const val WAVE_MIN_RIDEABLE = 0.4
-        private const val WAVE_IDEAL_MAX = 2.5
-        private const val WIND_IDEAL_MAX = 20.0
-        private const val WIND_BAD_MIN = 35.0
-        private const val TEMP_WARM_MIN = 18.0
-    }
-
     override fun isApplicable(context: ActivityContext): Boolean =
         context.location.hasSeaAccess
 
     override fun score(context: ActivityContext): RankedActivity {
         val day = context.day
         val wave = day.waveHeightMax ?: 0.0
-        var score = BASE_SCORE
+        var score = SURF_BASE_SCORE
 
         when {
-            wave < WAVE_MIN_RIDEABLE -> score -= 25
-            wave <= WAVE_IDEAL_MAX -> score += 35
+            wave < SURF_WAVE_MIN_RIDEABLE -> score -= 25
+            wave <= SURF_WAVE_IDEAL_MAX -> score += 35
             else -> score -= 15
         }
 
         when {
-            day.maxWindSpeed < WIND_IDEAL_MAX -> score += 15
-            day.maxWindSpeed > WIND_BAD_MIN -> score -= 30
+            day.maxWindSpeed < SURF_WIND_IDEAL_MAX -> score += 15
+            day.maxWindSpeed > SURF_WIND_BAD_MIN -> score -= 30
         }
 
-        if (day.maxTemp >= TEMP_WARM_MIN) score += 10
+        if (day.maxTemp >= SURF_TEMP_WARM_MIN) score += 10
 
         return RankedActivity(
             activity = activityType,
@@ -85,29 +97,21 @@ class SurfScorer : ActivityScorer {
 class SkiScorer : ActivityScorer {
     override val activityType = RecommendedActivity.SKIING
 
-    companion object {
-        private const val BASE_SCORE = 20
-        private const val ELEVATION_MOUNTAIN_MIN = 800.0
-        private const val SNOW_IDEAL_MIN = 3.0
-        private const val TEMP_FREEZING_MAX = 0.0
-        private const val TEMP_MELTING_MIN = 6.0
-    }
-
     override fun isApplicable(context: ActivityContext): Boolean {
         val elevation = context.location.elevation
-        val mountainous = elevation != null && elevation >= ELEVATION_MOUNTAIN_MIN
+        val mountainous = elevation != null && elevation >= SKI_ELEVATION_MOUNTAIN_MIN
         return mountainous || context.day.snowfallSum > 0.0
     }
 
     override fun score(context: ActivityContext): RankedActivity {
         val day = context.day
-        var score = BASE_SCORE
+        var score = SKI_BASE_SCORE
 
-        if (day.snowfallSum >= SNOW_IDEAL_MIN) score += 50
+        if (day.snowfallSum >= SKI_SNOW_IDEAL_MIN) score += 50
         else if (day.snowfallSum > 0.0) score += 25
 
-        if (day.avgTemp < TEMP_FREEZING_MAX) score += 30
-        if (day.avgTemp > TEMP_MELTING_MIN) score -= 40
+        if (day.avgTemp < SKI_TEMP_FREEZING_MAX) score += 30
+        if (day.avgTemp > SKI_TEMP_MELTING_MIN) score -= 40
 
         return RankedActivity(
             activity = activityType,
@@ -125,25 +129,16 @@ class SkiScorer : ActivityScorer {
 class OutdoorSightseeingScorer : ActivityScorer {
     override val activityType = RecommendedActivity.OUTDOOR_SIGHTSEEING
 
-    companion object {
-        private const val BASE_SCORE = 55
-        private const val PRECIP_BAD_MIN = 5.0
-        private const val TEMP_MILD_MIN = 14.0
-        private const val TEMP_MILD_MAX = 26.0
-        private const val TEMP_HOT_MIN = 32.0
-        private const val WIND_STRONG_MIN = 35.0
-    }
-
     override fun isApplicable(context: ActivityContext): Boolean = true
 
     override fun score(context: ActivityContext): RankedActivity {
         val day = context.day
-        var score = BASE_SCORE
+        var score = OUTDOOR_BASE_SCORE
 
-        if (day.precipitationSum > PRECIP_BAD_MIN) score -= 45
-        if (day.avgTemp in TEMP_MILD_MIN..TEMP_MILD_MAX) score += 35
-        if (day.avgTemp > TEMP_HOT_MIN) score -= 30
-        if (day.maxWindSpeed > WIND_STRONG_MIN) score -= 15
+        if (day.precipitationSum > OUTDOOR_PRECIP_BAD_MIN) score -= 45
+        if (day.avgTemp in OUTDOOR_TEMP_MILD_MIN..OUTDOOR_TEMP_MILD_MAX) score += 35
+        if (day.avgTemp > OUTDOOR_TEMP_HOT_MIN) score -= 30
+        if (day.maxWindSpeed > OUTDOOR_WIND_STRONG_MIN) score -= 15
 
         return RankedActivity(
             activity = activityType,
@@ -161,21 +156,16 @@ class OutdoorSightseeingScorer : ActivityScorer {
 class IndoorSightseeingScorer : ActivityScorer {
     override val activityType = RecommendedActivity.INDOOR_SIGHTSEEING
 
-    companion object {
-        private const val BASE_SCORE = 45
-        private const val PRECIP_BAD_MIN = 4.0
-        private const val SNOW_BAD_MIN = 1.0
-        private const val TEMP_COLD_MAX = 4.0
-    }
-
     override fun isApplicable(context: ActivityContext): Boolean = true
 
     override fun score(context: ActivityContext): RankedActivity {
         val day = context.day
-        var score = BASE_SCORE
+        var score = INDOOR_BASE_SCORE
 
-        if (day.precipitationSum > PRECIP_BAD_MIN || day.snowfallSum > SNOW_BAD_MIN) score += 35
-        if (day.minTemp < TEMP_COLD_MAX) score += 15
+        if (day.precipitationSum > INDOOR_PRECIP_BAD_MIN || day.snowfallSum > INDOOR_SNOW_BAD_MIN) {
+            score += 35
+        }
+        if (day.minTemp < INDOOR_TEMP_COLD_MAX) score += 15
 
         return RankedActivity(
             activity = activityType,

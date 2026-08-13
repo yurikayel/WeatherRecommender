@@ -33,6 +33,7 @@ import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
+import com.example.weatherrecommender.domain.model.ScoringThresholds
 import com.example.weatherrecommender.theme.PastelRainLight
 import com.example.weatherrecommender.theme.PastelSnowLight
 import com.example.weatherrecommender.theme.PastelSunnyLight
@@ -66,8 +67,6 @@ private val FlyerAccent = PremiumPrimaryDark
 private val FlyerWidth = 360.dp
 private val FlyerHeight = 640.dp
 
-private const val SCORE_HIGH = 75
-private const val SCORE_MID = 40
 private const val MAX_FLYER_ACTIVITIES = 4
 private const val MAX_FLYER_DAYS = 7
 
@@ -471,8 +470,8 @@ private fun FlyerSectionLabel(text: String) {
 
 /** Mirrors the detail-screen score ring thresholds using fixed light colors. */
 private fun flyerScoreColor(score: Int): Color = when {
-    score > SCORE_HIGH -> FlyerAccent
-    score > SCORE_MID -> PremiumAccent
+    score > ScoringThresholds.SCORE_HIGH -> FlyerAccent
+    score > ScoringThresholds.SCORE_MID -> PremiumAccent
     else -> PremiumErrorLight
 }
 
