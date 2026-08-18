@@ -1,18 +1,31 @@
 *.iml
-.gradle
-.gradle-map-agent/
-.gradle-agent/
-/local.properties
-/.idea/
 .DS_Store
+
+# Gradle
+.gradle
+# Throwaway GRADLE_USER_HOME dirs used to isolate agent/CI runs (multi-GB caches).
+.gradle-*/
+
+# Build outputs
 /build
+/build-*/
 /captures
 .externalNativeBuild
 .cxx
-local.properties
-sdk_list.txt
-ksp.xml
 .kotlin/
+
+# Local config (machine-specific, may contain SDK paths or keys)
+/local.properties
+local.properties
+/.idea/
+ksp.xml
+
+# Scratch logs and captured tool output
+*.log
+/.ci-logs*/
 compile-out*.txt
 test-out.txt
-*.log
+sdk_list.txt
+
+# Local-only generated reference docs (kept out of the repo; README is the source of truth).
+/docs/
