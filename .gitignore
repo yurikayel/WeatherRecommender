@@ -15,7 +15,7 @@
 .kotlin/
 
 # Local config (machine-specific, may contain SDK paths or keys)
-/local.properties
+# See local.properties.example for the expected shape.
 local.properties
 /.idea/
 ksp.xml
