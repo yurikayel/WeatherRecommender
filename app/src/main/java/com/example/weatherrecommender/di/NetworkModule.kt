@@ -45,7 +45,10 @@ object NetworkModule {
             .readTimeout(15, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
-                    .header("User-Agent", "WeatherRecommender/1.0 (https://github.com/example/weatherrecommender)")
+                    .header(
+                        "User-Agent",
+                        "WeatherRecommender/1.0 (https://github.com/yurikayel/WeatherRecommender)"
+                    )
                     .build()
                 chain.proceed(request)
             }

@@ -11,7 +11,7 @@ import retrofit2.http.Query
  * [MediaWiki API](https://www.mediawiki.org/wiki/API:Main_page)
  */
 interface WikipediaApi {
-    @Headers("User-Agent: WeatherRecommender/1.0 (https://github.com/example/weatherrecommender)")
+    @Headers("User-Agent: WeatherRecommender/1.0 (https://github.com/yurikayel/WeatherRecommender)")
     @GET("w/api.php")
     suspend fun getPageImage(
         @Query("titles") titles: String,

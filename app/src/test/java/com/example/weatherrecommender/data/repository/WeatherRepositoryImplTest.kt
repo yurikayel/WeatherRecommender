@@ -127,6 +127,18 @@ class WeatherRepositoryImplTest {
     }
 
     @Test
+    fun `searchCity rethrows CancellationException instead of mapping it to an error`() = runTest {
+        coEvery { geocodingApi.searchCity(any()) } throws kotlinx.coroutines.CancellationException("cancelled")
+
+        try {
+            repository.searchCity("Lon")
+            org.junit.Assert.fail("expected CancellationException")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            assertEquals("cancelled", e.message)
+        }
+    }
+
+    @Test
     fun `searchCity maps 429 to RateLimitExceeded`() = runTest {
         coEvery { geocodingApi.searchCity(any()) } throws HttpException(
             Response.error<String>(429, "".toResponseBody())

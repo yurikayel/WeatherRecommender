@@ -135,6 +135,7 @@ class WeatherViewModel @Inject constructor(
     private val searchQueryFlow = MutableStateFlow("")
     private var forecastJob: Job? = null
     private var contentRevealJob: Job? = null
+    private var mapTapJob: Job? = null
     private var deviceLocationJob: Job? = null
     private var pendingDetailLocation: Location? = null
     private var bufferedForecast: WeatherForecast? = null
@@ -254,6 +255,8 @@ class WeatherViewModel @Inject constructor(
      * on a cache miss, 200 ms before land when weather is already fresh).
      */
     fun onLocationSelected(location: Location) {
+        mapTapJob?.cancel()
+        mapTapJob = null
         pendingDetailLocation = location
         bufferedForecast = null
         bufferedError = null
@@ -366,12 +369,12 @@ class WeatherViewModel @Inject constructor(
      * Tap / long-press on the map: reverse-geocode then open the same detail flow as search.
      */
     fun onMapTapped(latitude: Double, longitude: Double) {
-        if (_uiState.value.isResolvingMapTap) return
         if (currentConnectivityStatus != ConnectivityStatus.Available) {
             _uiState.update { it.copy(error = AppError.NetworkError.NoConnectivity.asUiText()) }
             return
         }
 
+        mapTapJob?.cancel()
         _uiState.update {
             it.copy(
                 mapTapFetch = FetchStatus.Loading,
@@ -384,7 +387,7 @@ class WeatherViewModel @Inject constructor(
             )
         }
 
-        viewModelScope.launch {
+        mapTapJob = viewModelScope.launch {
             repository.reverseGeocode(latitude, longitude).fold(
                 onSuccess = { location ->
                     onLocationSelected(location)
@@ -421,6 +424,8 @@ class WeatherViewModel @Inject constructor(
     fun onBack() {
         forecastJob?.cancel()
         contentRevealJob?.cancel()
+        mapTapJob?.cancel()
+        mapTapJob = null
         pendingDetailLocation = null
         bufferedForecast = null
         bufferedError = null

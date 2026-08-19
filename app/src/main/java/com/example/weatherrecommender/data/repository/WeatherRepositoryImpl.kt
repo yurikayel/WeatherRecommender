@@ -21,6 +21,7 @@ import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
 import com.example.weatherrecommender.domain.usecase.MajorCities
 import com.example.weatherrecommender.domain.usecase.NearbyCities
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -137,6 +138,8 @@ class WeatherRepositoryImpl @Inject constructor(
             if (index > 0) delay(PREFETCH_STAGGER_MS)
             try {
                 refreshForecast(nearby, force = false)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Best-effort warm of the map neighborhood.
             }
@@ -318,6 +321,8 @@ class WeatherRepositoryImpl @Inject constructor(
             pages?.values?.firstOrNull()?.let { page ->
                 page.thumbnail?.source ?: page.original?.source
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null // Best-effort fetching
         }
@@ -337,6 +342,8 @@ class WeatherRepositoryImpl @Inject constructor(
             marineDaily.time.indices.associateBy({ marineDaily.time[it] }) { i ->
                 marineDaily.waveHeightMax.getOrNull(i)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         }
@@ -394,6 +401,8 @@ class WeatherRepositoryImpl @Inject constructor(
     }
 
     private fun Exception.toAppError(): AppError {
+        // catch (Exception) would otherwise turn Job cancellation into a UI error.
+        if (this is CancellationException) throw this
         return when (this) {
             is java.net.SocketTimeoutException -> AppError.NetworkError.Timeout
             is javax.net.ssl.SSLException -> AppError.NetworkError.Unknown(this)

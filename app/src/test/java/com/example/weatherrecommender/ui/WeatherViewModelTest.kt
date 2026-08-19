@@ -24,6 +24,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -485,6 +486,29 @@ class WeatherViewModelTest {
         assertEquals(false, state.isResolvingMapTap)
         assertEquals(pinned, state.mapPin)
         io.mockk.coVerify { repository.reverseGeocode(51.5, -0.1) }
+    }
+
+    @Test
+    fun `selecting a city cancels an in-flight map tap so it cannot overwrite`() = runTest {
+        val pinned = Location(-1_000_042, "London", 51.5, -0.1, "UK", "England")
+        coEvery { repository.reverseGeocode(51.5, -0.1) } coAnswers {
+            delay(10_000)
+            Result.Success(pinned)
+        }
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(any(), 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onMapTapped(51.5, -0.1)
+        runCurrent()
+        viewModel.onLocationSelected(location)
+        advanceUntilIdle()
+
+        assertEquals(location, viewModel.uiState.value.selectedLocation)
+        io.mockk.coVerify(exactly = 0) { repository.refreshForecast(pinned) }
+        io.mockk.coVerify(exactly = 0) { repository.getForecastFlow(pinned) }
     }
 
     @Test

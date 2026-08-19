@@ -25,6 +25,7 @@ interface NominatimApi {
 
     companion object {
         const val BASE_URL = "https://nominatim.openstreetmap.org/"
-        const val USER_AGENT = "WeatherRecommender/1.0 (Concierge take-home; Android)"
+        const val USER_AGENT =
+            "WeatherRecommender/1.0 (https://github.com/yurikayel/WeatherRecommender)"
     }
 }
