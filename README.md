@@ -99,6 +99,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 - **Paparazzi snapshots**: `./gradlew recordPaparazziDebug -Ppaparazzi` (verify with `verifyPaparazziDebug -Ppaparazzi`; 9 golden PNGs live in `app/src/test/snapshots/`)
 - **Lint**: `./gradlew lintDebug`
 - **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify`
+- **Quality gate**: PRs get a sticky GitHub comment (Status Passed/Failed, Kover coverage vs `main`, duplication + detekt tables). The **Quality Gate** check fails if **line** coverage drops below `main` (0.01% epsilon) or under a 10% floor. Driven by **unit tests + Kover** only — no emulator, no SonarCloud. Workflow: `.github/workflows/quality-gate.yml`.
 - **Static analysis**: `./gradlew detekt`
 - **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (Compose UI flows + Room DAO integration + migration tests; also run on CI emulator)
 
@@ -219,7 +220,7 @@ Honest scope note: a **strict 3–4 hour** take would likely stop at search → 
 Implemented:
 1. Network connectivity checks via `ConnectivityObserver` with `ACCESS_NETWORK_STATE` permission.
 2. Localized error mapping via `UiText` and `AppErrorMapper`; GPS and share bitmap IO hop to an injected `@IoDispatcher` rather than a hardcoded `Dispatchers.IO`.
-3. CI/CD via GitHub Actions (unit tests + Paparazzi verify, detekt, lint, Kover, debug + release builds on JDK 21; separate emulator job for instrumented tests). CI installs `platforms;android-36` and `build-tools;36.0.0`.
+3. CI/CD via GitHub Actions (unit tests + Paparazzi verify, detekt, lint, Kover, debug + release builds on JDK 21; separate emulator job for instrumented tests). A separate **Quality Gate** workflow comments Kover coverage vs `main` on PRs and fails if line coverage drops. CI installs `platforms;android-36` and `build-tools;36.0.0`.
 4. Debug-only HTTP body logging; release builds use R8 minification.
 5. Privacy policy: see [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 

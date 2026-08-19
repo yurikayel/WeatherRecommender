@@ -74,6 +74,22 @@ kotlin {
 kover {
     reports {
         filters {
+            excludes {
+                // Generated Hilt / Room / databinding — FQCN wildcards only (not file paths).
+                classes(
+                    "*_Impl",
+                    "*_Impl\$*",
+                    "*_Factory",
+                    "*_Factory\$*",
+                    "Hilt_*",
+                    "*_HiltModules*",
+                    "*_MembersInjector*",
+                    "*_GeneratedInjector*",
+                    "*databinding*",
+                    "*.databinding.*",
+                    "*.BuildConfig",
+                )
+            }
             includes {
                 packages("com.example.weatherrecommender.domain.*")
                 packages("com.example.weatherrecommender.data.*")

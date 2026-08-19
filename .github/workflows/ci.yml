@@ -1,5 +1,8 @@
 name: Android CI
 
+# Coverage vs main is a separate check (.github/workflows/quality-gate.yml).
+# A coverage dip fails that job only — not this unit-test / Paparazzi job.
+
 on:
   push:
     branches: [ "main" ]
