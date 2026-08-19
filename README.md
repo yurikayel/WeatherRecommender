@@ -6,15 +6,16 @@ This is a native Android app that implements the Concierge Weather Recommender a
 | Scope | What |
 |-------|------|
 | **Core (brief)** | City search, **7-day selector (weather + date per day)**, per-day activity ranking, offline-first Room cache, Clean Architecture + tests |
-| **Stretch** | Home top picks (postcard cards + Top Picks / Recent tabs); History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; Wikipedia city thumbnails (Room v8 `imageUrl` + 30-day `placeMetadataUpdatedAt`); WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 9:16 weather flyer PNG (+ city-image background, save to Downloads); collapsing square (1:1) MapLibre map (map-first hop, then sheet); GPS current-location chip; nearby-city prefetch; Paparazzi + instrumented CI |
+| **Stretch** | Home top picks (postcard cards + Top Picks / Recent tabs); History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; Wikipedia city thumbnails (Room v8 `imageUrl` + 30-day `placeMetadataUpdatedAt`); WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle** (first launch follows sunrise/sunset at the device location); splash + original mark; share 9:16 weather flyer PNG (+ city-image background, save to Downloads); MapLibre map under a Material 3 bottom sheet (peek ~40% / map ~60%, expand to full screen, map-first hop); GPS current-location chip; nearby-city prefetch; Paparazzi + instrumented CI |
 
 Key experience details:
-- **7-Day Forecast (core)**: the detail sheet (bottom half under the 1:1 map) is a **no-scroll** weighted layout: city hero, then **seven tall day-of-week buttons in one `fillMaxWidth` row** (weekday + date stacked, weather icon, high/low, precip — no activity name/score on the chip). Today is first and selected (`selectedDayIndex = 0`). Tapping a day re-ranks the **vertical activity column** below. There is no "7-day forecast" heading and no "Wednesday's picks" title.
-- **Per-day recommendations**: ranked activities fill leftover height as equal-weight **cards in a column** (icon + name + score + a localized **why** line from `ReasonKey`). There is no single "week-long" score.
+- **7-Day Forecast (core)**: the detail sheet is a **scrollable** Material 3 bottom sheet (peek ~40% of the screen so the map stays ~60% visible; drag expands to full screen). Top of the sheet is an **overlay hero**: city photo edge-to-edge under a scrim, with back / city / info / share / theme on the image. Below: **seven tall day-of-week buttons in one `fillMaxWidth` row** (weekday + date stacked, weather icon, high/low, precip — no activity name/score on the chip). Today is first and selected (`selectedDayIndex = 0`). Tapping a day re-ranks the **vertical activity list** below. There is no "7-day forecast" heading and no "Wednesday's picks" title.
+- **Per-day recommendations**: ranked activities as **cards in a column** (icon + name + score + a localized **why** line from `ReasonKey`). The sheet scrolls so all rows fit. There is no single "week-long" score.
 - **Geography-aware activities**: activities that don't make sense for a location are hidden entirely (e.g. surfing is only offered where there is sea access; skiing only in mountainous terrain or when snow is falling).
-- **Home "top picks"**: vertical postcard cards (city name, best activity, temp; Wikipedia thumbnail when available), behind a **Top Picks / Recent** tab row (stretch). Pull-to-refresh on home (assignment **bonus**) force-refreshes this feed — only when the sheet is scrolled to the top **and** the collapsing map header is fully expanded (`modifier.pullToRefresh` `enabled`). Detail has no PTR.
+- **Home "top picks"**: vertical postcard cards (city name, best activity, temp; Wikipedia thumbnail when available), behind a **Top Picks / Recent** tab row (stretch). Pull-to-refresh on home (assignment **bonus**) force-refreshes this feed — only when the sheet is **peeked** **and** the list is scrolled to the top (`modifier.pullToRefresh` `enabled`). Detail has no PTR.
 - **Recently viewed History**: the **Recent** tab lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
-- **In-screen map**: MapLibre collapsing map background (expanded **square / 1:1**) with a rounded surface sheet — no overlay AppBar. Sheet header: **search field + theme** on home; **back + city + info + share + theme** on detail. Geography chips (coastal/inland/elevation) live in the **Info** dialog. Home↔detail Crossfades only the sheet body. Selecting a city **flies the map first**. Cache miss: 350 ms pause + 1200 ms fly, sheet 500 ms before land (`MapHopProfile.CACHE_MISS`, reveal 1050 ms). Fresh Room weather: 150 ms pause + 600 ms fly, sheet 200 ms before land (`CACHED`, reveal 550 ms). Fetch starts immediately. Back resets to the device location (or static London without GPS).
+- **In-screen map**: MapLibre full-screen background under a rounded **bottom sheet** — no overlay AppBar. Peek shows ~60% map / ~40% sheet; the sheet expands to cover the screen and scrolls. OpenFreeMap **Liberty** tiles in light theme and **Dark** tiles in dark theme (swap immediately on the sun/moon toggle). Sheet header: **search field + theme** on home; **back + city + info + share + theme** overlaid on the city image in detail. Geography chips (coastal/inland/elevation) live in the **Info** dialog. Home↔detail Crossfades only the sheet body. Selecting a city **flies the map first**. Cache miss: 350 ms pause + 1200 ms fly, sheet 500 ms before land (`MapHopProfile.CACHE_MISS`, reveal 1050 ms). Fresh Room weather: 150 ms pause + 600 ms fly, sheet 200 ms before land (`CACHED`, reveal 550 ms). Fetch starts immediately. Back resets to the device location (or static London without GPS).
+- **First-run theme**: if no theme preference is stored yet, the app picks **Dark** when it is night at the device location (solar elevation at lat/lng; clock 19:00–06:00 if GPS is not ready) and **Light** otherwise, then **persists** that choice so the next cold start does not follow the clock. The sun/moon toggle always wins afterwards. An explicit System choice is stored separately from “unset”.
 - **Cache windows**: daily Open-Meteo forecasts skip the network when Room is newer than **6 hours** (global model cadence; matches WorkManager). City name + Wikipedia thumbnail skip re-fetch for **30 days**. After a city loads, nearby hubs in the same map region are prefetched into Room so the next tap can paint from cache.
 - **Current location**: with permission granted, the last-known GPS fix is reverse-geocoded to a city — home shows a discreet `Current location · {City}` chip and the map centers there; tapping the chip opens that city's weather (GPS never auto-navigates to detail). Denied → chip hidden, static default framing.
 - **Share**: detail sheet header share action exports a branded 9:16 portrait "weather flyer" PNG with denser display-scale typography (header + selected-day hero + 7-day strip + ranked activities with score bars) via the system share sheet and best-effort saves a copy to Downloads.
@@ -23,10 +24,11 @@ Key experience details:
 
 **Suggested review order**
 1. Home → search in the sheet header (e.g. Lisbon) → watch the **map fly first**, then the sheet.
-2. City image, then **7 tall day buttons** in one row (weather, temps, precip). Ranked activities as a **vertical column** under the selected day.
-3. Tap a day button → activities re-rank. Open **Info** for coastal/inland/elevation.
+2. Peek shows ~60% map. Drag the sheet up to full screen; it should scroll. City image is edge-to-edge under the header (scrim). **7 tall day buttons** in one row. Ranked activities below — scroll if needed.
+3. Tap a day button → activities re-rank. Open **Info** for coastal/inland/elevation. Toggle theme: map tiles should switch Liberty ↔ Dark immediately.
 4. Open a second nearby city (map tap or search) — if it was prefetched, detail should appear as the camera lands.
 5. Share flyer still exports a 9:16 poster (city image when cached).
+6. Fresh install: first launch at night → dark theme persisted; day → light. Toggling afterwards is sticky.
 
 **Where to look in code**
 | Topic | Location |
@@ -38,11 +40,15 @@ Key experience details:
 | Offline SSOT | `WeatherRepositoryImpl` + Room `WeatherDao` |
 | Cache windows | `CachePolicy` (6 h weather / 30 d place metadata) + `prefetchNearbyCities` |
 | Map-first hop | `MapHopProfile` + `WeatherViewModel.onLocationSelected` |
+| Bottom sheet peek (map 60%) | `WeatherScreen.kt` → `SHEET_PEEK_FRACTION` (0.40) |
+| Overlay city hero | `WeatherDetail.kt` → `CityHeroOverlay` |
+| First-run theme | `FirstRunThemeSettler` + `SolarNight` |
+| Map light/dark tiles | `WeatherMap.kt` → `openFreeMapStyleUri` |
 | Timeouts vs offline | `WeatherRepositoryImpl.toAppError()` (`SocketTimeoutException` → `Timeout`) |
 | IO dispatcher | `DispatcherModule` `@IoDispatcher` |
 | Score thresholds | `ScoringThresholds.kt` (domain) + README §g |
 
-**Run manually**: `./gradlew installDebug` → search in header → detail → tap day buttons → Info dialog → toggle dark mode → share. Confirm the sheet does not scroll.
+**Run manually**: `./gradlew installDebug` → search in header → detail → drag sheet to full screen → tap day buttons → Info dialog → toggle dark mode (map tiles follow) → share. Confirm home peek leaves ~60% map visible.
 
 **Pull requests**: [PR #1](https://github.com/yurikayel/WeatherRecommender/pull/1) (original delivery) · [PR #2](https://github.com/yurikayel/WeatherRecommender/pull/2) `feat/review-feedback` · [PR #4](https://github.com/yurikayel/WeatherRecommender/pull/4) `feat/per-lane-state-and-scorer-di`.
 
@@ -107,14 +113,14 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 |-------|--------|----------------|
 | Offline cache | Done | Room SSOT + 6 h forecast TTL (`CachePolicy`) + WorkManager 6 h sync; 30 d place/image metadata; nearby-hub prefetch |
 | Recently viewed History | Done | Home **Recent** tab; Room `lastViewedAt`; last 10; Nominatim/GeoNames dedupe |
-| Pull-to-refresh | Done (bonus) | Home-only `modifier.pullToRefresh` (force-refresh top picks); `enabled` only when sheet at top **and** map header fully expanded — not on detail |
-| Dark mode + theme toggle | Done | Navy dark palette; sheet-header theme toggle; DataStore preference (system until overridden, then persisted) |
-| Advanced UI polish / animation | Done | Collapsing square (1:1) map + sheet; cache-miss 350+1200 ms fly (sheet −500 ms); cached 150+600 ms (sheet −200 ms); detail shimmer matches hero + 7 tall day buttons + vertical activity columns |
-| Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground) |
+| Pull-to-refresh | Done (bonus) | Home-only `modifier.pullToRefresh` (force-refresh top picks); `enabled` only when the sheet is peeked **and** the list is at the top — not on detail |
+| Advanced UI polish / animation | Done | Bottom sheet peek ~40% (map ~60%); expand to full screen + scroll; overlay city-image hero; cache-miss 350+1200 ms fly (sheet −500 ms); cached 150+600 ms (sheet −200 ms); detail shimmer matches overlay hero + 7 tall day buttons + activity rows |
+| Dark mode + theme toggle | Done | Navy dark palette; sheet-header theme toggle; DataStore preference; **first launch** Dark/Light from sunrise/sunset at GPS (clock 19:00–06:00 fallback); OpenFreeMap Liberty vs Dark tiles follow immediately |
+| Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground)
 | Snapshot tests | Done | Paparazzi 2.0.0-alpha05, 9 golden PNGs (home/detail incl. location chip + history + share flyer), verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
 | Substantial UI test coverage | Done | 22 instrumented Compose tests for key flows (home, header search, top picks, day-button selection, Info dialog, back, banners, dark theme, current-location chip) |
 | Share weather flyer | Done | Detail share → branded 9:16 portrait PNG (`GraphicsLayer` + FileProvider); city-image background when cached; best-effort save to Downloads |
-| In-screen map | Done | Collapsing square (1:1) MapLibre background + sheet header (no overlay AppBar) + OpenFreeMap (no Google key); map-first hop then sheet; tap → Nominatim reverse; camera/pin in ViewModel |
+| In-screen map | Done | Full-screen MapLibre under a Material 3 bottom sheet (peek 40% / map 60%, expand to full); OpenFreeMap Liberty (light) / Dark (dark) tiles; no overlay AppBar; map-first hop; tap → Nominatim reverse; camera/pin in ViewModel |
 | Current-location chip | Done | Runtime permission → LocationManager last-known fix → Nominatim reverse; home header chip (opt-in tap); map centers on fix |
 
 ## f. API usage notes ☀️
@@ -125,12 +131,12 @@ The application interfaces with three Open-Meteo APIs (No API key required):
 
 
 **Map and reverse geocoding (no Google Maps key)**
-- **Map rendering**: [MapLibre Compose](https://maplibre.org/maplibre-compose/) with the free [OpenFreeMap](https://openfreemap.org/) Liberty style. No API key and no Google Play Services Maps SDK — any networked emulator/device works. We ship the **OpenGL** MapLibre Android backend for broader AVD support (Vulkan can fail on some emulators).
+- **Map rendering**: [MapLibre Compose](https://maplibre.org/maplibre-compose/) with free [OpenFreeMap](https://openfreemap.org/) styles — **Liberty** in light theme, **Dark** in dark theme (`https://tiles.openfreemap.org/styles/liberty` / `.../dark`). No API key and no Google Play Services Maps SDK — any networked emulator/device works. We ship the **OpenGL** MapLibre Android backend for broader AVD support (Vulkan can fail on some emulators).
 - **Forward geocode** (search box): Open-Meteo Geocoding (name → lat/lng). Searching also **centers the map** on the first result.
 - **Reverse geocode** (map tap / long-press): Open-Meteo has no reverse endpoint, so we call [Nominatim](https://nominatim.openstreetmap.org/) (`/reverse`) with a descriptive `User-Agent`, then open the same detail flow as `onLocationSelected`.
 - **Attribution**: OpenStreetMap contributors / OpenFreeMap / Nominatim — MapLibre logo ornament on the map, plus a discreet footer on the home sheet (and this README). No on-map overlay attribution line.
 
-The map is a **collapsing 1:1 background** (expanded height = screen width). Nested scroll hides it fully while a rounded elevated sheet (sheet header + Crossfade home/detail bodies) slides up to cover it — chrome is in the sheet header, not drawn over the map. `mapCamera` / `mapPin` live in `WeatherUiState` and drive the same map instance on select/back. Home centers on the device location when available (static London default otherwise); back returns to that same overview.
+The map is a **full-screen background** under a Material 3 `BottomSheetScaffold`. Peek height is **40% of the screen** (about **60% of the map** stays visible). Dragging expands the sheet to full screen; home and detail content **scroll**. Detail clips a borderless city photo to the sheet’s rounded top corners with the header on a top-down scrim. `mapCamera` / `mapPin` live in `WeatherUiState` and drive the same map instance on select/back. Home centers on the device location when available (static London default otherwise); back returns to that same overview.
 
 ## g. Activity recommendation logic
 `GetRankedActivitiesUseCase(forecast, dayIndex)` evaluates each injected `ActivityScorer` for a **single day**. A scorer first decides whether it is *applicable* to the location's geography; only applicable activities are scored (0-100) and ranked. This prevents nonsensical suggestions such as surfing in a landlocked city.

@@ -61,7 +61,8 @@ class WeatherScreenSnapshotTest {
                         onLocationSelected = {},
                         onDaySelected = {},
                         onBack = {},
-                        onRefresh = {}
+                        onRefresh = {},
+                        isDarkTheme = darkTheme
                     )
                 }
             }

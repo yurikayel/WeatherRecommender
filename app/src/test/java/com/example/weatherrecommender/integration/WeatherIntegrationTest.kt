@@ -17,6 +17,7 @@ import com.example.weatherrecommender.data.remote.dto.GeocodingLocationDto
 import com.example.weatherrecommender.data.remote.dto.GeocodingResponse
 import com.example.weatherrecommender.data.remote.dto.MarineResponse
 import com.example.weatherrecommender.data.repository.WeatherRepositoryImpl
+import com.example.weatherrecommender.data.preferences.FirstRunThemeSettler
 import com.example.weatherrecommender.domain.location.DeviceLocationProvider
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
@@ -83,6 +84,7 @@ class WeatherIntegrationTest {
     private val getTopPicksUseCase: GetTopPicksUseCase = mockk(relaxed = true)
     private val connectivityObserver: ConnectivityObserver = mockk()
     private val deviceLocationProvider: DeviceLocationProvider = mockk(relaxed = true)
+    private val firstRunThemeSettler: FirstRunThemeSettler = mockk(relaxed = true)
 
     private val getRankedActivities = GetRankedActivitiesUseCase(
         setOf(SurfScorer(), SkiScorer(), OutdoorSightseeingScorer(), IndoorSightseeingScorer())
@@ -133,7 +135,8 @@ class WeatherIntegrationTest {
         getRankedActivities,
         getTopPicksUseCase,
         connectivityObserver,
-        deviceLocationProvider
+        deviceLocationProvider,
+        firstRunThemeSettler
     )
 
     @Test

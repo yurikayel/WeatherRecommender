@@ -2,6 +2,7 @@ package com.example.weatherrecommender.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.weatherrecommender.data.preferences.FirstRunThemeSettler
 import com.example.weatherrecommender.domain.location.DeviceLocationProvider
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.Location
@@ -44,7 +45,7 @@ import kotlin.time.Duration.Companion.milliseconds
  *    always reflects [selectedDayIndex].
  *
  * The map is driven by [mapCamera] / [mapPin]; [WeatherScreenContent] keeps a single map instance
- * mounted as the collapsing background while the sheet body Crossfades home↔detail.
+ * mounted behind a Material 3 bottom sheet while the sheet body Crossfades home↔detail.
  *
  * @property query The current search query (updated immediately; the network path is debounced).
  * @property search Geocoding lane: idle, in-flight (optionally with previous hits), or results.
@@ -119,7 +120,8 @@ class WeatherViewModel @Inject constructor(
     private val getRankedActivities: GetRankedActivitiesUseCase,
     private val getTopPicks: GetTopPicksUseCase,
     private val connectivityObserver: ConnectivityObserver,
-    private val deviceLocationProvider: DeviceLocationProvider
+    private val deviceLocationProvider: DeviceLocationProvider,
+    private val firstRunThemeSettler: FirstRunThemeSettler
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WeatherUiState())
@@ -452,7 +454,10 @@ class WeatherViewModel @Inject constructor(
      * When denied, home stays on the static default framing and the chip remains hidden.
      */
     fun onLocationPermissionResult(granted: Boolean) {
-        if (!granted) return
+        if (!granted) {
+            viewModelScope.launch { firstRunThemeSettler.settle(coordinates = null) }
+            return
+        }
         resolveDeviceLocation()
     }
 
@@ -465,7 +470,9 @@ class WeatherViewModel @Inject constructor(
     private fun resolveDeviceLocation() {
         deviceLocationJob?.cancel()
         deviceLocationJob = viewModelScope.launch {
-            val coords = deviceLocationProvider.getLastKnownLocation() ?: return@launch
+            val coords = deviceLocationProvider.getLastKnownLocation()
+            firstRunThemeSettler.settle(coords)
+            if (coords == null) return@launch
             if (currentConnectivityStatus != ConnectivityStatus.Available) return@launch
 
             repository.reverseGeocode(coords.latitude, coords.longitude).fold(
@@ -495,7 +502,7 @@ class WeatherViewModel @Inject constructor(
     /**
      * Refresh entry point used by home pull-to-refresh (bonus): force-refreshes top picks
      * (bypassing TTL). When a location is selected, refreshes that city's forecast into Room
-     * (kept for callers/tests; the detail UI no longer exposes PTR so it won't fight map collapse).
+     * (kept for callers/tests; the detail UI no longer exposes PTR so it won't fight sheet drag).
      */
     fun refresh() {
         val location = _uiState.value.selectedLocation

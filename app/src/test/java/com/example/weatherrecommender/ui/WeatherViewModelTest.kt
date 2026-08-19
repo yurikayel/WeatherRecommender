@@ -1,6 +1,7 @@
 package com.example.weatherrecommender.ui
 
 import app.cash.turbine.test
+import com.example.weatherrecommender.data.preferences.FirstRunThemeSettler
 import com.example.weatherrecommender.domain.location.DeviceLocationProvider
 import com.example.weatherrecommender.domain.location.GeoCoordinates
 import com.example.weatherrecommender.domain.model.AppError
@@ -50,6 +51,7 @@ class WeatherViewModelTest {
     private val getTopPicksUseCase: GetTopPicksUseCase = mockk()
     private val connectivityObserver: ConnectivityObserver = mockk()
     private val deviceLocationProvider: DeviceLocationProvider = mockk()
+    private val firstRunThemeSettler: FirstRunThemeSettler = mockk(relaxed = true)
 
     private lateinit var viewModel: WeatherViewModel
 
@@ -99,7 +101,8 @@ class WeatherViewModelTest {
         getRankedActivitiesUseCase,
         getTopPicksUseCase,
         connectivityObserver,
-        deviceLocationProvider
+        deviceLocationProvider,
+        firstRunThemeSettler
     )
 
     @Test

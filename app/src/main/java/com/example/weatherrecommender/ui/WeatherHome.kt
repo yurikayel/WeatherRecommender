@@ -74,11 +74,11 @@ import com.example.weatherrecommender.ui.util.weatherCodeIcon
 import kotlin.math.roundToInt
 
 /**
- * Home body inside the collapsing-map sheet: optional current-location chip, search, and
+ * Home body inside the map bottom sheet: optional current-location chip and
  * population-weighted "top picks".
  * Pull-to-refresh (assignment bonus) force-refreshes top picks (bypasses the in-memory TTL cache).
- * Gated with [Modifier.pullToRefresh] `enabled` only when the sheet is at the top **and** the
- * collapsing map header is fully expanded — so PTR does not fight nested-scroll map collapse.
+ * Gated with [Modifier.pullToRefresh] `enabled` only when the sheet is peeked **and** the
+ * list is scrolled to the top — so PTR does not fight sheet expand/collapse.
  * The map lives in [WeatherScreenContent] so it stays mounted across home↔detail.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,13 +88,13 @@ internal fun HomeContent(
     onLocationSelected: (Location) -> Unit,
     onRefresh: () -> Unit,
     onCurrentLocationClick: () -> Unit = {},
-    mapFullyExpanded: Boolean = true
+    sheetPeeked: Boolean = true
 ) {
     val scrollState = rememberScrollState()
     val pullToRefreshState = rememberPullToRefreshState()
     var selectedHomeTabIndex by remember { mutableIntStateOf(0) }
     // Material3 1.3.x PullToRefreshBox has no `enabled`; use Modifier.pullToRefresh instead.
-    val canPullToRefresh = mapFullyExpanded && scrollState.value == 0
+    val canPullToRefresh = sheetPeeked && scrollState.value == 0
     Box(
         modifier = Modifier
             .fillMaxSize()

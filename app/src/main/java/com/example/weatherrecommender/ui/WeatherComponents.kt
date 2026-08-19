@@ -12,8 +12,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -35,11 +35,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,52 +64,44 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
 }
 
 /**
- * Weight/flex metrics shared by [DetailContent] and [PremiumShimmerLoadingState] so loading
- * never flashes a different geometry (hero + 7 tall day buttons + vertical activity columns).
- * Weights sum to 1f; the day row is the tallest band.
+ * Weight/size metrics shared by [DetailContent] and [PremiumShimmerLoadingState] so loading
+ * never flashes a different geometry (overlay hero + 7 tall day buttons + activity rows).
+ * Heights are fixed so the sheet can scroll; at peek the hero (and usually the day row) is
+ * visible, and expanding/scrolling reveals activities.
  */
 internal object DetailLayout {
-    const val HeroWeight = 0.26f
-    const val DayRowWeight = 0.38f
-    const val ActivitiesWeight = 0.36f
     const val ForecastDays = 7
     const val ActivitySlots = 4
+    val HeroHeight = 168.dp
+    val DayRowHeight = 140.dp
+    val ActivityRowMinHeight = 64.dp
     val BlockSpacing = 8.dp
+    val AfterDayRowSpacing = 12.dp
     val ActivitySpacing = 6.dp
     val DayButtonSpacing = 4.dp
     val DayButtonCorner = 12.dp
-    val HeroCorner = 20.dp
+    val SheetHorizontalPadding = 8.dp
+    val SheetBottomPadding = 16.dp
 }
 
 /**
- * Skeleton for the detail sheet. Geometry matches [DetailContent]: weighted hero, a full-width
- * row of 7 tall day buttons, then 4 vertical activity-card slots. No scroll.
- *
- * @param showHeroPlaceholder When the city has no cached image URL yet.
+ * Skeleton for the day-row + activity column under the overlay hero. Geometry matches
+ * [DetailContent]'s loaded body. The hero (including header overlay) is drawn by
+ * [DetailContent] itself so loading never drops the overlay chrome.
  */
 @Composable
 internal fun PremiumShimmerLoadingState(
-    showHeroPlaceholder: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(DetailLayout.BlockSpacing)
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(DetailLayout.AfterDayRowSpacing)
     ) {
-        if (showHeroPlaceholder) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(DetailLayout.HeroWeight)
-                    .clip(RoundedCornerShape(DetailLayout.HeroCorner))
-                    .shimmerEffect()
-            )
-        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(DetailLayout.DayButtonSpacing),
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(DetailLayout.DayRowWeight)
+                .height(DetailLayout.DayRowHeight)
         ) {
             repeat(DetailLayout.ForecastDays) {
                 Box(
@@ -121,15 +115,13 @@ internal fun PremiumShimmerLoadingState(
         }
         Column(
             verticalArrangement = Arrangement.spacedBy(DetailLayout.ActivitySpacing),
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(DetailLayout.ActivitiesWeight)
+            modifier = Modifier.fillMaxWidth()
         ) {
             repeat(DetailLayout.ActivitySlots) {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .height(DetailLayout.ActivityRowMinHeight)
                         .clip(RoundedCornerShape(12.dp))
                         .shimmerEffect()
                 )
@@ -213,8 +205,9 @@ internal fun CustomSearchBar(
 
 
 /**
- * First row inside the scrolling sheet: city label + theme toggle on home; back, city, share, and
- * theme on detail. No chrome is drawn over the map itself.
+ * First row of sheet chrome: city label + theme toggle on home; back, city, share, and
+ * theme on detail. Home places this below the sheet edge. Detail overlays it on the city
+ * hero ([overlayOnHero]) so it does not consume a separate vertical block.
  */
 @Composable
 internal fun WeatherSheetHeader(
@@ -223,7 +216,7 @@ internal fun WeatherSheetHeader(
     canShare: Boolean,
     shareInProgress: Boolean,
     isDarkTheme: Boolean,
-    mapFullyCollapsed: Boolean,
+    sheetFullyExpanded: Boolean,
     onToggleTheme: () -> Unit,
     onBack: () -> Unit,
     onShare: () -> Unit,
@@ -231,63 +224,68 @@ internal fun WeatherSheetHeader(
     isSearching: Boolean = false,
     onQueryChange: (String) -> Unit = {},
     onInfoClick: (() -> Unit)? = null,
+    overlayOnHero: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier.then(
-            if (mapFullyCollapsed) Modifier.statusBarsPadding() else Modifier
-        ),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    val contentColor = if (overlayOnHero) Color.White else LocalContentColor.current
+    CompositionLocalProvider(LocalContentColor provides contentColor) {
         Row(
-            modifier = Modifier.weight(1f),
+            modifier = modifier.then(
+                if (sheetFullyExpanded) Modifier.statusBarsPadding() else Modifier
+            ),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (inDetail) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.detail_back)
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (inDetail) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.detail_back)
+                        )
+                    }
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = contentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
-                }
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-            } else {
-                CustomSearchBar(
-                    query = searchQuery,
-                    onQueryChange = onQueryChange,
-                    isSearching = isSearching,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(end = 8.dp)
-                )
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (inDetail && onInfoClick != null) {
-                IconButton(onClick = onInfoClick) {
-                    Icon(
-                        Icons.Filled.Info,
-                        contentDescription = stringResource(R.string.detail_info)
+                } else {
+                    CustomSearchBar(
+                        query = searchQuery,
+                        onQueryChange = onQueryChange,
+                        isSearching = isSearching,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(end = 8.dp)
                     )
                 }
             }
-            if (canShare) {
-                IconButton(onClick = onShare, enabled = !shareInProgress) {
-                    Icon(
-                        Icons.Filled.Share,
-                        contentDescription = stringResource(R.string.share_weather)
-                    )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (inDetail && onInfoClick != null) {
+                    IconButton(onClick = onInfoClick) {
+                        Icon(
+                            Icons.Filled.Info,
+                            contentDescription = stringResource(R.string.detail_info)
+                        )
+                    }
                 }
+                if (canShare) {
+                    IconButton(onClick = onShare, enabled = !shareInProgress) {
+                        Icon(
+                            Icons.Filled.Share,
+                            contentDescription = stringResource(R.string.share_weather)
+                        )
+                    }
+                }
+                ThemeToggleIcon(isDarkTheme = isDarkTheme, onToggleTheme = onToggleTheme)
             }
-            ThemeToggleIcon(isDarkTheme = isDarkTheme, onToggleTheme = onToggleTheme)
         }
     }
 }

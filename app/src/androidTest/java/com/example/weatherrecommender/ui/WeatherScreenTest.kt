@@ -86,7 +86,8 @@ class WeatherScreenTest {
                     onDaySelected = onDaySelected,
                     onBack = onBack,
                     onRefresh = {},
-                    onCurrentLocationClick = onCurrentLocationClick
+                    onCurrentLocationClick = onCurrentLocationClick,
+                    isDarkTheme = darkTheme
                 )
             }
         }

@@ -2,15 +2,20 @@ package com.example.weatherrecommender.ui
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -20,6 +25,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -37,34 +44,48 @@ import com.example.weatherrecommender.ui.util.asUiText
 import kotlin.math.roundToInt
 
 private const val DAY_SWITCH_MS = 220
-private val CompactSheetThreshold = 300.dp
 
 /**
- * Detail body inside the collapsing-map sheet: city hero, a full-width row of tall day buttons,
- * and a vertical column of ranked activities. Everything is weighted to the sheet (bottom half
- * under the 1:1 map) — no [androidx.compose.foundation.verticalScroll] / LazyColumn.
- * Tapping a day re-ranks activities (handled by [WeatherViewModel.onDaySelected]).
- * Pull-to-refresh is home-only (bonus) so it cannot fight nested-scroll map collapse here.
+ * Detail body inside the map bottom sheet: an edge-to-edge city hero (header overlaid),
+ * a full-width row of tall day buttons, and a vertical column of ranked activities.
+ * Content scrolls with the sheet. At peek the hero (and usually the day row) is visible;
+ * expanding or scrolling reveals activities. Tapping a day re-ranks activities
+ * (handled by [WeatherViewModel.onDaySelected]). Pull-to-refresh is home-only.
  */
 @Composable
 internal fun DetailContent(
     uiState: WeatherUiState,
-    onDaySelected: (Int) -> Unit
+    onDaySelected: (Int) -> Unit,
+    header: @Composable () -> Unit
 ) {
-    BoxWithConstraints(
+    val imageUrl = uiState.selectedLocation?.imageUrl ?: uiState.forecast?.location?.imageUrl
+    val showLoadingShimmer = uiState.isLoadingForecast && uiState.forecast == null
+    val forecast = uiState.forecast
+
+    Column(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
     ) {
-        val compact = maxHeight < CompactSheetThreshold
-        val location = uiState.selectedLocation
-        val imageUrl = location?.imageUrl ?: uiState.forecast?.location?.imageUrl
-        val showLoadingShimmer = uiState.isLoadingForecast && uiState.forecast == null
-        val forecast = uiState.forecast
+        CityHeroOverlay(
+            imageUrl = imageUrl,
+            showShimmer = showLoadingShimmer && imageUrl == null,
+            header = header,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(DetailLayout.HeroHeight)
+        )
 
         Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(DetailLayout.BlockSpacing)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = DetailLayout.SheetHorizontalPadding,
+                    end = DetailLayout.SheetHorizontalPadding,
+                    top = DetailLayout.BlockSpacing,
+                    bottom = DetailLayout.SheetBottomPadding
+                ),
+            verticalArrangement = Arrangement.spacedBy(DetailLayout.AfterDayRowSpacing)
         ) {
             uiState.error?.let { error ->
                 Text(
@@ -80,50 +101,37 @@ internal fun DetailContent(
                 SyncErrorBanner(syncError.asString())
             }
 
-            if (imageUrl != null) {
-                CityHeroImage(
-                    imageUrl = imageUrl,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(DetailLayout.HeroWeight)
-                )
-            }
-
             if (showLoadingShimmer) {
-                PremiumShimmerLoadingState(
-                    showHeroPlaceholder = imageUrl == null,
-                    modifier = Modifier.weight(1f)
-                )
+                PremiumShimmerLoadingState()
             } else if (forecast != null) {
                 WeekSummarySection(
                     forecast = forecast,
                     selectedDayIndex = uiState.selectedDayIndex,
                     onDaySelected = onDaySelected,
-                    compact = compact,
+                    compact = false,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(DetailLayout.DayRowWeight)
+                        .height(DetailLayout.DayRowHeight)
                 )
                 Crossfade(
                     targetState = uiState.selectedDayIndex to uiState.rankedActivities,
                     animationSpec = tween(DAY_SWITCH_MS),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(DetailLayout.ActivitiesWeight)
                         .testTag("detail_activity_list"),
                     label = "day_activities"
                 ) { (_, activities) ->
                     Column(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(DetailLayout.ActivitySpacing)
                     ) {
                         activities.forEach { ranked ->
                             ActivityItem(
                                 rankedActivity = ranked,
-                                compact = compact,
+                                compact = false,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .weight(1f)
+                                    .heightIn(min = DetailLayout.ActivityRowMinHeight)
                             )
                         }
                     }
@@ -133,27 +141,66 @@ internal fun DetailContent(
     }
 }
 
+/**
+ * Edge-to-edge photo (or placeholder/shimmer) flush to the sheet's top. The sheet Surface
+ * clips this to the rounded top corners — no inner card inset. [header] sits on a top-down
+ * scrim so white chrome stays readable even when [imageUrl] is missing.
+ */
 @Composable
-private fun CityHeroImage(
-    imageUrl: String,
+private fun CityHeroOverlay(
+    imageUrl: String?,
+    showShimmer: Boolean,
+    header: @Composable () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(DetailLayout.HeroCorner),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(imageUrl)
-                .crossfade(true)
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-            alpha = 0.9f
+    Box(modifier = modifier.testTag("detail_hero")) {
+        when {
+            imageUrl != null -> {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            showShimmer -> {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .shimmerEffect()
+                )
+            }
+            else -> {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+            }
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0f to Color.Black.copy(alpha = 0.72f),
+                            0.55f to Color.Black.copy(alpha = 0.28f),
+                            1f to Color.Transparent
+                        )
+                    )
+                )
         )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+        ) {
+            header()
+        }
     }
 }
 
@@ -232,7 +279,7 @@ private fun ActivityItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = if (compact) 4.dp else 8.dp)
         ) {
             Icon(
