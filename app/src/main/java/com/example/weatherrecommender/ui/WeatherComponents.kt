@@ -7,19 +7,16 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -65,65 +62,75 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
 }
 
 /**
- * Skeleton for the detail sheet. Geometry matches [DetailContent]: 180 dp hero, weekday,
- * ranked-activity row (icon + name + score + reason), then seven 52 dp week rows.
+ * Weight/flex metrics shared by [DetailContent] and [PremiumShimmerLoadingState] so loading
+ * never flashes a different geometry (hero + 7 tall day buttons + vertical activity columns).
+ * Weights sum to 1f; the day row is the tallest band.
+ */
+internal object DetailLayout {
+    const val HeroWeight = 0.26f
+    const val DayRowWeight = 0.38f
+    const val ActivitiesWeight = 0.36f
+    const val ForecastDays = 7
+    const val ActivitySlots = 4
+    val BlockSpacing = 8.dp
+    val ActivitySpacing = 6.dp
+    val DayButtonSpacing = 4.dp
+    val DayButtonCorner = 12.dp
+    val HeroCorner = 20.dp
+}
+
+/**
+ * Skeleton for the detail sheet. Geometry matches [DetailContent]: weighted hero, a full-width
+ * row of 7 tall day buttons, then 4 vertical activity-card slots. No scroll.
  *
  * @param showHeroPlaceholder When the city has no cached image URL yet.
  */
 @Composable
-internal fun PremiumShimmerLoadingState(showHeroPlaceholder: Boolean = true) {
-    Column {
+internal fun PremiumShimmerLoadingState(
+    showHeroPlaceholder: Boolean = true,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(DetailLayout.BlockSpacing)
+    ) {
         if (showHeroPlaceholder) {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .weight(DetailLayout.HeroWeight)
+                    .clip(RoundedCornerShape(DetailLayout.HeroCorner))
                     .shimmerEffect()
             )
-            Spacer(Modifier.height(12.dp))
         }
-        Box(Modifier.width(140.dp).height(28.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
-        Spacer(Modifier.height(16.dp))
         Row(
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(DetailLayout.DayButtonSpacing),
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
+                .weight(DetailLayout.DayRowWeight)
         ) {
-            listOf(108.dp, 96.dp, 88.dp).forEach { nameWidth ->
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(Modifier.size(24.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
-                        Box(
-                            Modifier.width(nameWidth).height(16.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect()
-                        )
-                        Box(Modifier.width(28.dp).height(18.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
-                    }
-                    Box(
-                        Modifier
-                            .width(nameWidth + 48.dp)
-                            .height(12.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .shimmerEffect()
-                    )
-                }
+            repeat(DetailLayout.ForecastDays) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(DetailLayout.DayButtonCorner))
+                        .shimmerEffect()
+                )
             }
         }
-        Spacer(Modifier.height(32.dp))
-        Box(Modifier.width(72.dp).height(28.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
-        Spacer(Modifier.height(16.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            repeat(7) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(DetailLayout.ActivitySpacing),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(DetailLayout.ActivitiesWeight)
+        ) {
+            repeat(DetailLayout.ActivitySlots) {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
                         .shimmerEffect()
                 )
             }

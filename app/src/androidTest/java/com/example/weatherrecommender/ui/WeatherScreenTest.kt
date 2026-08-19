@@ -254,7 +254,7 @@ class WeatherScreenTest {
     // --- Detail ---
 
     @Test
-    fun detail_showsWeekSummaryHeading() {
+    fun detail_showsDayButtonsWithoutWeekHeading() {
         setContent(
             WeatherUiState(
                 destination = WeatherDestination.Detail(london),
@@ -265,7 +265,9 @@ class WeatherScreenTest {
             )
         )
 
-        composeTestRule.onNodeWithText("7-Day").performScrollTo().assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("7-Day").assertCountEquals(0)
+        composeTestRule.onNodeWithTag("week_summary_day_0").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("week_summary_day_1").assertIsDisplayed()
     }
 
     @Test
@@ -280,7 +282,7 @@ class WeatherScreenTest {
         )
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
-        composeTestRule.onNodeWithText("7-Day").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("week_summary_day_0").assertIsDisplayed()
         composeTestRule.onNodeWithText("Outdoor").assertIsDisplayed()
         composeTestRule.onNodeWithText("95").assertIsDisplayed()
     }
