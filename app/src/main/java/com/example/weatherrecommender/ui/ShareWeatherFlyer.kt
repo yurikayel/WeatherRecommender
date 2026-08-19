@@ -76,8 +76,7 @@ private const val MAX_FLYER_DAYS = 7
 
 /**
  * Flyer type scale — explicit sizes/weights/lineHeights (no Material default LH bloat).
- * Font family stays system/default: downloadable Inter crashes under Paparazzi/layoutlib,
- * and system sans keeps share PNGs deterministic across devices.
+ * Font family stays system/default so share PNGs stay deterministic across devices.
  */
 private object FlyerType {
     val brand = TextStyle(

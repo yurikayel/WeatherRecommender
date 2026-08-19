@@ -219,7 +219,7 @@ private fun CurrentLocationChip(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
         modifier = Modifier.semantics { contentDescription = chipCd }
     ) {
         Row(
@@ -255,7 +255,7 @@ private fun SearchResultsList(
             .heightIn(max = 280.dp)
             .padding(top = 8.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
     ) {
         items(results) { location ->
             ListItem(
@@ -340,7 +340,9 @@ private fun TopPickCard(pick: TopPick, onClick: () -> Unit) {
             }
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -487,7 +489,9 @@ private fun HistoryCard(location: Location, onClick: () -> Unit) {
             .semantics { contentDescription = openAgainCd }
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {

@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,14 +38,13 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.RankedActivity
-import com.example.weatherrecommender.domain.model.ScoringThresholds
 import com.example.weatherrecommender.ui.util.asUiText
 
 private const val DAY_SWITCH_MS = 220
 
 /**
  * Detail body inside the map bottom sheet: one outer [verticalScroll] (same pattern as home)
- * covering the city hero, a compact 7-day row, and ranked activities for the selected day.
+ * covering the city hero, a 7-day row, and ranked activities for the selected day.
  * The sheet is locked at 60%; tapping a day only swaps the activity list via
  * [WeatherViewModel.onDaySelected]. Pull-to-refresh is home-only.
  */
@@ -115,17 +115,17 @@ internal fun DetailContent(
                         .testTag("detail_activity_list"),
                     label = "day_activities"
                 ) { (_, activities) ->
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(DetailLayout.ActivitySpacing)
-                    ) {
-                        activities.forEach { ranked ->
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        activities.forEachIndexed { index, ranked ->
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outlineVariant
+                                )
+                            }
                             ActivityItem(
                                 rankedActivity = ranked,
-                                compact = false,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = DetailLayout.ActivityRowMinHeight)
+                                isTopPick = index == 0,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
@@ -172,7 +172,7 @@ private fun CityHeroOverlay(
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 )
             }
         }
@@ -223,72 +223,48 @@ private fun SyncErrorBanner(message: String) {
 @Composable
 private fun ActivityItem(
     rankedActivity: RankedActivity,
-    compact: Boolean,
+    isTopPick: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    val colorScheme = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = modifier
+            .heightIn(min = DetailLayout.ActivityRowMinHeight)
+            .padding(horizontal = 4.dp, vertical = 6.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = if (compact) 4.dp else 8.dp)
+        Icon(
+            activityIcon(rankedActivity.activity),
+            contentDescription = null,
+            tint = colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                activityIcon(rankedActivity.activity),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(if (compact) 18.dp else 22.dp)
+            Text(
+                text = rankedActivity.activity.asUiText().asString(),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = rankedActivity.activity.asUiText().asString(),
-                        style = if (compact) {
-                            MaterialTheme.typography.labelLarge
-                        } else {
-                            MaterialTheme.typography.bodyLarge
-                        },
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = rankedActivity.score.toString(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = when {
-                            rankedActivity.score > ScoringThresholds.SCORE_HIGH ->
-                                MaterialTheme.colorScheme.primary
-                            rankedActivity.score > ScoringThresholds.SCORE_MID ->
-                                MaterialTheme.colorScheme.secondary
-                            else -> MaterialTheme.colorScheme.error
-                        }
-                    )
-                }
-                if (!compact) {
-                    Text(
-                        text = rankedActivity.reasonKey.asUiText(rankedActivity.reasonArgs).asString(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
+            Text(
+                text = rankedActivity.reasonKey.asUiText(rankedActivity.reasonArgs).asString(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
+        Text(
+            text = rankedActivity.score.toString(),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = if (isTopPick) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isTopPick) colorScheme.primary else colorScheme.onSurfaceVariant
+        )
     }
 }

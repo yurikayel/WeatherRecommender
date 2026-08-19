@@ -47,8 +47,8 @@ class WeatherScreenSnapshotTest {
 
     private fun content(state: WeatherUiState, darkTheme: Boolean = false) {
         paparazzi.snapshot {
-            // Default typography uses downloadable Google Fonts, which spawns an Android-only
-            // fetcher thread that crashes under layoutlib; system fonts render deterministically.
+            // M3 default Typography() (Roboto) is deterministic under layoutlib; keep the
+            // explicit instance so snapshots do not depend on platform font fallbacks.
             // Inspection mode keeps MapLibre off the snapshot path (native libs are unavailable).
             CompositionLocalProvider(
                 LocalInspectionMode provides true,

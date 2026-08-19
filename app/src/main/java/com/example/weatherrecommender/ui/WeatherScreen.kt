@@ -309,12 +309,16 @@ private fun MapBottomSheetScaffold(
         sheetSwipeEnabled = !inDetail,
         sheetShape = sheetShape,
         sheetContainerColor = MaterialTheme.colorScheme.surface,
-        sheetTonalElevation = 1.dp,
-        sheetShadowElevation = 6.dp,
+        sheetTonalElevation = 2.dp,
+        sheetShadowElevation = 4.dp,
         sheetDragHandle = if (inDetail) {
             null
         } else {
-            { BottomSheetDefaults.DragHandle() }
+            {
+                BottomSheetDefaults.DragHandle(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                )
+            }
         },
         sheetContent = {
             Crossfade(

@@ -65,7 +65,7 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
 
 /**
  * Weight/size metrics shared by [DetailContent] and [PremiumShimmerLoadingState] so loading
- * never flashes a different geometry (16:9 overlay hero + compact 7-day chips + activity rows).
+ * never flashes a different geometry (16:9 overlay hero + 7-day chips + compact activity rows).
  * The locked 60% sheet scrolls as one column; after the hero moves off, activities keep the
  * remaining viewport.
  */
@@ -73,13 +73,12 @@ internal object DetailLayout {
     const val ForecastDays = 7
     const val ActivitySlots = 4
     const val HeroAspectRatio = 16f / 9f
-    val DayRowHeight = 92.dp
-    val ActivityRowMinHeight = 64.dp
+    val DayRowHeight = 128.dp
+    val ActivityRowMinHeight = 56.dp
     val BlockSpacing = 8.dp
-    val AfterDayRowSpacing = 12.dp
-    val ActivitySpacing = 6.dp
+    val AfterDayRowSpacing = 8.dp
     val DayButtonSpacing = 4.dp
-    val DayButtonCorner = 10.dp
+    val DayButtonCorner = 12.dp
     val SheetHorizontalPadding = 8.dp
     val SheetBottomPadding = 16.dp
 }
@@ -113,16 +112,13 @@ internal fun PremiumShimmerLoadingState(
                 )
             }
         }
-        Column(
-            verticalArrangement = Arrangement.spacedBy(DetailLayout.ActivitySpacing),
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             repeat(DetailLayout.ActivitySlots) {
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .height(DetailLayout.ActivityRowMinHeight)
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(4.dp))
                         .shimmerEffect()
                 )
             }
@@ -192,8 +188,8 @@ internal fun CustomSearchBar(
         singleLine = true,
         shape = CircleShape,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = Color.Transparent,
             focusedTextColor = MaterialTheme.colorScheme.onSurface,

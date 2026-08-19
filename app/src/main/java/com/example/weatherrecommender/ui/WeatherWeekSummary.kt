@@ -3,12 +3,13 @@ package com.example.weatherrecommender.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,7 +29,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.WeatherForecast
@@ -40,7 +40,7 @@ import com.example.weatherrecommender.ui.util.weatherCodeIcon
 import kotlin.math.roundToInt
 
 /**
- * Compact equal-width row of day chips. Today is index 0 (selected by default in UI state).
+ * Equal-width row of day chips filling the parent. Today is index 0 (selected by default).
  * Each chip shows weekday + date, weather icon, temp range, and precipitation — no per-day
  * activity name/score and no section title. Tapping updates [selectedDayIndex] via [onDaySelected].
  */
@@ -52,7 +52,9 @@ internal fun WeekSummarySection(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(DetailLayout.DayRowHeight),
         horizontalArrangement = Arrangement.spacedBy(DetailLayout.DayButtonSpacing)
     ) {
         forecast.dailyForecasts.forEachIndexed { index, day ->
@@ -61,7 +63,9 @@ internal fun WeekSummarySection(
                 dayIndex = index,
                 selected = index == selectedDayIndex,
                 onClick = { onDaySelected(index) },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
             )
         }
     }
@@ -75,20 +79,29 @@ private fun WeekDayButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     val background by animateColorAsState(
         targetValue = if (selected) {
-            MaterialTheme.colorScheme.primary
+            colorScheme.primary
         } else {
-            MaterialTheme.colorScheme.surfaceVariant
+            colorScheme.surfaceContainerHighest
         },
         animationSpec = tween(250),
         label = "week_day_bg"
     )
     val contentColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.onPrimary
-        else MaterialTheme.colorScheme.onSurface,
+        targetValue = if (selected) colorScheme.onPrimary else colorScheme.onSurface,
         animationSpec = tween(250),
         label = "week_day_content"
+    )
+    val secondaryColor by animateColorAsState(
+        targetValue = if (selected) {
+            colorScheme.onPrimary.copy(alpha = 0.80f)
+        } else {
+            colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(250),
+        label = "week_day_secondary"
     )
 
     val weekday = isoDateToWeekday(day.date)
@@ -110,30 +123,19 @@ private fun WeekDayButton(
         modifier = modifier
             .clip(corner)
             .background(background)
-            .then(
-                if (selected) Modifier
-                else Modifier.border(
-                    1.dp,
-                    MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-                    corner
-                )
-            )
             .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = rowLabel
                 testTag = "week_summary_day_$dayIndex"
             }
-            .padding(horizontal = 2.dp, vertical = 5.dp),
+            .padding(horizontal = 2.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(1.dp)
+        verticalArrangement = Arrangement.SpaceEvenly
     ) {
         Text(
             text = shortWeekday,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 10.sp,
-                lineHeight = 11.sp
-            ),
-            color = contentColor.copy(alpha = 0.85f),
+            style = MaterialTheme.typography.labelLarge,
+            color = secondaryColor,
             maxLines = 1,
             overflow = TextOverflow.Clip,
             textAlign = TextAlign.Center,
@@ -141,10 +143,7 @@ private fun WeekDayButton(
         )
         Text(
             text = dayOfMonth,
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontSize = 13.sp,
-                lineHeight = 14.sp
-            ),
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = contentColor,
             maxLines = 1,
@@ -154,7 +153,7 @@ private fun WeekDayButton(
             imageVector = weatherCodeIcon(day.weatherCode),
             contentDescription = weatherDesc,
             tint = contentColor,
-            modifier = Modifier.size(14.dp)
+            modifier = Modifier.size(18.dp)
         )
         Text(
             text = stringResource(
@@ -162,10 +161,7 @@ private fun WeekDayButton(
                 day.maxTemp.roundToInt(),
                 day.minTemp.roundToInt()
             ),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 9.sp,
-                lineHeight = 10.sp
-            ),
+            style = MaterialTheme.typography.labelSmall,
             color = contentColor,
             maxLines = 1,
             overflow = TextOverflow.Clip,
@@ -174,11 +170,8 @@ private fun WeekDayButton(
         )
         Text(
             text = stringResource(R.string.week_summary_precip, precipMm),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 9.sp,
-                lineHeight = 10.sp
-            ),
-            color = contentColor.copy(alpha = 0.85f),
+            style = MaterialTheme.typography.labelSmall,
+            color = secondaryColor,
             maxLines = 1,
             overflow = TextOverflow.Clip,
             textAlign = TextAlign.Center,
