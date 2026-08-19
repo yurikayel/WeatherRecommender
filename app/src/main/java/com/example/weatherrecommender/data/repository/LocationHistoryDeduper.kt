@@ -14,6 +14,7 @@ internal object LocationHistoryDeduper {
 
     const val PROXIMITY_DEGREES = 0.05
 
+    /** Drops later rows that match an earlier city by id, proximity, or name+country. */
     fun collapse(entities: List<LocationEntity>): List<LocationEntity> {
         if (entities.size <= 1) return entities
         val kept = mutableListOf<LocationEntity>()
@@ -25,12 +26,14 @@ internal object LocationHistoryDeduper {
         return kept
     }
 
+    /** Same Room id, nearby coordinates, or matching normalized name and country. */
     fun isSameCity(a: LocationEntity, b: LocationEntity): Boolean {
         return a.id == b.id ||
             withinProximity(a.latitude, a.longitude, b.latitude, b.longitude) ||
             sameNormalizedNameCountry(a, b)
     }
 
+    /** True when both points sit within [delta] degrees on both axes. */
     fun withinProximity(
         lat1: Double,
         lng1: Double,
@@ -41,6 +44,7 @@ internal object LocationHistoryDeduper {
         return abs(lat1 - lat2) <= delta && abs(lng1 - lng2) <= delta
     }
 
+    /** Case-insensitive name+country match, ignoring blank names. */
     fun sameNormalizedNameCountry(a: LocationEntity, b: LocationEntity): Boolean {
         val nameA = a.name.trim()
         val nameB = b.name.trim()

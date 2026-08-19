@@ -22,15 +22,18 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 abstract class AppModule {
 
+    /** Binds the logcat [CrashReporter] until a Crashlytics implementation is wired. */
     @Binds
     @Singleton
     abstract fun bindCrashReporter(impl: LogCrashReporter): CrashReporter
 
+    /** Binds the Android LocationManager-backed GPS provider. */
     @Binds
     @Singleton
     abstract fun bindDeviceLocationProvider(impl: AndroidDeviceLocationProvider): DeviceLocationProvider
 
     companion object {
+        /** Application-scoped [ConnectivityObserver] over Android ConnectivityManager callbacks. */
         @Provides
         @Singleton
         fun provideConnectivityObserver(@ApplicationContext context: Context): ConnectivityObserver {

@@ -13,6 +13,10 @@ import retrofit2.http.Query
  * [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/).
  */
 interface NominatimApi {
+    /**
+     * Resolves a map tap (or GPS fix) to an OSM place at [latitude]/[longitude].
+     * [zoom] 10 prefers city-scale results; [userAgent] must identify this app per Nominatim policy.
+     */
     @GET("reverse")
     suspend fun reverseGeocode(
         @Query("lat") latitude: Double,
@@ -25,6 +29,7 @@ interface NominatimApi {
 
     companion object {
         const val BASE_URL = "https://nominatim.openstreetmap.org/"
-        const val USER_AGENT = "WeatherRecommender/1.0 (Concierge take-home; Android)"
+        const val USER_AGENT =
+            "WeatherRecommender/1.0 (https://github.com/yurikayel/WeatherRecommender)"
     }
 }

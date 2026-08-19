@@ -30,6 +30,7 @@ class WeatherApplication : Application(), ImageLoaderFactory {
     @Inject
     lateinit var okHttpClient: OkHttpClient
 
+    /** Coil loader that ignores Wikipedia max-age=0 so city photos stay on disk. */
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .okHttpClient(okHttpClient)
@@ -50,6 +51,7 @@ class WeatherApplication : Application(), ImageLoaderFactory {
             .build()
     }
 
+    /** Hooks crash reporting and schedules the 6-hour forecast sync. */
     override fun onCreate() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         super.onCreate()
@@ -60,6 +62,7 @@ class WeatherApplication : Application(), ImageLoaderFactory {
         scheduleSyncWorker()
     }
 
+    /** Unique periodic WorkManager request aligned with [CachePolicy] weather TTL. */
     private fun scheduleSyncWorker() {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)

@@ -1,0 +1,189 @@
+# Quality Gate — unit-test Kover coverage vs the PR base (main).
+#
+# Rules (this check only; Android CI unit tests still pass independently):
+#   - Fail if LINE coverage on the PR is lower than baseline (ε = 0.01%).
+#   - Fail if LINE coverage is below 10% (low floor; do not use a 65% gate here).
+#   - koverVerify 65% domain+data stays on the Android CI job.
+#   - Duplication / detekt tables are informational.
+#
+# Baseline: the pull_request.base SHA (the main commit this PR targets), not
+# whatever main happens to be at comment time. workflow_dispatch uses default_branch.
+#
+# This workflow does not wait for Paparazzi / lint / assemble / emulator. It only
+# re-runs unit tests + Kover + detekt on the PR head and on main.
+
+name: Quality Gate
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: quality-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  coverage:
+    name: coverage (${{ matrix.side }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        side: [current, baseline]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ matrix.side == 'current' && (github.event.pull_request.head.sha || github.sha) || (github.event.pull_request.base.sha || github.event.repository.default_branch) }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Main does not have these scripts / Kover 0.9.5 until the workflow lands.
+      # Sparse-checkout into qg-tools so we do not wipe app/build after Gradle.
+      - name: Checkout quality-gate scripts
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: qg-tools
+          sparse-checkout: |
+            .github/scripts
+          sparse-checkout-cone-mode: false
+
+      # Baseline checks out main (Kover 0.9.1). Total koverXmlReport then writes
+      # report.xml with LINE 0/0. Bump to 0.9.5 so koverXmlReportDebug exists.
+      - name: Ensure Kover 0.9.5+
+        run: python3 qg-tools/.github/scripts/quality_gate.py ensure-kover --root .
+
+      # One invocation so Kover's task graph includes unit tests. Do not use total
+      # `koverXmlReport`: on AGP 9 + Kover < 0.9.5 it has no test deps and writes
+      # app/build/reports/kover/report.xml with LINE covered=0 missed=0 (parsed as 0.00%).
+      - name: Unit tests + Kover XML
+        run: ./gradlew testDebugUnitTest koverXmlReportDebug --no-daemon
+
+      - name: Detekt reports
+        if: always()
+        run: ./gradlew detekt --no-daemon || true
+
+      - name: Stage reports
+        if: always()
+        run: python3 qg-tools/.github/scripts/quality_gate.py stage --root . --out artifacts
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-${{ matrix.side }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
+  quality-gate:
+    name: Quality Gate
+    needs: coverage
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout scripts
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout: |
+            .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Download current reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: quality-current
+          path: current
+
+      - name: Download baseline reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: quality-baseline
+          path: baseline
+
+      - name: Compare vs baseline
+        id: compare
+        continue-on-error: true
+        run: |
+          python3 .github/scripts/quality_gate.py compare \
+            --current current \
+            --baseline baseline \
+            --out-md comment.md \
+            --out-json result.json \
+            --baseline-ref "${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}"
+
+      - name: Job summary
+        if: always()
+        run: |
+          if [ -f comment.md ]; then
+            cat comment.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Quality gate did not produce a comment (compare step failed earlier)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Post sticky PR comment
+        if: github.event_name == 'pull_request' && hashFiles('comment.md') != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('comment.md', 'utf8');
+            const marker = '<!-- quality-gate -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Enforce quality gate
+        if: always()
+        run: |
+          if [ ! -f result.json ]; then
+            echo "No result.json — coverage jobs likely failed before reports were staged."
+            exit 1
+          fi
+          python3 -c "import json,sys; r=json.load(open('result.json')); sys.exit(0 if r.get('passed') else 1)"

@@ -14,5 +14,6 @@ enum class ConnectivityStatus {
  * Domain layer interface abstracting Android network callbacks.
  */
 interface ConnectivityObserver {
+    /** Continuous connectivity updates for search, refresh, and offline banners. */
     fun observe(): Flow<ConnectivityStatus>
 }

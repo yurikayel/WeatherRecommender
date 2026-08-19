@@ -7,26 +7,23 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -38,17 +35,20 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,42 +64,61 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
     RecommendedActivity.SKIING -> Icons.Outlined.DownhillSkiing
 }
 
-/** Skeleton placeholder shown while a city's forecast loads. Mirrors the loaded detail body. */
+/**
+ * Weight/size metrics shared by [DetailContent] and [PremiumShimmerLoadingState] so loading
+ * never flashes a different geometry (16:9 overlay hero + 7-day chips + compact activity rows).
+ * The locked 60% sheet does not scroll: the hero keeps its 16:9 height, day chips stay
+ * [DayRowHeight], and ranked activity rows share the leftover space equally.
+ */
+internal object DetailLayout {
+    const val ForecastDays = 7
+    const val ActivitySlots = 4
+    const val HeroAspectRatio = 16f / 9f
+    val DayRowHeight = 128.dp
+    val BlockSpacing = 8.dp
+    val AfterDayRowSpacing = 8.dp
+    val DayButtonSpacing = 4.dp
+    val DayButtonCorner = 12.dp
+    val SheetHorizontalPadding = 8.dp
+    val SheetBottomPadding = 8.dp
+}
+
+/**
+ * Skeleton for the compact day-row + activity column under the overlay hero. Geometry matches
+ * [DetailContent]'s loaded body. The hero (including header overlay) is drawn by
+ * [DetailContent] itself so loading never drops the overlay chrome.
+ */
 @Composable
-internal fun PremiumShimmerLoadingState() {
-    Column {
-        Box(Modifier.width(120.dp).height(28.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
-        Spacer(Modifier.height(16.dp))
+internal fun PremiumShimmerLoadingState(
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(DetailLayout.AfterDayRowSpacing)
+    ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(DetailLayout.DayButtonSpacing),
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
+                .height(DetailLayout.DayRowHeight)
         ) {
-            listOf(108.dp, 96.dp, 58.dp, 48.dp).forEach { nameWidth ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(Modifier.size(24.dp).clip(CircleShape).shimmerEffect())
-                    Box(
-                        Modifier.width(nameWidth).height(16.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect()
-                    )
-                    Box(Modifier.width(24.dp).height(18.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
-                }
+            repeat(DetailLayout.ForecastDays) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(DetailLayout.DayButtonCorner))
+                        .shimmerEffect()
+                )
             }
         }
-        Spacer(Modifier.height(32.dp))
-        Box(Modifier.width(72.dp).height(28.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
-        Spacer(Modifier.height(16.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            repeat(7) {
+        Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            repeat(DetailLayout.ActivitySlots) {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .weight(1f)
+                        .clip(RoundedCornerShape(4.dp))
                         .shimmerEffect()
                 )
             }
@@ -169,8 +188,8 @@ internal fun CustomSearchBar(
         singleLine = true,
         shape = CircleShape,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = Color.Transparent,
             focusedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -182,8 +201,9 @@ internal fun CustomSearchBar(
 
 
 /**
- * First row inside the scrolling sheet: city label + theme toggle on home; back, city, share, and
- * theme on detail. No chrome is drawn over the map itself.
+ * First row of sheet chrome: city label + theme toggle on home; back, city, Wikipedia,
+ * share, and theme on detail. Home places this below the sheet edge. Detail overlays it on
+ * the city hero ([overlayOnHero]) so it does not consume a separate vertical block.
  */
 @Composable
 internal fun WeatherSheetHeader(
@@ -192,75 +212,85 @@ internal fun WeatherSheetHeader(
     canShare: Boolean,
     shareInProgress: Boolean,
     isDarkTheme: Boolean,
-    mapFullyCollapsed: Boolean,
+    sheetFullyExpanded: Boolean,
     onToggleTheme: () -> Unit,
     onBack: () -> Unit,
     onShare: () -> Unit,
     searchQuery: String = "",
     isSearching: Boolean = false,
     onQueryChange: (String) -> Unit = {},
-    onInfoClick: (() -> Unit)? = null,
+    wikipediaUrl: String? = null,
+    onOpenWikipedia: (String) -> Unit = {},
+    overlayOnHero: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier.then(
-            if (mapFullyCollapsed) Modifier.statusBarsPadding() else Modifier
-        ),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    val contentColor = if (overlayOnHero) Color.White else LocalContentColor.current
+    CompositionLocalProvider(LocalContentColor provides contentColor) {
         Row(
-            modifier = Modifier.weight(1f),
+            modifier = modifier.then(
+                if (sheetFullyExpanded) Modifier.statusBarsPadding() else Modifier
+            ),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (inDetail) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.detail_back)
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (inDetail) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.detail_back)
+                        )
+                    }
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = contentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
-                }
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-            } else {
-                CustomSearchBar(
-                    query = searchQuery,
-                    onQueryChange = onQueryChange,
-                    isSearching = isSearching,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(end = 8.dp)
-                )
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (inDetail && onInfoClick != null) {
-                IconButton(onClick = onInfoClick) {
-                    Icon(
-                        Icons.Filled.Info,
-                        contentDescription = stringResource(R.string.detail_info)
+                } else {
+                    CustomSearchBar(
+                        query = searchQuery,
+                        onQueryChange = onQueryChange,
+                        isSearching = isSearching,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(end = 8.dp)
                     )
                 }
             }
-            if (canShare) {
-                IconButton(onClick = onShare, enabled = !shareInProgress) {
-                    Icon(
-                        Icons.Filled.Share,
-                        contentDescription = stringResource(R.string.share_weather)
-                    )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (inDetail) {
+                    IconButton(
+                        onClick = { wikipediaUrl?.let(onOpenWikipedia) },
+                        enabled = wikipediaUrl != null
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_wikipedia),
+                            contentDescription = stringResource(R.string.detail_wikipedia)
+                        )
+                    }
                 }
+                if (canShare) {
+                    IconButton(onClick = onShare, enabled = !shareInProgress) {
+                        Icon(
+                            Icons.Filled.Share,
+                            contentDescription = stringResource(R.string.share_weather)
+                        )
+                    }
+                }
+                ThemeToggleIcon(isDarkTheme = isDarkTheme, onToggleTheme = onToggleTheme)
             }
-            ThemeToggleIcon(isDarkTheme = isDarkTheme, onToggleTheme = onToggleTheme)
         }
     }
 }
 
+/** Sun/moon control that toggles [ThemePreferences] Light vs Dark. */
 @Composable
 private fun ThemeToggleIcon(
     isDarkTheme: Boolean,

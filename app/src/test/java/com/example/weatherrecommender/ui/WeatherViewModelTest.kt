@@ -1,6 +1,7 @@
 package com.example.weatherrecommender.ui
 
 import app.cash.turbine.test
+import com.example.weatherrecommender.data.preferences.FirstRunThemeSettler
 import com.example.weatherrecommender.domain.location.DeviceLocationProvider
 import com.example.weatherrecommender.domain.location.GeoCoordinates
 import com.example.weatherrecommender.domain.model.AppError
@@ -17,17 +18,20 @@ import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
 import com.example.weatherrecommender.domain.util.ConnectivityObserver
 import com.example.weatherrecommender.domain.util.ConnectivityStatus
 import com.example.weatherrecommender.ui.map.MapCameraPosition
+import com.example.weatherrecommender.ui.map.MapHopProfile
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -48,6 +52,7 @@ class WeatherViewModelTest {
     private val getTopPicksUseCase: GetTopPicksUseCase = mockk()
     private val connectivityObserver: ConnectivityObserver = mockk()
     private val deviceLocationProvider: DeviceLocationProvider = mockk()
+    private val firstRunThemeSettler: FirstRunThemeSettler = mockk(relaxed = true)
 
     private lateinit var viewModel: WeatherViewModel
 
@@ -72,6 +77,8 @@ class WeatherViewModelTest {
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Available)
         every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
         coEvery { repository.markLocationViewed(any()) } returns Unit
+        coEvery { repository.prefetchNearbyCities(any()) } returns Unit
+        coEvery { repository.hasFreshForecast(any()) } returns false
         coEvery { getTopPicksUseCase(any(), any()) } returns emptyList()
         every { deviceLocationProvider.hasLocationPermission() } returns false
         coEvery { deviceLocationProvider.getLastKnownLocation() } returns null
@@ -95,7 +102,8 @@ class WeatherViewModelTest {
         getRankedActivitiesUseCase,
         getTopPicksUseCase,
         connectivityObserver,
-        deviceLocationProvider
+        deviceLocationProvider,
+        firstRunThemeSettler
     )
 
     @Test
@@ -351,12 +359,49 @@ class WeatherViewModelTest {
         backgroundScope.launch { viewModel.uiState.collect {} }
 
         viewModel.onLocationSelected(location)
+        // Pin is synchronous; hop profile waits for the Room freshness check.
+        assertEquals(location, viewModel.uiState.value.mapPin)
+        assertTrue(viewModel.uiState.value.destination is WeatherDestination.Home)
+
+        runCurrent()
+        val flying = viewModel.uiState.value
+        assertEquals(location.latitude, flying.mapCamera.latitude, 0.0)
+        assertEquals(MapHopProfile.CACHE_MISS, flying.mapCamera.hop)
+        assertTrue(flying.destination is WeatherDestination.Home)
+
+        advanceTimeBy(MapHopProfile.CACHE_MISS.contentRevealMs - 1)
+        assertTrue(viewModel.uiState.value.destination is WeatherDestination.Home)
+
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(location.latitude, state.mapCamera.latitude, 0.0)
         assertEquals(location.longitude, state.mapCamera.longitude, 0.0)
         assertEquals(location, state.mapPin)
+        assertTrue(state.destination is WeatherDestination.Detail)
+    }
+
+    @Test
+    fun `cached location selection uses the snappy hop and reveals earlier`() = runTest {
+        coEvery { repository.hasFreshForecast(location) } returns true
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationSelected(location)
+        runCurrent()
+
+        val flying = viewModel.uiState.value
+        assertEquals(MapHopProfile.CACHED, flying.mapCamera.hop)
+        assertTrue(flying.destination is WeatherDestination.Home)
+
+        advanceTimeBy(MapHopProfile.CACHED.contentRevealMs - 1)
+        assertTrue(viewModel.uiState.value.destination is WeatherDestination.Home)
+
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.destination is WeatherDestination.Detail)
     }
 
     @Test
@@ -441,6 +486,29 @@ class WeatherViewModelTest {
         assertEquals(false, state.isResolvingMapTap)
         assertEquals(pinned, state.mapPin)
         io.mockk.coVerify { repository.reverseGeocode(51.5, -0.1) }
+    }
+
+    @Test
+    fun `selecting a city cancels an in-flight map tap so it cannot overwrite`() = runTest {
+        val pinned = Location(-1_000_042, "London", 51.5, -0.1, "UK", "England")
+        coEvery { repository.reverseGeocode(51.5, -0.1) } coAnswers {
+            delay(10_000)
+            Result.Success(pinned)
+        }
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(any(), 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onMapTapped(51.5, -0.1)
+        runCurrent()
+        viewModel.onLocationSelected(location)
+        advanceUntilIdle()
+
+        assertEquals(location, viewModel.uiState.value.selectedLocation)
+        io.mockk.coVerify(exactly = 0) { repository.refreshForecast(pinned) }
+        io.mockk.coVerify(exactly = 0) { repository.getForecastFlow(pinned) }
     }
 
     @Test

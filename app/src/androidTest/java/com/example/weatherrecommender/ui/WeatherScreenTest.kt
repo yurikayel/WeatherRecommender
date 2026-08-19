@@ -1,12 +1,16 @@
 package com.example.weatherrecommender.ui
 
 import android.Manifest
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -14,6 +18,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import com.example.weatherrecommender.domain.model.DailyForecast
@@ -68,6 +74,14 @@ class WeatherScreenTest {
         reasonArgs = listOf(22)
     )
 
+    private var openedUri: String? = null
+
+    private val capturingUriHandler = object : UriHandler {
+        override fun openUri(uri: String) {
+            openedUri = uri
+        }
+    }
+
     private fun setContent(
         state: WeatherUiState,
         darkTheme: Boolean = false,
@@ -77,19 +91,46 @@ class WeatherScreenTest {
         onBack: () -> Unit = {},
         onCurrentLocationClick: () -> Unit = {}
     ) {
+        openedUri = null
         composeTestRule.setContent {
-            WeatherRecommenderTheme(darkTheme = darkTheme) {
-                WeatherScreenContent(
-                    uiState = state,
-                    onQueryChanged = onQueryChanged,
-                    onLocationSelected = onLocationSelected,
-                    onDaySelected = onDaySelected,
-                    onBack = onBack,
-                    onRefresh = {},
-                    onCurrentLocationClick = onCurrentLocationClick
+            CompositionLocalProvider(LocalUriHandler provides capturingUriHandler) {
+                WeatherRecommenderTheme(darkTheme = darkTheme) {
+                    WeatherScreenContent(
+                        uiState = state,
+                        onQueryChanged = onQueryChanged,
+                        onLocationSelected = onLocationSelected,
+                        onDaySelected = onDaySelected,
+                        onBack = onBack,
+                        onRefresh = {},
+                        onCurrentLocationClick = onCurrentLocationClick,
+                        isDarkTheme = darkTheme
+                    )
+                }
+            }
+        }
+    }
+
+    /** Home peek clips content below ~40%; expand like a user so assertIsDisplayed can pass. */
+    private fun expandHomeSheet() {
+        val handle = composeTestRule.onNodeWithContentDescription("Drag handle")
+        val expanded = runCatching {
+            handle.performSemanticsAction(SemanticsActions.Expand)
+        }.isSuccess
+        if (!expanded) {
+            handle.performTouchInput {
+                swipe(
+                    start = center,
+                    end = Offset(center.x, center.y - 1600f),
+                    durationMillis = 500
                 )
             }
         }
+        composeTestRule.waitForIdle()
+    }
+
+    /** Detail is locked at 60%; ranked rows share the leftover space and stay on screen. */
+    private fun assertDisplayedInDetailSheet(text: String) {
+        composeTestRule.onNodeWithText(text).assertIsDisplayed()
     }
 
     // --- Home ---
@@ -110,8 +151,7 @@ class WeatherScreenTest {
         setContent(
             WeatherUiState(
                 deviceLocation = lisbon,
-                topPicks = emptyList(),
-                isLoadingTopPicks = false
+                topPicks = emptyList()
             )
         )
 
@@ -159,7 +199,7 @@ class WeatherScreenTest {
 
     @Test
     fun home_emptyTopPicks_showsOfflineHint() {
-        setContent(WeatherUiState(topPicks = emptyList(), isLoadingTopPicks = false))
+        setContent(WeatherUiState(topPicks = emptyList()))
 
         composeTestRule
             .onNodeWithText("Connect to the internet to see today's suggestions.")
@@ -208,13 +248,13 @@ class WeatherScreenTest {
         setContent(
             WeatherUiState(
                 topPicks = emptyList(),
-                isLoadingTopPicks = false,
                 recentHistory = listOf(london, lisbon)
             )
         )
 
         composeTestRule.onNodeWithText("Recent").performClick()
         composeTestRule.onNodeWithText("Recent").assertIsDisplayed()
+        expandHomeSheet()
         composeTestRule.onNodeWithText("London").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Lisbon").performScrollTo().assertIsDisplayed()
     }
@@ -234,7 +274,7 @@ class WeatherScreenTest {
             london,
             Location(3, "Paris", 48.8, 2.3, "France", "Ile-de-France")
         )
-        setContent(WeatherUiState(searchResults = locations, query = "Lon"))
+        setContent(WeatherUiState(search = SearchUiState.Results(locations), query = "Lon"))
 
         composeTestRule.onNodeWithText("📍 London, England, UK").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("📍 Paris, Ile-de-France, France").performScrollTo().assertIsDisplayed()
@@ -244,7 +284,7 @@ class WeatherScreenTest {
     fun search_tappingResult_invokesLocationSelected() {
         var selected: Location? = null
         setContent(
-            WeatherUiState(searchResults = listOf(london), query = "Lon"),
+            WeatherUiState(search = SearchUiState.Results(listOf(london)), query = "Lon"),
             onLocationSelected = { selected = it }
         )
 
@@ -256,7 +296,7 @@ class WeatherScreenTest {
     // --- Detail ---
 
     @Test
-    fun detail_showsWeekSummaryHeading() {
+    fun detail_showsDayButtonsWithoutWeekHeading() {
         setContent(
             WeatherUiState(
                 destination = WeatherDestination.Detail(london),
@@ -267,7 +307,9 @@ class WeatherScreenTest {
             )
         )
 
-        composeTestRule.onNodeWithText("7-Day").performScrollTo().assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("7-Day").assertCountEquals(0)
+        composeTestRule.onNodeWithTag("week_summary_day_0").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("week_summary_day_1").assertIsDisplayed()
     }
 
     @Test
@@ -282,9 +324,9 @@ class WeatherScreenTest {
         )
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
-        composeTestRule.onNodeWithText("7-Day").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Outdoor").assertIsDisplayed()
-        composeTestRule.onNodeWithText("95").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("week_summary_day_0").assertIsDisplayed()
+        assertDisplayedInDetailSheet("Outdoor")
+        assertDisplayedInDetailSheet("95")
     }
 
     @Test
@@ -307,7 +349,7 @@ class WeatherScreenTest {
             WeatherUiState(
                 destination = WeatherDestination.Detail(london),
                 forecast = null,
-                isLoadingForecast = true
+                forecastFetch = FetchStatus.Loading
             )
         )
 
@@ -315,22 +357,7 @@ class WeatherScreenTest {
     }
 
     @Test
-    fun detail_showsGeographyChips() {
-        setContent(
-            WeatherUiState(
-                destination = WeatherDestination.Detail(lisbon),
-                forecast = twoDayForecast.copy(location = lisbon),
-                rankedActivities = listOf(outdoorActivity)
-            )
-        )
-
-        composeTestRule.onNodeWithContentDescription("Info").performClick()
-        composeTestRule.onNodeWithText("Coastal").assertIsDisplayed()
-        composeTestRule.onNodeWithText("68 m elevation").assertIsDisplayed()
-    }
-
-    @Test
-    fun detail_inlandCity_showsInlandChip() {
+    fun detail_wikipediaButton_opensArticleUrl() {
         setContent(
             WeatherUiState(
                 destination = WeatherDestination.Detail(london),
@@ -339,8 +366,23 @@ class WeatherScreenTest {
             )
         )
 
-        composeTestRule.onNodeWithContentDescription("Info").performClick()
-        composeTestRule.onNodeWithText("Inland").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Open Wikipedia").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Open Wikipedia").performClick()
+        assertEquals("https://en.wikipedia.org/wiki/London", openedUri)
+    }
+
+    @Test
+    fun detail_wikipediaButton_usesCityTitle() {
+        setContent(
+            WeatherUiState(
+                destination = WeatherDestination.Detail(lisbon),
+                forecast = twoDayForecast.copy(location = lisbon),
+                rankedActivities = listOf(outdoorActivity)
+            )
+        )
+
+        composeTestRule.onNodeWithContentDescription("Open Wikipedia").performClick()
+        assertEquals("https://en.wikipedia.org/wiki/Lisbon", openedUri)
     }
 
     @Test
@@ -403,7 +445,6 @@ class WeatherScreenTest {
         setContent(
             WeatherUiState(
                 destination = WeatherDestination.Detail(london),
-                isLoadingForecast = false,
                 error = UiText.DynamicString("Server error")
             )
         )
@@ -425,6 +466,6 @@ class WeatherScreenTest {
         )
 
         composeTestRule.onNodeWithText("London").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Outdoor").assertIsDisplayed()
+        assertDisplayedInDetailSheet("Outdoor")
     }
 }

@@ -30,6 +30,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
+        // java.time (Instant, ZonedDateTime, Clock) on minSdk 24.
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures {
       compose = true
@@ -72,9 +74,32 @@ kotlin {
 kover {
     reports {
         filters {
+            excludes {
+                // Generated Hilt / Room / databinding — FQCN wildcards only (not file paths).
+                classes(
+                    "*_Impl",
+                    "*_Impl\$*",
+                    "*_Factory",
+                    "*_Factory\$*",
+                    "Hilt_*",
+                    "*_HiltModules*",
+                    "*_MembersInjector*",
+                    "*_GeneratedInjector*",
+                    "*databinding*",
+                    "*.databinding.*",
+                    "*.BuildConfig",
+                )
+            }
             includes {
                 packages("com.example.weatherrecommender.domain.*")
                 packages("com.example.weatherrecommender.data.*")
+            }
+        }
+        // AGP 9 + Kover < 0.9.5: total `koverXmlReport` has no test deps and writes an empty
+        // report.xml (0/0 counters). Debug variant is what unit tests + the quality gate use.
+        variant("debug") {
+            xml {
+                xmlFile.set(layout.buildDirectory.file("reports/kover/reportDebug.xml"))
             }
         }
         total {
@@ -103,6 +128,8 @@ dependencies {
   implementation(composeBom)
   androidTestImplementation(composeBom)
 
+  coreLibraryDesugaring(libs.desugar.jdk.libs)
+
   // Core Android dependencies
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.core.splashscreen)
@@ -119,7 +146,6 @@ dependencies {
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
-  implementation(libs.androidx.compose.ui.text.google.fonts)
   implementation("io.coil-kt:coil-compose:2.6.0")
   
   // Tooling
@@ -184,4 +210,9 @@ tasks.withType<Test>().configureEach {
     }
     // Paparazzi + Gradle 9: disable HTML test reports to avoid internal API breakage.
     reports.html.required.set(false)
+}
+
+// AGP 9 historically omitted test deps on Kover report tasks (kotlinx-kover#785).
+tasks.matching { it.name == "koverXmlReportDebug" || it.name == "koverXmlReport" }.configureEach {
+    dependsOn("testDebugUnitTest")
 }

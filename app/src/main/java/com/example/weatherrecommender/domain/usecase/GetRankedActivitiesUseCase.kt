@@ -11,7 +11,8 @@ import javax.inject.Inject
  *
  * Uses the Strategy pattern by injecting a set of [ActivityScorer]s. Each scorer decides whether
  * it applies to the location's geography and, if so, scores the given day independently. This
- * satisfies the Open/Closed Principle: adding a new activity means adding a new scorer.
+ * satisfies the Open/Closed Principle: adding a new activity is a new [ActivityScorer]
+ * added to the injected set; this use case is not edited.
  */
 class GetRankedActivitiesUseCase @Inject constructor(
     private val scorers: Set<@JvmSuppressWildcards ActivityScorer>

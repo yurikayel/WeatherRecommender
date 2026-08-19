@@ -10,58 +10,83 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = PremiumPrimary,
-    onPrimary = PremiumBackgroundDark,
-    primaryContainer = PremiumPrimaryContainerDark,
-    onPrimaryContainer = PremiumOnPrimaryContainerDark,
-    secondary = PremiumAccent,
-    onSecondary = PremiumBackgroundDark,
-    secondaryContainer = PremiumSecondaryContainerDark,
-    onSecondaryContainer = PremiumOnSecondaryContainerDark,
-    tertiary = PremiumPrimaryDark,
-    onTertiary = PremiumOnDarkText,
-    background = PremiumBackgroundDark,
-    onBackground = PremiumOnDarkText,
-    surface = PremiumSurfaceDark,
-    onSurface = PremiumOnDarkText,
-    surfaceVariant = PremiumSurfaceVariantDark,
-    onSurfaceVariant = PremiumOnSurfaceVariantDark,
-    outline = PremiumOutlineDark,
-    outlineVariant = PremiumSurfaceVariantDark,
-    error = PremiumErrorDark,
-    onError = PremiumOnErrorDark,
-    errorContainer = PremiumErrorContainerDark,
-    onErrorContainer = PremiumOnErrorContainerDark
+    primary = MdDarkPrimary,
+    onPrimary = MdDarkOnPrimary,
+    primaryContainer = MdDarkPrimaryContainer,
+    onPrimaryContainer = MdDarkOnPrimaryContainer,
+    inversePrimary = MdLightPrimary,
+    secondary = MdDarkSecondary,
+    onSecondary = MdDarkOnSecondary,
+    secondaryContainer = MdDarkSecondaryContainer,
+    onSecondaryContainer = MdDarkOnSecondaryContainer,
+    tertiary = MdDarkTertiary,
+    onTertiary = MdDarkOnTertiary,
+    background = MdDarkSurface,
+    onBackground = MdDarkOnSurface,
+    surface = MdDarkSurface,
+    onSurface = MdDarkOnSurface,
+    surfaceVariant = MdDarkSurfaceVariant,
+    onSurfaceVariant = MdDarkOnSurfaceVariant,
+    surfaceTint = MdDarkPrimary,
+    inverseSurface = MdDarkInverseSurface,
+    inverseOnSurface = MdDarkInverseOnSurface,
+    outline = MdDarkOutline,
+    outlineVariant = MdDarkOutlineVariant,
+    scrim = Color.Black,
+    surfaceBright = MdDarkSurfaceBright,
+    surfaceDim = MdDarkSurfaceDim,
+    surfaceContainer = MdDarkSurfaceContainer,
+    surfaceContainerHigh = MdDarkSurfaceContainerHigh,
+    surfaceContainerHighest = MdDarkSurfaceContainerHighest,
+    surfaceContainerLow = MdDarkSurfaceContainerLow,
+    surfaceContainerLowest = MdDarkSurfaceContainerLowest,
+    error = MdDarkError,
+    onError = MdDarkOnError,
+    errorContainer = MdDarkErrorContainer,
+    onErrorContainer = MdDarkOnErrorContainer
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = PremiumPrimaryDark,
-    onPrimary = PremiumSurfaceLight,
-    primaryContainer = PremiumPrimaryContainerLight,
-    onPrimaryContainer = PremiumOnPrimaryContainerLight,
-    secondary = PremiumAccent,
-    onSecondary = PremiumOnLightText,
-    secondaryContainer = PremiumSecondaryContainerLight,
-    onSecondaryContainer = PremiumOnSecondaryContainerLight,
-    tertiary = PremiumPrimary,
-    onTertiary = PremiumOnLightText,
-    background = PremiumBackgroundLight,
-    onBackground = PremiumOnLightText,
-    surface = PremiumSurfaceLight,
-    onSurface = PremiumOnLightText,
-    surfaceVariant = PremiumSurfaceVariantLight,
-    onSurfaceVariant = PremiumOnSurfaceVariantLight,
-    outline = PremiumOutlineLight,
-    outlineVariant = PremiumSurfaceVariantLight,
-    error = PremiumErrorLight,
-    onError = PremiumOnErrorLight,
-    errorContainer = PremiumErrorContainerLight,
-    onErrorContainer = PremiumOnErrorContainerLight
+    primary = MdLightPrimary,
+    onPrimary = MdLightOnPrimary,
+    primaryContainer = MdLightPrimaryContainer,
+    onPrimaryContainer = MdLightOnPrimaryContainer,
+    inversePrimary = MdDarkPrimary,
+    secondary = MdLightSecondary,
+    onSecondary = MdLightOnSecondary,
+    secondaryContainer = MdLightSecondaryContainer,
+    onSecondaryContainer = MdLightOnSecondaryContainer,
+    tertiary = MdLightTertiary,
+    onTertiary = MdLightOnTertiary,
+    background = MdLightSurface,
+    onBackground = MdLightOnSurface,
+    surface = MdLightSurface,
+    onSurface = MdLightOnSurface,
+    surfaceVariant = MdLightSurfaceVariant,
+    onSurfaceVariant = MdLightOnSurfaceVariant,
+    surfaceTint = MdLightPrimary,
+    inverseSurface = MdLightInverseSurface,
+    inverseOnSurface = MdLightInverseOnSurface,
+    outline = MdLightOutline,
+    outlineVariant = MdLightOutlineVariant,
+    scrim = Color.Black,
+    surfaceBright = MdLightSurfaceBright,
+    surfaceDim = MdLightSurfaceDim,
+    surfaceContainer = MdLightSurfaceContainer,
+    surfaceContainerHigh = MdLightSurfaceContainerHigh,
+    surfaceContainerHighest = MdLightSurfaceContainerHighest,
+    surfaceContainerLow = MdLightSurfaceContainerLow,
+    surfaceContainerLowest = MdLightSurfaceContainerLowest,
+    error = MdLightError,
+    onError = MdLightOnError,
+    errorContainer = MdLightErrorContainer,
+    onErrorContainer = MdLightOnErrorContainer
 )
 
 /**
@@ -72,16 +97,16 @@ private val LightColorScheme = lightColorScheme(
  * deprecated `statusBarColor` handling is needed — only the icon appearance is toggled here.
  *
  * @param darkTheme Whether to use the dark color scheme.
- * @param dynamicColor Whether to use Android 12+ dynamic colors (disabled by default to enforce premium branding).
- * @param typography Typography to apply. Overridable so JVM-rendered tests (Paparazzi) can supply
- *   system fonts — the default uses downloadable Google Fonts, whose fetcher thread requires a real
- *   Android runtime.
+ * @param dynamicColor Whether to use Android 12+ dynamic colors (disabled by default so home
+ *   and detail share the same M3 tokens).
+ * @param typography Typography to apply. Overridable so JVM-rendered tests (Paparazzi) can
+ *   supply an explicit [Typography] instance.
  * @param content The composable content to apply the theme to.
  */
 @Composable
 fun WeatherRecommenderTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Keep dynamic disabled to show off our fun theme
+    dynamicColor: Boolean = false,
     typography: androidx.compose.material3.Typography = Typography,
     content: @Composable () -> Unit
 ) {

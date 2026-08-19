@@ -12,7 +12,7 @@ import com.example.weatherrecommender.data.local.entity.LocationEntity
  * The Room database for the application.
  * Contains tables for locations and daily forecasts.
  */
-@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 7, exportSchema = true)
+@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 8, exportSchema = true)
 abstract class WeatherDatabase : RoomDatabase() {
     /**
      * Retrieves the primary [WeatherDao] for executing database transactions.
@@ -24,6 +24,7 @@ abstract class WeatherDatabase : RoomDatabase() {
          * v2 adds [DailyForecastEntity.weatherCode] and [DailyForecastEntity.snowfallSum].
          */
         val MIGRATION_1_2 = object : Migration(1, 2) {
+            /** Adds weather-code and snowfall columns used by per-day activity scoring. */
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "ALTER TABLE daily_forecast_entity ADD COLUMN weatherCode INTEGER NOT NULL DEFAULT 0"
@@ -39,6 +40,7 @@ abstract class WeatherDatabase : RoomDatabase() {
          * and per-day marine [DailyForecastEntity.waveHeightMax], enabling geography-aware activities.
          */
         val MIGRATION_2_3 = object : Migration(2, 3) {
+            /** Adds location geography fields and per-day wave height for sea-access detection. */
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE location_entity ADD COLUMN elevation REAL")
                 db.execSQL("ALTER TABLE location_entity ADD COLUMN population INTEGER")
@@ -55,6 +57,7 @@ abstract class WeatherDatabase : RoomDatabase() {
          * explicit user selection, independent of forecast [LocationEntity.lastUpdated] sync age.
          */
         val MIGRATION_3_4 = object : Migration(3, 4) {
+            /** Adds last-viewed timestamp so History can order by explicit user opens. */
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "ALTER TABLE location_entity ADD COLUMN lastViewedAt INTEGER NOT NULL DEFAULT 0"
@@ -67,6 +70,7 @@ abstract class WeatherDatabase : RoomDatabase() {
          * migrate forward; [MIGRATION_5_6] drops those columns.
          */
         val MIGRATION_4_5 = object : Migration(4, 5) {
+            /** Adds the short-lived Wikipedia media columns later dropped in v6. */
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE location_entity ADD COLUMN imageUrl TEXT")
                 db.execSQL("ALTER TABLE location_entity ADD COLUMN description TEXT")
@@ -79,9 +83,38 @@ abstract class WeatherDatabase : RoomDatabase() {
          * Recreates the table (SQLite DROP COLUMN is unavailable on older Android SQLite).
          */
         val MIGRATION_5_6 = object : Migration(5, 6) {
+            /** Recreates `location_entity` without the v5 Wikipedia columns (no DROP COLUMN). */
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(LOCATION_V6_CREATE)
+                db.execSQL(LOCATION_V6_COPY)
+                db.execSQL("DROP TABLE location_entity")
+                db.execSQL("ALTER TABLE location_entity_new RENAME TO location_entity")
+            }
+        }
+        /**
+         * v7 re-adds [LocationEntity.imageUrl] for the postcard UI.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            /** Restores a nullable thumbnail URL for postcard cards. */
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE location_entity ADD COLUMN imageUrl TEXT")
+            }
+        }
+
+        /**
+         * v8 adds [LocationEntity.placeMetadataUpdatedAt] so Wikipedia thumbnails and names
+         * can be reused for 30 days independently of forecast [LocationEntity.lastUpdated].
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            /** Adds place-metadata timestamp so Wikipedia reuse is independent of forecast TTL. */
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
-                    """
+                    "ALTER TABLE location_entity ADD COLUMN placeMetadataUpdatedAt INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
+        private const val LOCATION_V6_CREATE = """
                     CREATE TABLE IF NOT EXISTS location_entity_new (
                         id INTEGER NOT NULL,
                         name TEXT NOT NULL,
@@ -97,10 +130,9 @@ abstract class WeatherDatabase : RoomDatabase() {
                         lastViewedAt INTEGER NOT NULL,
                         PRIMARY KEY(id)
                     )
-                    """.trimIndent()
-                )
-                db.execSQL(
                     """
+
+        private const val LOCATION_V6_COPY = """
                     INSERT INTO location_entity_new (
                         id, name, latitude, longitude, country, admin1, lastUpdated,
                         elevation, population, featureCode, hasSeaAccess, lastViewedAt
@@ -109,19 +141,6 @@ abstract class WeatherDatabase : RoomDatabase() {
                         id, name, latitude, longitude, country, admin1, lastUpdated,
                         elevation, population, featureCode, hasSeaAccess, lastViewedAt
                     FROM location_entity
-                    """.trimIndent()
-                )
-                db.execSQL("DROP TABLE location_entity")
-                db.execSQL("ALTER TABLE location_entity_new RENAME TO location_entity")
-            }
-        }
-        /**
-         * v7 re-adds [LocationEntity.imageUrl] for the postcard UI.
-         */
-        val MIGRATION_6_7 = object : Migration(6, 7) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE location_entity ADD COLUMN imageUrl TEXT")
-            }
-        }
+                    """
     }
 }

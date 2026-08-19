@@ -21,7 +21,20 @@ style:
 
 complexity:
   LongMethod:
-    threshold: 150
+    threshold: 30
+    ignoreAnnotated:
+      - Composable
+      - Test
+  CognitiveComplexMethod:
+    threshold: 15
+    ignoreAnnotated:
+      - Composable
+      - Test
+  NestedBlockDepth:
+    threshold: 4
+    ignoreAnnotated:
+      - Composable
+      - Test
   LongParameterList:
     active: false
 

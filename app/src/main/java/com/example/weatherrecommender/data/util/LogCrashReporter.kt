@@ -12,6 +12,7 @@ private const val TAG = "WeatherRecommender"
  */
 @Singleton
 class LogCrashReporter @Inject constructor() : CrashReporter {
+    /** Writes [throwable] to logcat, prefixing [message] when the caller supplied one. */
     override fun recordException(throwable: Throwable, message: String?) {
         if (message != null) {
             Log.e(TAG, message, throwable)

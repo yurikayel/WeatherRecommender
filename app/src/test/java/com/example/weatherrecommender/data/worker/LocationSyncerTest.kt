@@ -33,11 +33,11 @@ class LocationSyncerTest {
     @Test
     fun `syncAllLocations returns true when every refresh succeeds`() = runTest {
         coEvery { weatherDao.getAllLocations() } returns listOf(londonEntity)
-        coEvery { repository.refreshForecast(match { it.id == 1L }) } returns Result.Success(Unit)
+        coEvery { repository.refreshForecast(any(), any()) } returns Result.Success(Unit)
 
         assertTrue(syncer.syncAllLocations())
 
-        coVerify(exactly = 1) { repository.refreshForecast(any()) }
+        coVerify(exactly = 1) { repository.refreshForecast(any(), any()) }
     }
 
     @Test
@@ -51,16 +51,16 @@ class LocationSyncerTest {
             tokyoEntity,
             sydneyEntity
         )
-        coEvery { repository.refreshForecast(match { it.id == 1L }) } returns Result.Success(Unit)
-        coEvery { repository.refreshForecast(match { it.id == 2L }) } returns Result.Error(
+        coEvery { repository.refreshForecast(match { it.id == 1L }, any()) } returns Result.Success(Unit)
+        coEvery { repository.refreshForecast(match { it.id == 2L }, any()) } returns Result.Error(
             AppError.NetworkError.NoConnectivity
         )
-        coEvery { repository.refreshForecast(match { it.id == 3L }) } returns Result.Success(Unit)
-        coEvery { repository.refreshForecast(match { it.id == 4L }) } returns Result.Success(Unit)
+        coEvery { repository.refreshForecast(match { it.id == 3L }, any()) } returns Result.Success(Unit)
+        coEvery { repository.refreshForecast(match { it.id == 4L }, any()) } returns Result.Success(Unit)
 
         assertFalse(syncer.syncAllLocations())
 
-        coVerify(exactly = 4) { repository.refreshForecast(any()) }
+        coVerify(exactly = 4) { repository.refreshForecast(any(), any()) }
     }
 
     @Test
@@ -69,11 +69,11 @@ class LocationSyncerTest {
             londonEntity.copy(id = id, name = "City$id")
         }
         coEvery { weatherDao.getAllLocations() } returns entities
-        coEvery { repository.refreshForecast(any()) } returns Result.Success(Unit)
+        coEvery { repository.refreshForecast(any(), any()) } returns Result.Success(Unit)
 
         assertTrue(syncer.syncAllLocations())
 
-        coVerify(exactly = 4) { repository.refreshForecast(any()) }
+        coVerify(exactly = 4) { repository.refreshForecast(any(), any()) }
     }
 
     @Test
@@ -82,6 +82,6 @@ class LocationSyncerTest {
 
         assertTrue(syncer.syncAllLocations())
 
-        coVerify(exactly = 0) { repository.refreshForecast(any()) }
+        coVerify(exactly = 0) { repository.refreshForecast(any(), any()) }
     }
 }

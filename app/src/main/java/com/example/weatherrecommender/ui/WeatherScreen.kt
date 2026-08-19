@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions") // Extracted sheet lock / map pane / home-detail bodies.
+
 package com.example.weatherrecommender.ui
 
 import android.Manifest
@@ -20,29 +22,35 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetState
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -50,6 +58,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.Location
+import com.example.weatherrecommender.domain.util.WikipediaUrls
 import com.example.weatherrecommender.ui.map.WeatherMapSection
 import kotlinx.coroutines.launch
 
@@ -82,10 +91,14 @@ fun WeatherScreen(
 /**
  * Stateless, testable root of the Weather screen.
  *
- * A collapsing map (1:1 expanded → fully hidden) stays mounted while a surface sheet below
- * Crossfades home vs detail body content — no full-screen slide, and the map instance is
- * not remounted on select/back. Modes are derived from [WeatherUiState.destination].
+ * MapLibre’s **layout height** tracks the sheet (not a full-screen map with a sheet painted on
+ * top). Home peeks at [SHEET_HOME_PEEK_FRACTION] so the map is ~60%; dragging toward Expanded
+ * shrinks the map with [SheetState.requireOffset]. Detail locks at
+ * [SHEET_DETAIL_PEEK_FRACTION] (map ~40%, [sheetSwipeEnabled] = false). Home vs detail
+ * Crossfades only the sheet body so the map instance is not remounted. Modes are derived from
+ * [WeatherUiState.destination].
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeatherScreenContent(
     uiState: WeatherUiState,
@@ -127,8 +140,8 @@ fun WeatherScreenContent(
         if (!inDetail) shareInProgress = false
     }
 
-    // Map draws edge-to-edge under the status bar; the sheet header adds status-bar padding
-    // only when the map is fully collapsed. Scaffold applies horizontal + bottom safe areas.
+    // Map draws edge-to-edge under the status bar; the sheet adds status-bar padding only when
+    // fully expanded. Scaffold applies horizontal + bottom safe areas.
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
@@ -139,7 +152,7 @@ fun WeatherScreenContent(
         if (inDetail) {
             BackHandler(onBack = onBack)
         }
-        CollapsingMapScaffold(
+        MapBottomSheetScaffold(
             uiState = uiState,
             inDetail = inDetail,
             canShare = canShare,
@@ -183,6 +196,7 @@ fun WeatherScreenContent(
     )
 }
 
+/** Requests fine/coarse location on first composition, or reports an already-granted grant. */
 @Composable
 private fun RequestLocationPermissionEffect(onLocationPermissionResult: (Boolean) -> Unit) {
     val context = LocalContext.current
@@ -207,6 +221,7 @@ private fun RequestLocationPermissionEffect(onLocationPermissionResult: (Boolean
     }
 }
 
+/** Renders the offscreen flyer capture when share is in progress and detail data exists. */
 @Composable
 private fun PendingShareCapture(
     shareInProgress: Boolean,
@@ -227,11 +242,14 @@ private fun PendingShareCapture(
 }
 
 /**
- * Collapsing map header (1:1) + rounded sheet that nested-scrolls over it.
- * Map height is animated via [MapCollapseState]; the MapLibre instance is not remounted.
+ * Map + Material 3 bottom sheet. The map’s height is [SheetState.requireOffset] (the gap above
+ * the sheet) plus a corner overlap so tiles show through the sheet’s rounded top. Home peeks
+ * at [SHEET_HOME_PEEK_FRACTION] and can expand; detail locks at [SHEET_DETAIL_PEEK_FRACTION]
+ * with swipe disabled. Home↔detail Crossfade lives in the sheet so MapLibre is not remounted.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CollapsingMapScaffold(
+private fun MapBottomSheetScaffold(
     uiState: WeatherUiState,
     inDetail: Boolean,
     canShare: Boolean,
@@ -248,157 +266,315 @@ private fun CollapsingMapScaffold(
     onCurrentLocationClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val collapse = rememberMapCollapseState(resetKey = inDetail)
-    var showInfoDialog by remember { mutableStateOf(false) }
+    val confirmValueChange = rememberDetailSheetLock(inDetail)
+    val sheetState = rememberStandardBottomSheetState(
+        initialValue = SheetValue.PartiallyExpanded,
+        confirmValueChange = confirmValueChange,
+        skipHiddenState = true
+    )
+    val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
+    val sheetShape = RoundedCornerShape(topStart = SheetTopCorner, topEnd = SheetTopCorner)
+    val peekFraction = if (inDetail) SHEET_DETAIL_PEEK_FRACTION else SHEET_HOME_PEEK_FRACTION
+    val peekHeight = LocalConfiguration.current.screenHeightDp.dp * peekFraction
+    val mapHeight = rememberSheetMapHeight(
+        sheetState = sheetState,
+        peekFraction = peekFraction,
+        cornerOverlap = SheetTopCorner
+    )
+    val sheetFullyExpanded = !inDetail && sheetState.currentValue == SheetValue.Expanded
+    val sheetPeeked = sheetState.currentValue == SheetValue.PartiallyExpanded
+    val uriHandler = LocalUriHandler.current
+    val wikipediaUrl = WikipediaUrls.articleUrl(uiState.selectedLocation?.name)
 
-    val loc = uiState.selectedLocation
-    if (showInfoDialog && loc != null) {
-        LocationInfoDialog(
-            location = loc,
-            onDismiss = { showInfoDialog = false }
-        )
+    // Snap to the destination peek (40% home / 60% detail) without waiting for a drag.
+    LaunchedEffect(inDetail) {
+        sheetState.partialExpand()
+    }
+    LaunchedEffect(inDetail, sheetState.currentValue) {
+        if (inDetail && sheetState.currentValue != SheetValue.PartiallyExpanded) {
+            sheetState.partialExpand()
+        }
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .nestedScroll(collapse.nestedScrollConnection)
+    BottomSheetScaffold(
+        modifier = modifier.fillMaxSize(),
+        scaffoldState = scaffoldState,
+        containerColor = Color.Transparent,
+        sheetPeekHeight = peekHeight,
+        sheetSwipeEnabled = !inDetail,
+        sheetShape = sheetShape,
+        sheetContainerColor = MaterialTheme.colorScheme.surface,
+        sheetTonalElevation = 2.dp,
+        sheetShadowElevation = 4.dp,
+        sheetDragHandle = if (inDetail) {
+            null
+        } else {
+            {
+                BottomSheetDefaults.DragHandle(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                )
+            }
+        },
+        sheetContent = {
+            SheetBodyCrossfade(
+                uiState = uiState,
+                inDetail = inDetail,
+                peekHeight = peekHeight,
+                canShare = canShare,
+                shareInProgress = shareInProgress,
+                isDarkTheme = isDarkTheme,
+                sheetFullyExpanded = sheetFullyExpanded,
+                sheetPeeked = sheetPeeked,
+                wikipediaUrl = wikipediaUrl,
+                onToggleTheme = onToggleTheme,
+                onBack = onBack,
+                onShare = onShare,
+                onOpenWikipedia = { url -> runCatching { uriHandler.openUri(url) } },
+                onQueryChanged = onQueryChanged,
+                onLocationSelected = onLocationSelected,
+                onDaySelected = onDaySelected,
+                onRefresh = onRefresh,
+                onCurrentLocationClick = onCurrentLocationClick
+            )
+        }
     ) {
+        SheetMapPane(
+            uiState = uiState,
+            mapHeight = mapHeight,
+            interactive = !sheetFullyExpanded,
+            isDarkTheme = isDarkTheme,
+            onMapTapped = onMapTapped
+        )
+    }
+}
+
+/** Rejects expand/hide while detail is showing so the sheet stays locked at 60%. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun rememberDetailSheetLock(inDetail: Boolean): (SheetValue) -> Boolean {
+    val sheetLocked = rememberUpdatedState(inDetail)
+    return remember {
+        { newValue: SheetValue ->
+            if (sheetLocked.value) newValue == SheetValue.PartiallyExpanded else true
+        }
+    }
+}
+
+/** MapLibre pane whose height is the gap above the sheet plus the rounded-corner leftover. */
+@Composable
+private fun SheetMapPane(
+    uiState: WeatherUiState,
+    mapHeight: Dp,
+    interactive: Boolean,
+    isDarkTheme: Boolean,
+    onMapTapped: (Double, Double) -> Unit
+) {
+    Box(Modifier.fillMaxSize()) {
         WeatherMapSection(
             camera = uiState.mapCamera,
             pin = uiState.mapPin,
             isResolvingTap = uiState.isResolvingMapTap,
             onMapTap = onMapTapped,
-            interactive = collapse.mapInteractive,
+            interactive = interactive,
+            darkTheme = isDarkTheme,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(collapse.headerHeight)
+                .height(mapHeight)
                 .align(Alignment.TopCenter)
-                .graphicsLayer { alpha = 1f - collapse.fraction * 0.35f }
+                .clipToBounds()
         )
+    }
+}
 
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = collapse.sheetTop),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 1.dp,
-            shadowElevation = 6.dp
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                WeatherSheetHeader(
-                    title = if (inDetail) uiState.selectedLocation?.name.orEmpty() else "",
-                    inDetail = inDetail,
-                    canShare = canShare,
-                    shareInProgress = shareInProgress,
-                    isDarkTheme = isDarkTheme,
-                    mapFullyCollapsed = collapse.fraction >= 1f,
-                    onToggleTheme = onToggleTheme,
-                    onBack = onBack,
-                    onShare = onShare,
-                    searchQuery = uiState.query,
-                    isSearching = uiState.isSearching,
-                    onQueryChange = onQueryChanged,
-                    onInfoClick = { showInfoDialog = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
-                        .padding(top = 12.dp, bottom = 4.dp)
-                )
-                Crossfade(
-                    targetState = inDetail,
-                    animationSpec = tween(BODY_CROSSFADE_MS, easing = FastOutSlowInEasing),
-                    modifier = Modifier.fillMaxSize(),
-                    label = "home_detail_crossfade"
-                ) { detail ->
-                    if (detail) {
-                        DetailContent(
-                            uiState = uiState,
-                            onDaySelected = onDaySelected
-                        )
-                    } else {
-                        HomeContent(
-                            uiState = uiState,
-                            onLocationSelected = onLocationSelected,
-                            onRefresh = onRefresh,
-                            onCurrentLocationClick = onCurrentLocationClick,
-                            // PTR only when the map is fully open so overscroll doesn't steal collapse.
-                            mapFullyExpanded = collapse.fraction == 0f
-                        )
-                    }
-                }
-            }
+/** Crossfades home vs detail inside the sheet so the map instance is not remounted. */
+@Composable
+private fun SheetBodyCrossfade(
+    uiState: WeatherUiState,
+    inDetail: Boolean,
+    peekHeight: Dp,
+    canShare: Boolean,
+    shareInProgress: Boolean,
+    isDarkTheme: Boolean,
+    sheetFullyExpanded: Boolean,
+    sheetPeeked: Boolean,
+    wikipediaUrl: String?,
+    onToggleTheme: () -> Unit,
+    onBack: () -> Unit,
+    onShare: () -> Unit,
+    onOpenWikipedia: (String) -> Unit,
+    onQueryChanged: (String) -> Unit,
+    onLocationSelected: (Location) -> Unit,
+    onDaySelected: (Int) -> Unit,
+    onRefresh: () -> Unit,
+    onCurrentLocationClick: () -> Unit
+) {
+    Crossfade(
+        targetState = inDetail,
+        animationSpec = tween(BODY_CROSSFADE_MS, easing = FastOutSlowInEasing),
+        modifier = Modifier.fillMaxWidth(),
+        label = "home_detail_crossfade"
+    ) { detail ->
+        if (detail) {
+            DetailSheetBody(
+                uiState = uiState,
+                peekHeight = peekHeight,
+                canShare = canShare,
+                shareInProgress = shareInProgress,
+                isDarkTheme = isDarkTheme,
+                wikipediaUrl = wikipediaUrl,
+                onToggleTheme = onToggleTheme,
+                onBack = onBack,
+                onShare = onShare,
+                onOpenWikipedia = onOpenWikipedia,
+                onDaySelected = onDaySelected
+            )
+        } else {
+            HomeSheetBody(
+                uiState = uiState,
+                canShare = canShare,
+                shareInProgress = shareInProgress,
+                isDarkTheme = isDarkTheme,
+                sheetFullyExpanded = sheetFullyExpanded,
+                sheetPeeked = sheetPeeked,
+                onToggleTheme = onToggleTheme,
+                onBack = onBack,
+                onShare = onShare,
+                onQueryChanged = onQueryChanged,
+                onLocationSelected = onLocationSelected,
+                onRefresh = onRefresh,
+                onCurrentLocationClick = onCurrentLocationClick
+            )
         }
     }
 }
 
-private class MapCollapseState(
-    val nestedScrollConnection: NestedScrollConnection,
-    val headerHeight: Dp,
-    val sheetTop: Dp,
-    val fraction: Float,
-    val mapInteractive: Boolean
-)
-
+/** Locked 60% detail: overlay header on the hero, then day chips and ranked activities. */
 @Composable
-private fun rememberMapCollapseState(resetKey: Any): MapCollapseState {
-    val density = LocalDensity.current
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
-    val expandedMapHeight = screenWidthDp * MAP_ASPECT_HEIGHT / MAP_ASPECT_WIDTH
-    val expandedPx = with(density) { expandedMapHeight.toPx() }
-    val maxCollapsePx = expandedPx.coerceAtLeast(1f)
-
-    var toolbarOffsetPx by remember { mutableFloatStateOf(0f) }
-
-    // Expand the map again when switching home ↔ detail so the new mode starts with the header open.
-    LaunchedEffect(resetKey) {
-        toolbarOffsetPx = 0f
-    }
-
-    val nestedScrollConnection = remember(maxCollapsePx) {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                val delta = available.y
-                // Scroll up: collapse the map before the sheet content scrolls.
-                if (delta < 0f) {
-                    val previous = toolbarOffsetPx
-                    toolbarOffsetPx = (toolbarOffsetPx + delta).coerceIn(-maxCollapsePx, 0f)
-                    return Offset(0f, toolbarOffsetPx - previous)
-                }
-                return Offset.Zero
-            }
-
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource
-            ): Offset {
-                val delta = available.y
-                // Scroll down: expand the map after the sheet has scrolled to its top.
-                if (delta > 0f) {
-                    val previous = toolbarOffsetPx
-                    toolbarOffsetPx = (toolbarOffsetPx + delta).coerceIn(-maxCollapsePx, 0f)
-                    return Offset(0f, toolbarOffsetPx - previous)
-                }
-                return Offset.Zero
-            }
+private fun DetailSheetBody(
+    uiState: WeatherUiState,
+    peekHeight: Dp,
+    canShare: Boolean,
+    shareInProgress: Boolean,
+    isDarkTheme: Boolean,
+    wikipediaUrl: String?,
+    onToggleTheme: () -> Unit,
+    onBack: () -> Unit,
+    onShare: () -> Unit,
+    onOpenWikipedia: (String) -> Unit,
+    onDaySelected: (Int) -> Unit
+) {
+    DetailContent(
+        uiState = uiState,
+        onDaySelected = onDaySelected,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(peekHeight),
+        header = {
+            WeatherSheetHeader(
+                title = uiState.selectedLocation?.name.orEmpty(),
+                inDetail = true,
+                canShare = canShare,
+                shareInProgress = shareInProgress,
+                isDarkTheme = isDarkTheme,
+                sheetFullyExpanded = false,
+                overlayOnHero = true,
+                onToggleTheme = onToggleTheme,
+                onBack = onBack,
+                onShare = onShare,
+                wikipediaUrl = wikipediaUrl,
+                onOpenWikipedia = onOpenWikipedia,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 8.dp, bottom = 4.dp)
+            )
         }
-    }
-
-    val headerHeight = with(density) { (expandedPx + toolbarOffsetPx).toDp() }
-    val fraction = (-toolbarOffsetPx / maxCollapsePx).coerceIn(0f, 1f)
-    val sheetTop = (headerHeight - MapSheetOverlap).coerceAtLeast(0.dp)
-
-    return MapCollapseState(
-        nestedScrollConnection = nestedScrollConnection,
-        headerHeight = headerHeight,
-        sheetTop = sheetTop,
-        fraction = fraction,
-        mapInteractive = fraction < MAP_INTERACTIVE_COLLAPSE_THRESHOLD
     )
 }
 
+/** Expandable home sheet: search chrome plus [HomeContent]. */
+@Composable
+private fun HomeSheetBody(
+    uiState: WeatherUiState,
+    canShare: Boolean,
+    shareInProgress: Boolean,
+    isDarkTheme: Boolean,
+    sheetFullyExpanded: Boolean,
+    sheetPeeked: Boolean,
+    onToggleTheme: () -> Unit,
+    onBack: () -> Unit,
+    onShare: () -> Unit,
+    onQueryChanged: (String) -> Unit,
+    onLocationSelected: (Location) -> Unit,
+    onRefresh: () -> Unit,
+    onCurrentLocationClick: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth()) {
+        WeatherSheetHeader(
+            title = "",
+            inDetail = false,
+            canShare = canShare,
+            shareInProgress = shareInProgress,
+            isDarkTheme = isDarkTheme,
+            sheetFullyExpanded = sheetFullyExpanded,
+            onToggleTheme = onToggleTheme,
+            onBack = onBack,
+            onShare = onShare,
+            searchQuery = uiState.query,
+            isSearching = uiState.isSearching,
+            onQueryChange = onQueryChanged,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(top = 4.dp, bottom = 4.dp)
+        )
+        HomeContent(
+            uiState = uiState,
+            onLocationSelected = onLocationSelected,
+            onRefresh = onRefresh,
+            onCurrentLocationClick = onCurrentLocationClick,
+            sheetPeeked = sheetPeeked
+        )
+    }
+}
+
+/**
+ * Live map height: [SheetState.requireOffset] is the sheet’s top Y (home peek → ~60% map,
+ * detail lock → ~40%, Expanded → ~0). [cornerOverlap] keeps a leftover so tiles paint through
+ * the sheet’s rounded corners instead of a full-size map hidden underneath.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun rememberSheetMapHeight(
+    sheetState: SheetState,
+    peekFraction: Float,
+    cornerOverlap: Dp
+): Dp {
+    val density = LocalDensity.current
+    val fallbackPx = with(density) {
+        (LocalConfiguration.current.screenHeightDp.dp * (1f - peekFraction)).toPx()
+    }
+    val overlapPx = with(density) { cornerOverlap.toPx() }
+    val heightPx by produceState(
+        initialValue = mapLayoutHeightPx(fallbackPx, overlapPx),
+        key1 = sheetState,
+        key2 = fallbackPx,
+        key3 = overlapPx
+    ) {
+        value = mapLayoutHeightPx(fallbackPx, overlapPx)
+        snapshotFlow {
+            val offset = runCatching { sheetState.requireOffset() }.getOrDefault(fallbackPx)
+            mapLayoutHeightPx(offset, overlapPx)
+        }.collect { value = it }
+    }
+    return with(density) { heightPx.toDp() }
+}
+
+/** Sheet top Y plus corner overlap; expanded sheet (offset ~0) leaves only the leftover. */
+internal fun mapLayoutHeightPx(sheetOffsetPx: Float, cornerOverlapPx: Float): Float =
+    sheetOffsetPx.coerceAtLeast(0f) + cornerOverlapPx.coerceAtLeast(0f)
+
+/** True on API 28 and below when WRITE_EXTERNAL_STORAGE is still missing. */
 private fun needsLegacyWritePermission(context: android.content.Context): Boolean {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return false
     return ContextCompat.checkSelfPermission(
@@ -407,6 +583,7 @@ private fun needsLegacyWritePermission(context: android.content.Context): Boolea
     ) != PackageManager.PERMISSION_GRANTED
 }
 
+/** True when fine or coarse location permission is already granted. */
 private fun hasLocationPermission(context: android.content.Context): Boolean {
     val fine = ContextCompat.checkSelfPermission(
         context,
@@ -419,6 +596,7 @@ private fun hasLocationPermission(context: android.content.Context): Boolean {
     return fine || coarse
 }
 
+/** Snackbar copy for share success, Downloads save, or failure. */
 private fun shareOutcomeMessage(
     outcome: ShareWeatherOutcome,
     failed: String,
@@ -431,8 +609,8 @@ private fun shareOutcomeMessage(
 }
 
 private const val BODY_CROSSFADE_MS = 280
-/** Width:height = 1:1 when the collapsing map header is fully expanded. */
-private const val MAP_ASPECT_WIDTH = 1f
-private const val MAP_ASPECT_HEIGHT = 1f
-private val MapSheetOverlap: Dp = 28.dp
-private const val MAP_INTERACTIVE_COLLAPSE_THRESHOLD = 0.72f
+/** Home peek: ~40% sheet so ~60% of the map stays visible. */
+private const val SHEET_HOME_PEEK_FRACTION = 0.40f
+/** Locked detail height: ~60% sheet so ~40% of the map stays visible. */
+private const val SHEET_DETAIL_PEEK_FRACTION = 0.60f
+private val SheetTopCorner = 24.dp

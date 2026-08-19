@@ -35,13 +35,26 @@ interface WeatherRepository {
     fun getForecastFlow(location: Location): Flow<WeatherForecast?>
 
     /**
-     * Forces a network refresh of the forecast for a specific location.
+     * True when Room already has daily rows for [location] and the row's last update
+     * is within [com.example.weatherrecommender.domain.model.CachePolicy.WEATHER_TTL_MS].
+     * Used to pick a snappy vs long map hop before the camera flies.
+     */
+    suspend fun hasFreshForecast(location: Location): Boolean
+
+    /**
+     * Forces a network refresh of the forecast for a specific location unless Room is still
+     * within [com.example.weatherrecommender.domain.model.CachePolicy.WEATHER_TTL_MS].
      * Updates the local cache upon success, triggering [getForecastFlow].
      *
-     * @param location The target location to refresh.
-     * @return An [AppResult] indicating success or failure.
+     * @param force When true (manual refresh), always hits Open-Meteo.
      */
-    suspend fun refreshForecast(location: Location): AppResult<Unit>
+    suspend fun refreshForecast(location: Location, force: Boolean = false): AppResult<Unit>
+
+    /**
+     * Warms Room for major cities near [origin] so map hops can resolve from cache.
+     * Best-effort: failures are swallowed so navigation of the selected city is unaffected.
+     */
+    suspend fun prefetchNearbyCities(origin: Location)
 
     /**
      * Fetches a forecast for a location directly from the network without touching the cache.

@@ -34,6 +34,7 @@ import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -56,7 +57,8 @@ internal fun ShareWeatherCapture(
     days: List<DailyForecast>,
     selectedDayIndex: Int,
     rankedActivities: List<RankedActivity>,
-    onComplete: (ShareWeatherOutcome) -> Unit
+    onComplete: (ShareWeatherOutcome) -> Unit,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     val context = LocalContext.current
     val graphicsLayer = rememberGraphicsLayer()
@@ -100,7 +102,7 @@ internal fun ShareWeatherCapture(
         delay(64.milliseconds)
         val outcome = try {
             val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 shareWeatherBitmap(context, bitmap, location.name)
             }
         } catch (_: Exception) {
@@ -116,44 +118,49 @@ internal fun ShareWeatherCapture(
  * Also copies the same image into Downloads when possible; a Downloads failure does not
  * prevent sharing.
  */
+/**
+ * Writes [bitmap] to cache and opens [Intent.ACTION_SEND] with `image/png` via FileProvider.
+ * Also copies the same image into Downloads when possible; a Downloads failure does not
+ * prevent sharing.
+ */
 internal fun shareWeatherBitmap(context: Context, bitmap: Bitmap, cityName: String): ShareWeatherOutcome {
     return try {
-        val dir = File(context.cacheDir, "shared_images").apply { mkdirs() }
-        val file = File(dir, "weather_share_${System.currentTimeMillis()}.png")
-        FileOutputStream(file).use { out ->
-            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
-                return ShareWeatherOutcome(shared = false)
-            }
-        }
-
-        val downloadsFileName = buildDownloadsFileName(cityName)
-        val savedToDownloads = saveBitmapToDownloads(context, bitmap, downloadsFileName)
-
-        val authority = "${context.packageName}.fileprovider"
-        val uri = FileProvider.getUriForFile(context, authority, file)
-        val send = Intent(Intent.ACTION_SEND).apply {
-            type = "image/png"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(
-                Intent.EXTRA_SUBJECT,
-                context.getString(R.string.share_weather_subject, cityName)
-            )
-            putExtra(
-                Intent.EXTRA_TEXT,
-                context.getString(R.string.share_weather_text, cityName)
-            )
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(
-            Intent.createChooser(
-                send,
-                context.getString(R.string.share_weather_chooser)
-            )
+        val file = writeSharePng(context, bitmap) ?: return ShareWeatherOutcome(shared = false)
+        val savedToDownloads = saveBitmapToDownloads(
+            context,
+            bitmap,
+            buildDownloadsFileName(cityName)
         )
+        startShareChooser(context, file, cityName)
         ShareWeatherOutcome(shared = true, savedToDownloads = savedToDownloads)
     } catch (_: Exception) {
         ShareWeatherOutcome(shared = false)
     }
+}
+
+/** Compresses [bitmap] as PNG into the app cache; returns null if compression fails. */
+private fun writeSharePng(context: Context, bitmap: Bitmap): File? {
+    val dir = File(context.cacheDir, "shared_images").apply { mkdirs() }
+    val file = File(dir, "weather_share_${System.currentTimeMillis()}.png")
+    FileOutputStream(file).use { out ->
+        if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) return null
+    }
+    return file
+}
+
+/** Launches the system share sheet for the cached PNG, granting read URI permission. */
+private fun startShareChooser(context: Context, file: File, cityName: String) {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "image/png"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.share_weather_subject, cityName))
+        putExtra(Intent.EXTRA_TEXT, context.getString(R.string.share_weather_text, cityName))
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(
+        Intent.createChooser(send, context.getString(R.string.share_weather_chooser))
+    )
 }
 
 /**
@@ -173,6 +180,7 @@ internal fun saveBitmapToDownloads(context: Context, bitmap: Bitmap, fileName: S
     }
 }
 
+/** Writes into MediaStore Downloads on API 29+ without a storage permission. */
 @RequiresApi(Build.VERSION_CODES.Q)
 @SuppressLint("NewApi")
 private fun saveBitmapToDownloadsMediaStore(
@@ -208,6 +216,7 @@ private fun saveBitmapToDownloadsMediaStore(
     return success
 }
 
+/** Pre-Q fallback: writes the PNG under public Downloads when write permission is already granted. */
 @Suppress("DEPRECATION")
 private fun saveBitmapToDownloadsLegacy(
     context: Context,
@@ -237,12 +246,14 @@ private fun saveBitmapToDownloadsLegacy(
     return wrote
 }
 
+/** Builds `WeatherRecommender_{city}_{yyyy-MM-dd}.png` for Downloads and share cache files. */
 internal fun buildDownloadsFileName(cityName: String, date: Date = Date()): String {
     val city = sanitizeCityForFilename(cityName)
     val datePart = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(date)
     return "WeatherRecommender_${city}_$datePart.png"
 }
 
+/** Keeps alphanumeric characters from [cityName] so the file name is filesystem-safe. */
 internal fun sanitizeCityForFilename(cityName: String): String {
     val sanitized = cityName
         .replace(Regex("[^A-Za-z0-9]+"), "_")

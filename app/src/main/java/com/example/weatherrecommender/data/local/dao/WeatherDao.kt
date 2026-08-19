@@ -45,6 +45,13 @@ interface WeatherDao {
     fun getDailyForecastsFlow(locationId: Long): Flow<List<DailyForecastEntity>>
 
     /**
+     * One-shot read of daily forecasts for [locationId], oldest date first.
+     * Used by workers and hop logic that cannot wait on a Flow emission.
+     */
+    @Query("SELECT * FROM daily_forecast_entity WHERE locationId = :locationId ORDER BY date ASC")
+    suspend fun getDailyForecasts(locationId: Long): List<DailyForecastEntity>
+
+    /**
      * Retrieves a single location by its [locationId] for one-shot reads (e.g., workers).
      */
     @Query("SELECT * FROM location_entity WHERE id = :locationId")
@@ -83,6 +90,13 @@ interface WeatherDao {
      */
     @Query("SELECT COUNT(*) FROM location_entity")
     suspend fun getLocationCount(): Int
+
+    /**
+     * IDs of never-opened prefetch rows (`lastViewedAt = 0`), oldest forecast first, capped at [count].
+     * Eviction prefers these over cities the user actually viewed.
+     */
+    @Query("SELECT id FROM location_entity WHERE lastViewedAt = 0 ORDER BY lastUpdated ASC LIMIT :count")
+    suspend fun getUnviewedOldestIds(count: Int): List<Long>
 
     /**
      * Retrieves the IDs of the oldest (least recently updated) locations, limited by [count].

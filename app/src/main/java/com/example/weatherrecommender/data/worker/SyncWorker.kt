@@ -21,10 +21,14 @@ class SyncWorker(
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface SyncWorkerEntryPoint {
+        /** Resolves the singleton [LocationSyncer] from the application graph. */
         fun locationSyncer(): LocationSyncer
+
+        /** Resolves the singleton [CrashReporter] for worker failure logging. */
         fun crashReporter(): CrashReporter
     }
 
+    /** Syncs all Room cities; retries the work if any refresh fails or throws. */
     override suspend fun doWork(): Result {
         return try {
             val entryPoint = EntryPointAccessors.fromApplication(

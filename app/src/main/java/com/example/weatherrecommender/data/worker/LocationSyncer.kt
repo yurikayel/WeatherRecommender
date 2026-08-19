@@ -25,6 +25,10 @@ class LocationSyncer @Inject constructor(
     private val weatherDao: WeatherDao
 ) {
 
+    /**
+     * Refreshes every cached city in chunks of [CHUNK_SIZE], staggering batches.
+     * @return true only when every city's refresh succeeded.
+     */
     suspend fun syncAllLocations(): Boolean {
         val locations = weatherDao.getAllLocations()
         if (locations.isEmpty()) {

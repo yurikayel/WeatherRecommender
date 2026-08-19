@@ -30,6 +30,7 @@ import javax.inject.Singleton
 @Suppress("TooManyFunctions")
 object NetworkModule {
 
+    /** Lenient JSON for Open-Meteo / Wikipedia / Nominatim payloads. */
     @Provides
     @Singleton
     fun provideJson(): Json = Json {
@@ -37,6 +38,7 @@ object NetworkModule {
         coerceInputValues = true
     }
 
+    /** Shared OkHttp client with identifying User-Agent, 429 retries, and debug body logs. */
     @Provides
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
@@ -45,7 +47,10 @@ object NetworkModule {
             .readTimeout(15, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
-                    .header("User-Agent", "WeatherRecommender/1.0 (https://github.com/example/weatherrecommender)")
+                    .header(
+                        "User-Agent",
+                        "WeatherRecommender/1.0 (https://github.com/yurikayel/WeatherRecommender)"
+                    )
                     .build()
                 chain.proceed(request)
             }
@@ -62,6 +67,7 @@ object NetworkModule {
         return builder.build()
     }
 
+    /** Retrofit for Open-Meteo geocoding. */
     @Provides
     @Singleton
     @Named("GeocodingRetrofit")
@@ -73,6 +79,7 @@ object NetworkModule {
             .build()
     }
 
+    /** Retrofit for Open-Meteo weather. */
     @Provides
     @Singleton
     @Named("ForecastRetrofit")
@@ -84,6 +91,7 @@ object NetworkModule {
             .build()
     }
 
+    /** Retrofit for Open-Meteo marine (waves). */
     @Provides
     @Singleton
     @Named("MarineRetrofit")
@@ -95,6 +103,7 @@ object NetworkModule {
             .build()
     }
 
+    /** Retrofit for Wikipedia pageimages. */
     @Provides
     @Singleton
     @Named("WikipediaRetrofit")
@@ -106,30 +115,35 @@ object NetworkModule {
             .build()
     }
 
+    /** Typed geocoding API. */
     @Provides
     @Singleton
     fun provideGeocodingApi(@Named("GeocodingRetrofit") retrofit: Retrofit): GeocodingApi {
         return retrofit.create(GeocodingApi::class.java)
     }
 
+    /** Typed Wikipedia API. */
     @Provides
     @Singleton
     fun provideWikipediaApi(@Named("WikipediaRetrofit") retrofit: Retrofit): WikipediaApi {
         return retrofit.create(WikipediaApi::class.java)
     }
 
+    /** Typed forecast API. */
     @Provides
     @Singleton
     fun provideForecastApi(@Named("ForecastRetrofit") retrofit: Retrofit): ForecastApi {
         return retrofit.create(ForecastApi::class.java)
     }
 
+    /** Typed marine API. */
     @Provides
     @Singleton
     fun provideMarineApi(@Named("MarineRetrofit") retrofit: Retrofit): MarineApi {
         return retrofit.create(MarineApi::class.java)
     }
 
+    /** Retrofit for OSM Nominatim reverse geocoding. */
     @Provides
     @Singleton
     @Named("NominatimRetrofit")
@@ -141,6 +155,7 @@ object NetworkModule {
             .build()
     }
 
+    /** Typed Nominatim API. */
     @Provides
     @Singleton
     fun provideNominatimApi(@Named("NominatimRetrofit") retrofit: Retrofit): NominatimApi {

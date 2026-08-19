@@ -1,250 +1,228 @@
+@file:Suppress("TooManyFunctions") // Hero/forecast/activity rows split from DetailContent.
+
 package com.example.weatherrecommender.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.material3.Tab
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.testTag
-import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import coil.compose.AsyncImage
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.weatherrecommender.R
-import com.example.weatherrecommender.domain.model.DailyForecast
-import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
-import com.example.weatherrecommender.domain.model.ScoringThresholds
-import com.example.weatherrecommender.theme.PastelRainDark
-import com.example.weatherrecommender.theme.PastelRainLight
-import com.example.weatherrecommender.theme.PastelSnowDark
-import com.example.weatherrecommender.theme.PastelSnowLight
-import com.example.weatherrecommender.theme.PastelSunnyDark
-import com.example.weatherrecommender.theme.PastelSunnyLight
-import com.example.weatherrecommender.theme.PastelThunderDark
-import com.example.weatherrecommender.theme.PastelThunderLight
-import com.example.weatherrecommender.ui.util.WeatherUiCategory
+import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.ui.util.asUiText
-import com.example.weatherrecommender.ui.util.isoDateToDayOfMonth
-import com.example.weatherrecommender.ui.util.isoDateToWeekday
-import com.example.weatherrecommender.ui.util.weatherCodeDescription
-import com.example.weatherrecommender.ui.util.weatherCodeIcon
-import com.example.weatherrecommender.ui.util.weatherUiCategory
-import kotlin.math.roundToInt
 
-private const val DAY_SWITCH_MS = 320
+private const val DAY_SWITCH_MS = 220
 
 /**
- * Detail body inside the collapsing-map sheet: geography chips, day selector, and ranked activities.
- * The map lives in [WeatherScreenContent] so it stays mounted across home↔detail.
- * Tapping a day re-ranks activities (handled by [WeatherViewModel.onDaySelected]).
- * Pull-to-refresh is home-only (bonus) so it cannot fight nested-scroll map collapse here.
+ * Detail body inside the map bottom sheet. The sheet is locked at 60% and this column
+ * fills that height — there is no [androidx.compose.foundation.verticalScroll]. The 16:9
+ * hero takes its aspect-ratio height; day chips stay [DetailLayout.DayRowHeight]; ranked
+ * activity rows share the remaining space via [Modifier.weight] so every row stays on
+ * screen. Tapping a day only swaps the activity list via [WeatherViewModel.onDaySelected].
+ * Pull-to-refresh is home-only.
  */
 @Composable
 internal fun DetailContent(
     uiState: WeatherUiState,
+    onDaySelected: (Int) -> Unit,
+    header: @Composable () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val imageUrl = uiState.selectedLocation?.imageUrl ?: uiState.forecast?.location?.imageUrl
+    val showLoadingShimmer = uiState.isLoadingForecast && uiState.forecast == null
+    val forecast = uiState.forecast
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("detail_sheet_body")
+    ) {
+        CityHeroOverlay(
+            imageUrl = imageUrl,
+            showShimmer = showLoadingShimmer && imageUrl == null,
+            header = header,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(DetailLayout.HeroAspectRatio)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(
+                    start = DetailLayout.SheetHorizontalPadding,
+                    end = DetailLayout.SheetHorizontalPadding,
+                    top = DetailLayout.BlockSpacing,
+                    bottom = DetailLayout.SheetBottomPadding
+                ),
+            verticalArrangement = Arrangement.spacedBy(DetailLayout.AfterDayRowSpacing)
+        ) {
+            uiState.error?.let { error ->
+                Text(
+                    text = stringResource(R.string.error_prefix, error.asString()),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            uiState.syncError?.let { syncError ->
+                SyncErrorBanner(syncError.asString())
+            }
+
+            if (showLoadingShimmer) {
+                PremiumShimmerLoadingState(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                )
+            } else if (forecast != null) {
+                DetailForecastBody(
+                    forecast = forecast,
+                    selectedDayIndex = uiState.selectedDayIndex,
+                    rankedActivities = uiState.rankedActivities,
+                    onDaySelected = onDaySelected
+                )
+            }
+        }
+    }
+}
+
+/** Day chips plus a weighted column of ranked activities for the selected day. */
+@Composable
+private fun ColumnScope.DetailForecastBody(
+    forecast: WeatherForecast,
+    selectedDayIndex: Int,
+    rankedActivities: List<RankedActivity>,
     onDaySelected: (Int) -> Unit
 ) {
-    Column(
+    WeekSummarySection(
+        forecast = forecast,
+        selectedDayIndex = selectedDayIndex,
+        onDaySelected = onDaySelected,
+        modifier = Modifier.fillMaxWidth()
+    )
+    Crossfade(
+        targetState = selectedDayIndex to rankedActivities,
+        animationSpec = tween(DAY_SWITCH_MS),
         modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-    ) {
-        val location = uiState.selectedLocation
-        val imageUrl = location?.imageUrl ?: uiState.forecast?.location?.imageUrl
-        if (imageUrl != null) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-                    .padding(bottom = 16.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
+            .fillMaxWidth()
+            .weight(1f)
+            .testTag("detail_activity_list"),
+        label = "day_activities"
+    ) { (_, activities) ->
+        Column(modifier = Modifier.fillMaxSize()) {
+            activities.forEachIndexed { index, ranked ->
+                ActivityItem(
+                    rankedActivity = ranked,
+                    isTopPick = index == 0,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Edge-to-edge photo (or placeholder/shimmer) flush to the sheet’s top. The sheet Surface
+ * clips this to the rounded top corners — no inner card inset. Height comes from a 16:9
+ * [aspectRatio] (placeholder uses the same box so layout does not jump). [header] sits on a
+ * short top scrim so chrome stays readable while the photo still meets the sheet edge.
+ */
+@Composable
+private fun CityHeroOverlay(
+    imageUrl: String?,
+    showShimmer: Boolean,
+    header: @Composable () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier.testTag("detail_hero")) {
+        when {
+            imageUrl != null -> {
                 AsyncImage(
-                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                    model = ImageRequest.Builder(LocalContext.current)
                         .data(imageUrl)
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                    alpha = 0.9f
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            showShimmer -> {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .shimmerEffect()
+                )
+            }
+            else -> {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 )
             }
         }
-
-        if (uiState.isLoadingForecast && uiState.forecast == null) {
-            Spacer(Modifier.height(16.dp))
-            PremiumShimmerLoadingState()
-        }
-
-        uiState.error?.let { error ->
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = stringResource(R.string.error_prefix, error.asString()),
-                color = MaterialTheme.colorScheme.error
-            )
-        }
-
-        uiState.syncError?.let { syncError ->
-            Spacer(Modifier.height(12.dp))
-            SyncErrorBanner(syncError.asString())
-        }
-
-        val forecast = uiState.forecast
-        if (forecast != null) {
-            val selectedDay = forecast.dailyForecasts.getOrNull(uiState.selectedDayIndex)
-            val selectedDayName = selectedDay?.let { isoDateToWeekday(it.date) } ?: ""
-            
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = selectedDayName,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.semantics { heading() }
-            )
-            Spacer(Modifier.height(16.dp))
-            
-            AnimatedContent(
-                targetState = uiState.selectedDayIndex to uiState.rankedActivities,
-                transitionSpec = {
-                    (slideInVertically(tween(DAY_SWITCH_MS)) { it / 8 } + fadeIn(tween(DAY_SWITCH_MS)))
-                        .togetherWith(fadeOut(tween(DAY_SWITCH_MS / 2)))
-                },
-                label = "day_activities"
-            ) { (_, activities) ->
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .animateContentSize()
-                ) {
-                    activities.sortedByDescending { it.score }.forEach { ranked ->
-                        ActivityItem(ranked)
-                    }
-                }
-            }
-            
-            
-            Spacer(Modifier.height(32.dp))
-
-            Text(
-                text = stringResource(R.string.tab_7_day),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.semantics { heading() }
-            )
-            Spacer(Modifier.height(16.dp))
-
-
-            WeekSummarySection(
-                forecast = forecast,
-                weekTopActivities = uiState.weekTopActivities,
-                selectedDayIndex = uiState.selectedDayIndex,
-                onDaySelected = onDaySelected
-            )
-            Spacer(Modifier.height(24.dp))
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0f to Color.Black.copy(alpha = 0.55f),
+                            0.38f to Color.Black.copy(alpha = 0.18f),
+                            0.62f to Color.Transparent
+                        )
+                    )
+                )
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+        ) {
+            header()
         }
     }
 }
 
-@Composable
-internal fun LocationInfoDialog(
-    location: Location,
-    onDismiss: () -> Unit
-) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(text = location.name)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                val subtitle = listOfNotNull(location.admin1, location.country).joinToString(", ")
-                if (subtitle.isNotBlank()) {
-                    Text(text = subtitle, style = MaterialTheme.typography.bodyLarge)
-                }
-                Text(
-                    text = stringResource(
-                        if (location.hasSeaAccess) R.string.chip_coastal else R.string.chip_inland
-                    ),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                location.elevation?.let {
-                    Text(
-                        text = stringResource(R.string.chip_elevation, it.roundToInt()),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text(stringResource(android.R.string.ok))
-            }
-        }
-    )
-}
-
-
-
+/** Error-container banner for background sync failures that left cached days on screen. */
 @Composable
 private fun SyncErrorBanner(message: String) {
     Card(
@@ -259,39 +237,59 @@ private fun SyncErrorBanner(message: String) {
             ),
             color = MaterialTheme.colorScheme.onErrorContainer,
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(16.dp)
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
         )
     }
 }
+
+/** Compact ranked row: icon, score, title, and one-line reason. */
 @Composable
-private fun ActivityItem(rankedActivity: RankedActivity) {
+private fun ActivityItem(
+    rankedActivity: RankedActivity,
+    isTopPick: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.padding(horizontal = 4.dp, vertical = 2.dp)
     ) {
         Icon(
             activityIcon(rankedActivity.activity),
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.size(24.dp)
-        )
-        Text(
-            text = rankedActivity.activity.asUiText().asString(),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            tint = colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp)
         )
         Text(
             text = rankedActivity.score.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = when {
-                rankedActivity.score > ScoringThresholds.SCORE_HIGH -> MaterialTheme.colorScheme.primary
-                rankedActivity.score > ScoringThresholds.SCORE_MID -> MaterialTheme.colorScheme.secondary
-                else -> MaterialTheme.colorScheme.error
-            }
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = if (isTopPick) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isTopPick) colorScheme.primary else colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(min = 28.dp)
         )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = rankedActivity.activity.asUiText().asString(),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = rankedActivity.reasonKey.asUiText(rankedActivity.reasonArgs).asString(),
+                style = MaterialTheme.typography.bodySmall,
+                color = colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }

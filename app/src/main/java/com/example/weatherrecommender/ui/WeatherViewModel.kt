@@ -2,6 +2,7 @@ package com.example.weatherrecommender.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.weatherrecommender.data.preferences.FirstRunThemeSettler
 import com.example.weatherrecommender.domain.location.DeviceLocationProvider
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.Location
@@ -15,22 +16,21 @@ import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
 import com.example.weatherrecommender.domain.util.ConnectivityObserver
 import com.example.weatherrecommender.domain.util.ConnectivityStatus
 import com.example.weatherrecommender.ui.map.MapCameraPosition
+import com.example.weatherrecommender.ui.map.MapHopProfile
 import com.example.weatherrecommender.ui.util.UiText
 import com.example.weatherrecommender.ui.util.asUiText
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -44,47 +44,43 @@ import kotlin.time.Duration.Companion.milliseconds
  *  - **Detail** ([WeatherDestination.Detail]): the forecast with a per-day selector; [rankedActivities]
  *    always reflects [selectedDayIndex].
  *
- * The map is driven by [mapCamera] / [mapPin]; [WeatherScreenContent] keeps a single map instance
- * mounted as the collapsing background while the sheet body Crossfades home↔detail.
+ * The map is driven by [mapCamera] / [mapPin]; [WeatherScreenContent] keeps a single map
+ * instance whose layout height tracks the sheet while the sheet body Crossfades home↔detail.
  *
- * @property query The current search query.
- * @property isSearching True if a search request is in-flight.
- * @property searchResults List of geocoding results matching the query.
+ * @property query The current search query (updated immediately; the network path is debounced).
+ * @property search Geocoding lane: idle, in-flight (optionally with previous hits), or results.
  * @property destination Explicit home vs detail navigation target.
  * @property selectedLocation The location shown in detail, derived from [destination].
  * @property forecast The 7-day forecast for the selected location.
- * @property isLoadingForecast True while the forecast for the selected location is loading.
+ * @property forecastFetch Loading vs idle for the detail forecast (independent of [search]).
  * @property selectedDayIndex Index of the day whose activities are currently shown.
  * @property rankedActivities Applicable activities for [selectedDayIndex], sorted by score.
  * @property weekTopActivities Top-ranked activity per forecast day (#1 each day); stable until forecast changes.
  * @property topPicks Population-weighted featured suggestions shown on the home screen.
- * @property isLoadingTopPicks True while the home suggestions are loading (initial skeleton).
- * @property isRefreshingTopPicks True while pull-to-refresh is force-refreshing top picks.
+ * @property topPicksFetch Idle, initial skeleton, or pull-to-refresh over existing [topPicks].
  * @property recentHistory The 10 most recently viewed cities, newest first (empty when none).
  * @property mapCamera Camera target for the in-screen map.
  * @property mapPin Marker shown on the map (selected city or search preview).
- * @property isResolvingMapTap True while reverse-geocoding a map tap.
+ * @property mapTapFetch Loading while reverse-geocoding a map tap.
  * @property deviceLocation Reverse-geocoded city for the device GPS fix; null hides the home chip.
  * @property error The main UI error, usually blocking or prominent.
  * @property syncError A background sync error for offline scenarios.
  */
 data class WeatherUiState(
     val query: String = "",
-    val isSearching: Boolean = false,
-    val searchResults: List<Location> = emptyList(),
+    val search: SearchUiState = SearchUiState.Idle,
     val destination: WeatherDestination = WeatherDestination.Home,
     val forecast: WeatherForecast? = null,
-    val isLoadingForecast: Boolean = false,
+    val forecastFetch: FetchStatus = FetchStatus.Idle,
     val selectedDayIndex: Int = 0,
     val rankedActivities: List<RankedActivity> = emptyList(),
     val weekTopActivities: List<RankedActivity?> = emptyList(),
     val topPicks: List<TopPick> = emptyList(),
-    val isLoadingTopPicks: Boolean = false,
-    val isRefreshingTopPicks: Boolean = false,
+    val topPicksFetch: FetchStatus = FetchStatus.Idle,
     val recentHistory: List<Location> = emptyList(),
     val mapCamera: MapCameraPosition = MapCameraPosition.DEFAULT,
     val mapPin: Location? = null,
-    val isResolvingMapTap: Boolean = false,
+    val mapTapFetch: FetchStatus = FetchStatus.Idle,
     val deviceLocation: Location? = null,
     val error: UiText? = null,
     val syncError: UiText? = null
@@ -92,13 +88,30 @@ data class WeatherUiState(
     /** Convenience accessor for detail mode; null on [WeatherDestination.Home]. */
     val selectedLocation: Location?
         get() = (destination as? WeatherDestination.Detail)?.location
+
+    val isSearching: Boolean get() = search is SearchUiState.Loading
+
+    val searchResults: List<Location>
+        get() = when (val current = search) {
+            SearchUiState.Idle -> emptyList()
+            is SearchUiState.Loading -> current.previousResults
+            is SearchUiState.Results -> current.locations
+        }
+
+    val isLoadingForecast: Boolean get() = forecastFetch == FetchStatus.Loading
+
+    val isLoadingTopPicks: Boolean get() = topPicksFetch == FetchStatus.Loading
+
+    val isRefreshingTopPicks: Boolean get() = topPicksFetch == FetchStatus.Refreshing
+
+    val isResolvingMapTap: Boolean get() = mapTapFetch == FetchStatus.Loading
 }
 
 /**
  * Orchestrates the UI logic and state for the main Weather Screen.
  * Employs unidirectional data flow and reacts to network connectivity events.
  */
-@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+@OptIn(FlowPreview::class)
 @HiltViewModel
 // Map/GPS/history grew the event surface; no clean collaborator split without fragmenting UDF.
 @Suppress("TooManyFunctions")
@@ -107,83 +120,99 @@ class WeatherViewModel @Inject constructor(
     private val getRankedActivities: GetRankedActivitiesUseCase,
     private val getTopPicks: GetTopPicksUseCase,
     private val connectivityObserver: ConnectivityObserver,
-    private val deviceLocationProvider: DeviceLocationProvider
+    private val deviceLocationProvider: DeviceLocationProvider,
+    private val firstRunThemeSettler: FirstRunThemeSettler
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WeatherUiState())
-    
+
     /**
      * The single source of truth for the UI state.
      * Combines search results, home data, and detail forecast data into a reactive stream.
      */
-    val uiState: StateFlow<WeatherUiState> = _uiState.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = WeatherUiState()
-    )
+    val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
 
     private val searchQueryFlow = MutableStateFlow("")
     private var forecastJob: Job? = null
+    private var contentRevealJob: Job? = null
+    private var mapTapJob: Job? = null
     private var deviceLocationJob: Job? = null
+    private var pendingDetailLocation: Location? = null
+    private var bufferedForecast: WeatherForecast? = null
+    private var bufferedError: UiText? = null
 
     private var currentConnectivityStatus: ConnectivityStatus = ConnectivityStatus.Available
 
     init {
+        observeConnectivity()
+        observeSearchQueries()
+        loadTopPicks()
+        observeHistory()
+    }
+
+    /** Settles in-flight search to an error when connectivity drops. */
+    private fun observeConnectivity() {
         viewModelScope.launch {
             connectivityObserver.observe().collect { status ->
                 currentConnectivityStatus = status
                 if (status != ConnectivityStatus.Available && _uiState.value.isSearching) {
                     _uiState.update {
-                        it.copy(
-                            error = AppError.NetworkError.NoConnectivity.asUiText(),
-                            isSearching = false
-                        )
+                        it.withSearchSettled(AppError.NetworkError.NoConnectivity.asUiText())
                     }
                 }
             }
         }
+    }
 
+    /** Debounces the search box and geocodes queries longer than two characters. */
+    private fun observeSearchQueries() {
         viewModelScope.launch {
             searchQueryFlow
                 .debounce(500.milliseconds)
                 .filter { it.length > 2 }
                 .distinctUntilChanged()
-                .onEach { _uiState.update { state -> state.copy(isSearching = true, error = null) } }
-                .collectLatest { query ->
-                    if (currentConnectivityStatus != ConnectivityStatus.Available) {
-                        _uiState.update {
-                            it.copy(
-                                error = AppError.NetworkError.NoConnectivity.asUiText(),
-                                isSearching = false
-                            )
-                        }
-                        return@collectLatest
-                    }
-
-                    repository.searchCity(query).fold(
-                        onSuccess = { locations ->
-                            _uiState.update { state ->
-                                val preview = locations.firstOrNull()
-                                state.copy(
-                                    searchResults = locations,
-                                    isSearching = false,
-                                    mapCamera = preview?.toMapCamera(MapCameraPosition.CITY_ZOOM)
-                                        ?: state.mapCamera,
-                                    mapPin = preview ?: state.mapPin
-                                )
-                            }
-                        },
-                        onError = { err ->
-                            _uiState.update { it.copy(error = err.asUiText(), isSearching = false) }
-                        }
-                    )
-                }
+                .onEach { markSearchLoading() }
+                .collectLatest { query -> searchCities(query) }
         }
-
-        loadTopPicks()
-        observeHistory()
     }
 
+    /** Shows the search lane as loading while keeping previous hits visible. */
+    private fun markSearchLoading() {
+        _uiState.update { state ->
+            state.copy(search = SearchUiState.Loading(state.searchResults), error = null)
+        }
+    }
+
+    /** Geocodes [query] or surfaces a connectivity error without hitting the network. */
+    private suspend fun searchCities(query: String) {
+        if (currentConnectivityStatus != ConnectivityStatus.Available) {
+            _uiState.update {
+                it.withSearchSettled(AppError.NetworkError.NoConnectivity.asUiText())
+            }
+            return
+        }
+        repository.searchCity(query).fold(
+            onSuccess = ::applySearchResults,
+            onError = { err -> _uiState.update { it.withSearchSettled(err.asUiText()) } }
+        )
+    }
+
+    /** Publishes geocoding hits and previews the first result on the map. */
+    private fun applySearchResults(locations: List<Location>) {
+        _uiState.update { state ->
+            val preview = locations.firstOrNull()
+            state.copy(
+                search = SearchUiState.Results(locations),
+                mapCamera = preview?.toMapCamera(
+                    MapCameraPosition.CITY_ZOOM,
+                    MapHopProfile.CACHED
+                ) ?: state.mapCamera,
+                mapPin = preview ?: state.mapPin
+            )
+        }
+    }
+
+    /** Mirrors the 10 most recently viewed cities into [WeatherUiState.recentHistory]. */
     private fun observeHistory() {
         viewModelScope.launch {
             repository.observeRecentLocations(HISTORY_LIMIT).collect { history ->
@@ -198,11 +227,10 @@ class WeatherViewModel @Inject constructor(
      */
     fun loadTopPicks(forceRefresh: Boolean = false) {
         _uiState.update { state ->
-            if (forceRefresh) {
-                state.copy(isRefreshingTopPicks = true, error = null)
-            } else {
-                state.copy(isLoadingTopPicks = true)
-            }
+            state.copy(
+                topPicksFetch = if (forceRefresh) FetchStatus.Refreshing else FetchStatus.Loading,
+                error = if (forceRefresh) null else state.error
+            )
         }
         viewModelScope.launch {
             if (!forceRefresh) {
@@ -212,8 +240,7 @@ class WeatherViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     topPicks = picks,
-                    isLoadingTopPicks = false,
-                    isRefreshingTopPicks = false
+                    topPicksFetch = FetchStatus.Idle
                 )
             }
         }
@@ -233,88 +260,170 @@ class WeatherViewModel @Inject constructor(
         searchQueryFlow.value = query
 
         if (query.length <= 2) {
-            _uiState.update { it.copy(searchResults = emptyList(), isSearching = false) }
+            _uiState.update { it.copy(search = SearchUiState.Idle) }
         }
     }
 
     /**
-     * Initiates the Detail view for the given location.
-     * Handles resetting the UI, fetching the forecast, and updating the history cache.
+     * Starts fetch immediately, plants the pin, then picks a [MapHopProfile] from Room freshness
+     * and flies the map. Sheet content waits [MapHopProfile.contentRevealMs] (500 ms before land
+     * on a cache miss, 200 ms before land when weather is already fresh).
      */
     fun onLocationSelected(location: Location) {
+        beginLocationHop(location)
+        startForecastJob(location)
+        startContentReveal(location)
+    }
+
+    /** Cancels a competing map-tap, plants the pin, and clears hop buffers for [location]. */
+    private fun beginLocationHop(location: Location) {
+        mapTapJob?.cancel()
+        mapTapJob = null
+        pendingDetailLocation = location
+        bufferedForecast = null
+        bufferedError = null
         _uiState.update {
             it.copy(
-                destination = WeatherDestination.Detail(location),
-                searchResults = emptyList(),
+                search = SearchUiState.Idle,
                 query = "",
-                forecast = null,
-                rankedActivities = emptyList(),
-                weekTopActivities = emptyList(),
-                selectedDayIndex = 0,
-                isLoadingForecast = true,
                 error = null,
                 syncError = null,
-                isResolvingMapTap = false,
-                mapCamera = location.toMapCamera(MapCameraPosition.DETAIL_ZOOM),
+                mapTapFetch = FetchStatus.Idle,
                 mapPin = location
             )
         }
+    }
 
+    /** Starts Room collect and refresh as sibling jobs so a later city selection cancels both. */
+    private fun startForecastJob(location: Location) {
         forecastJob?.cancel()
+        contentRevealJob?.cancel()
+        // Collect + refresh are siblings under one Job so selecting another city cancels both.
         forecastJob = viewModelScope.launch {
-            // Offline-first SSOT: collect from the local database.
-            repository.getForecastFlow(location).collect { forecast ->
-                if (forecast != null) {
-                    _uiState.update { state ->
-                        val maxIndex = maxOf(0, forecast.dailyForecasts.lastIndex)
-                        val dayIndex = state.selectedDayIndex.coerceIn(0, maxIndex)
-                        state.copy(
-                            // Prefer SSOT location so sea-access / geography updates flow through.
-                            destination = WeatherDestination.Detail(forecast.location),
-                            forecast = forecast,
-                            rankedActivities = getRankedActivities(forecast, dayIndex),
-                            weekTopActivities = computeWeekTopActivities(forecast),
-                            selectedDayIndex = dayIndex,
-                            isLoadingForecast = false
-                        )
-                    }
+            launch { collectForecast(location) }
+            launch { refreshAndPrefetch(location) }
+        }
+    }
+
+    /** Applies Room forecast emissions to the UI or buffers them until the hop reveal. */
+    private suspend fun collectForecast(location: Location) {
+        repository.getForecastFlow(location).collect { forecast ->
+            if (forecast != null) bufferOrApplyForecast(location, forecast)
+        }
+    }
+
+    /** Holds [forecast] until reveal, or paints it immediately if detail is already showing this city. */
+    private fun bufferOrApplyForecast(location: Location, forecast: WeatherForecast) {
+        val pendingThisCity = pendingDetailLocation?.id == location.id
+        val showingThisCity = _uiState.value.selectedLocation?.id == location.id
+        when {
+            pendingThisCity && !showingThisCity -> bufferedForecast = forecast
+            showingThisCity -> applyForecastToUi(forecast)
+        }
+    }
+
+    /** Marks history, refreshes Open-Meteo into Room, then warms nearby hubs. */
+    private suspend fun refreshAndPrefetch(location: Location) {
+        repository.markLocationViewed(location)
+        repository.refreshForecast(location).fold(
+            onSuccess = { /* SSOT flow emission. */ },
+            onError = { err -> applyRefreshError(location, err.asUiText()) }
+        )
+        repository.prefetchNearbyCities(location)
+    }
+
+    /** Routes a refresh failure to [WeatherUiState.error], [syncError], or the hop buffer. */
+    private fun applyRefreshError(location: Location, mappedError: UiText) {
+        if (_uiState.value.selectedLocation?.id == location.id) {
+            _uiState.update { state ->
+                if (state.forecast == null) {
+                    state.copy(error = mappedError, forecastFetch = FetchStatus.Idle)
+                } else {
+                    state.copy(syncError = mappedError, forecastFetch = FetchStatus.Idle)
                 }
             }
+            return
         }
+        if (pendingDetailLocation?.id == location.id) {
+            bufferedError = mappedError
+        }
+    }
 
-        // Mark viewed before refresh so lastViewedAt is preserved across the Room REPLACE upsert.
-        viewModelScope.launch {
-            repository.markLocationViewed(location)
-            val refreshResult = repository.refreshForecast(location)
-            refreshResult.fold(
-                onSuccess = { /* Handled by the SSOT flow emission. */ },
-                onError = { err ->
-                    _uiState.update { state ->
-                        val mappedError = err.asUiText()
-                        if (state.forecast == null) {
-                            state.copy(error = mappedError, isLoadingForecast = false)
-                        } else {
-                            state.copy(syncError = mappedError, isLoadingForecast = false)
-                        }
-                    }
-                }
+    /** Flies the camera with the TTL hop profile, then swaps the sheet to detail. */
+    private fun startContentReveal(location: Location) {
+        contentRevealJob = viewModelScope.launch {
+            val hop = if (repository.hasFreshForecast(location)) {
+                MapHopProfile.CACHED
+            } else {
+                MapHopProfile.CACHE_MISS
+            }
+            _uiState.update {
+                it.copy(mapCamera = location.toMapCamera(MapCameraPosition.DETAIL_ZOOM, hop))
+            }
+            delay(hop.contentRevealMs.milliseconds)
+            revealDetailContent(location)
+        }
+    }
+
+    /** Switches destination to detail and paints any forecast buffered during the hop. */
+    private fun revealDetailContent(location: Location) {
+        if (pendingDetailLocation?.id != location.id) return
+        val ready = bufferedForecast?.takeIf { it.location.id == location.id || namesMatch(it.location, location) }
+        val pendingError = bufferedError
+        bufferedError = null
+        _uiState.update { state ->
+            state.copy(
+                destination = WeatherDestination.Detail(location),
+                forecast = ready,
+                rankedActivities = ready?.let { getRankedActivities(it, 0) } ?: emptyList(),
+                weekTopActivities = ready?.let { computeWeekTopActivities(it) } ?: emptyList(),
+                selectedDayIndex = 0,
+                forecastFetch = if (ready == null && pendingError == null) FetchStatus.Loading else FetchStatus.Idle,
+                error = if (ready == null) pendingError else null,
+                syncError = if (ready != null) pendingError else null
+            )
+        }
+        ready?.let { applyForecastToUi(it) }
+    }
+
+    /** Re-ranks activities for the current day index from a freshly arrived [forecast]. */
+    private fun applyForecastToUi(forecast: WeatherForecast) {
+        _uiState.update { state ->
+            val maxIndex = maxOf(0, forecast.dailyForecasts.lastIndex)
+            val dayIndex = state.selectedDayIndex.coerceIn(0, maxIndex)
+            state.copy(
+                destination = WeatherDestination.Detail(forecast.location),
+                forecast = forecast,
+                rankedActivities = getRankedActivities(forecast, dayIndex),
+                weekTopActivities = computeWeekTopActivities(forecast),
+                selectedDayIndex = dayIndex,
+                forecastFetch = FetchStatus.Idle
             )
         }
     }
+
+    /** True when two locations share a case-insensitive name and country. */
+    private fun namesMatch(a: Location, b: Location): Boolean =
+        a.name.equals(b.name, ignoreCase = true) &&
+            a.country.equals(b.country, ignoreCase = true)
 
     /**
      * Tap / long-press on the map: reverse-geocode then open the same detail flow as search.
      */
     fun onMapTapped(latitude: Double, longitude: Double) {
-        if (_uiState.value.isResolvingMapTap) return
         if (currentConnectivityStatus != ConnectivityStatus.Available) {
             _uiState.update { it.copy(error = AppError.NetworkError.NoConnectivity.asUiText()) }
             return
         }
+        startMapTap(latitude, longitude)
+    }
 
+    /** Centers the camera on the tap and starts reverse-geocoding that point. */
+    private fun startMapTap(latitude: Double, longitude: Double) {
+        mapTapJob?.cancel()
         _uiState.update {
             it.copy(
-                isResolvingMapTap = true,
+                mapTapFetch = FetchStatus.Loading,
                 error = null,
                 mapCamera = MapCameraPosition(
                     latitude = latitude,
@@ -323,22 +432,19 @@ class WeatherViewModel @Inject constructor(
                 )
             )
         }
+        mapTapJob = viewModelScope.launch { resolveMapTap(latitude, longitude) }
+    }
 
-        viewModelScope.launch {
-            repository.reverseGeocode(latitude, longitude).fold(
-                onSuccess = { location ->
-                    onLocationSelected(location)
-                },
-                onError = { err ->
-                    _uiState.update {
-                        it.copy(
-                            isResolvingMapTap = false,
-                            error = err.asUiText()
-                        )
-                    }
+    /** Opens detail for the reverse-geocoded city, or shows the geocoding error. */
+    private suspend fun resolveMapTap(latitude: Double, longitude: Double) {
+        repository.reverseGeocode(latitude, longitude).fold(
+            onSuccess = { location -> onLocationSelected(location) },
+            onError = { err ->
+                _uiState.update {
+                    it.copy(mapTapFetch = FetchStatus.Idle, error = err.asUiText())
                 }
-            )
-        }
+            }
+        )
     }
 
     /** Re-ranks activities for the selected day without any network work. */
@@ -359,25 +465,19 @@ class WeatherViewModel @Inject constructor(
      * Keeps [deviceLocation] so the current-location chip stays available.
      */
     fun onBack() {
+        cancelDetailJobs()
+        _uiState.update { it.toHome() }
+    }
+
+    /** Cancels hop/forecast/map-tap jobs and clears buffers so home cannot flash stale detail. */
+    private fun cancelDetailJobs() {
         forecastJob?.cancel()
-        _uiState.update {
-            it.copy(
-                destination = WeatherDestination.Home,
-                forecast = null,
-                rankedActivities = emptyList(),
-                weekTopActivities = emptyList(),
-                selectedDayIndex = 0,
-                query = "",
-                searchResults = emptyList(),
-                isLoadingForecast = false,
-                error = null,
-                syncError = null,
-                mapCamera = it.deviceLocation?.toMapCamera(MapCameraPosition.HOME_DEFAULT_ZOOM)
-                    ?: MapCameraPosition.DEFAULT,
-                mapPin = null,
-                isResolvingMapTap = false
-            )
-        }
+        contentRevealJob?.cancel()
+        mapTapJob?.cancel()
+        mapTapJob = null
+        pendingDetailLocation = null
+        bufferedForecast = null
+        bufferedError = null
     }
 
     /**
@@ -387,7 +487,10 @@ class WeatherViewModel @Inject constructor(
      * When denied, home stays on the static default framing and the chip remains hidden.
      */
     fun onLocationPermissionResult(granted: Boolean) {
-        if (!granted) return
+        if (!granted) {
+            viewModelScope.launch { firstRunThemeSettler.settle(coordinates = null) }
+            return
+        }
         resolveDeviceLocation()
     }
 
@@ -397,10 +500,13 @@ class WeatherViewModel @Inject constructor(
         onLocationSelected(location)
     }
 
+    /** Reverse-geocodes last-known GPS for the home chip and, on home, recenters the map. */
     private fun resolveDeviceLocation() {
         deviceLocationJob?.cancel()
         deviceLocationJob = viewModelScope.launch {
-            val coords = deviceLocationProvider.getLastKnownLocation() ?: return@launch
+            val coords = deviceLocationProvider.getLastKnownLocation()
+            firstRunThemeSettler.settle(coords)
+            if (coords == null) return@launch
             if (currentConnectivityStatus != ConnectivityStatus.Available) return@launch
 
             repository.reverseGeocode(coords.latitude, coords.longitude).fold(
@@ -410,7 +516,10 @@ class WeatherViewModel @Inject constructor(
                             deviceLocation = location,
                             // Center the home map on the device city; detail keeps its own camera.
                             mapCamera = if (state.destination is WeatherDestination.Home) {
-                                location.toMapCamera(MapCameraPosition.HOME_DEFAULT_ZOOM)
+                                location.toMapCamera(
+                                    MapCameraPosition.HOME_DEFAULT_ZOOM,
+                                    MapHopProfile.CACHED
+                                )
                             } else {
                                 state.mapCamera
                             }
@@ -427,39 +536,85 @@ class WeatherViewModel @Inject constructor(
     /**
      * Refresh entry point used by home pull-to-refresh (bonus): force-refreshes top picks
      * (bypassing TTL). When a location is selected, refreshes that city's forecast into Room
-     * (kept for callers/tests; the detail UI no longer exposes PTR so it won't fight map collapse).
+     * (kept for callers/tests; the detail UI no longer exposes PTR so it won't fight sheet drag).
      */
     fun refresh() {
         val location = _uiState.value.selectedLocation
         if (location == null) {
-            if (currentConnectivityStatus != ConnectivityStatus.Available) {
-                _uiState.update { it.copy(error = AppError.NetworkError.NoConnectivity.asUiText()) }
-            } else {
-                loadTopPicks(forceRefresh = true)
-            }
+            refreshHome()
             return
         }
+        refreshSelectedForecast(location)
+    }
 
+    /** Pull-to-refresh on home: force-reloads featured cities when online. */
+    private fun refreshHome() {
+        if (currentConnectivityStatus != ConnectivityStatus.Available) {
+            _uiState.update { it.copy(error = AppError.NetworkError.NoConnectivity.asUiText()) }
+            return
+        }
+        loadTopPicks(forceRefresh = true)
+    }
+
+    /** Force-refreshes the selected city's forecast into Room for callers/tests. */
+    private fun refreshSelectedForecast(location: Location) {
         if (currentConnectivityStatus != ConnectivityStatus.Available) {
             _uiState.update { it.copy(syncError = AppError.NetworkError.NoConnectivity.asUiText()) }
-        } else {
-            viewModelScope.launch {
-                repository.refreshForecast(location).fold(
-                    onSuccess = { _uiState.update { it.copy(syncError = null, error = null) } },
-                    onError = { err -> _uiState.update { it.copy(syncError = err.asUiText()) } }
-                )
-            }
+            return
+        }
+        viewModelScope.launch {
+            repository.refreshForecast(location, force = true).fold(
+                onSuccess = { _uiState.update { it.copy(syncError = null, error = null) } },
+                onError = { err -> _uiState.update { it.copy(syncError = err.asUiText()) } }
+            )
         }
     }
 
+    /** Top-ranked activity for each forecast day; kept for tests even though chips no longer show it. */
     private fun computeWeekTopActivities(forecast: WeatherForecast): List<RankedActivity?> =
         forecast.dailyForecasts.indices.map { dayIndex ->
             getRankedActivities(forecast, dayIndex).firstOrNull()
         }
 }
 
-private fun Location.toMapCamera(zoom: Double) = MapCameraPosition(
+/** Clears detail fields and recenters the camera on the device city or the London default. */
+private fun WeatherUiState.toHome(): WeatherUiState = copy(
+    destination = WeatherDestination.Home,
+    forecast = null,
+    rankedActivities = emptyList(),
+    weekTopActivities = emptyList(),
+    selectedDayIndex = 0,
+    query = "",
+    search = SearchUiState.Idle,
+    forecastFetch = FetchStatus.Idle,
+    error = null,
+    syncError = null,
+    mapCamera = deviceLocation?.toMapCamera(
+        MapCameraPosition.HOME_DEFAULT_ZOOM,
+        MapHopProfile.CACHED
+    ) ?: MapCameraPosition.DEFAULT,
+    mapPin = null,
+    mapTapFetch = FetchStatus.Idle
+)
+
+/** Restores previous search hits (or Idle) and attaches [error] to the search lane. */
+private fun WeatherUiState.withSearchSettled(error: UiText): WeatherUiState {
+    val settled = when (val current = search) {
+        is SearchUiState.Loading ->
+            if (current.previousResults.isEmpty()) SearchUiState.Idle
+            else SearchUiState.Results(current.previousResults)
+        else -> current
+    }
+    return copy(search = settled, error = error)
+}
+
+/** Builds a camera target at this city's coordinates with the given zoom and hop profile. */
+private fun Location.toMapCamera(
+    zoom: Double,
+    hop: MapHopProfile = MapHopProfile.CACHE_MISS
+) = MapCameraPosition(
     latitude = latitude,
     longitude = longitude,
-    zoom = zoom
+    zoom = zoom,
+    hop = hop
 )

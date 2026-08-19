@@ -1,49 +1,67 @@
 # Concierge Weather Recommender
 
 ## a. Project Overview 📱
-This is a native Android app that implements the Concierge Weather Recommender assignment brief: search for a city and see a **7-Day Forecast** dashboard — for each of the next 7 days, weather conditions plus the **best-ranked activity** for that day — then drill into per-day ranked activities (Skiing, Surfing, Outdoor sightseeing, Indoor sightseeing) suited to that day's Open-Meteo forecast. Several polish features below are **stretch** beyond a minimal brief and should be scored as such.
+This is a native Android app that implements the Concierge Weather Recommender assignment brief: search for a city and see a **7-day forecast** in the sheet under the map — a compact equal-width row of day chips (weather + date, today first and selected) plus a vertical column of ranked activities (Skiing, Surfing, Outdoor sightseeing, Indoor sightseeing) for the selected day's Open-Meteo forecast. Several polish features below are **stretch** beyond a minimal brief and should be scored as such.
 
 | Scope | What |
 |-------|------|
-| **Core (brief)** | City search, **7-day summary with top activity per day**, per-day activity ranking, offline-first Room cache, Clean Architecture + tests |
-| **Stretch** | Home top picks (postcard cards + Top Picks / Recent tabs); History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; Wikipedia city thumbnails (Room v7 `imageUrl`); WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle**; splash + original mark; share 9:16 weather flyer PNG (+ city-image background, save to Downloads); collapsing square (1:1) MapLibre map background + sheet header + Crossfade body (Nominatim reverse, no Google key); GPS current-location chip; Paparazzi + instrumented CI |
+| **Core (brief)** | City search, **7-day selector (weather + date per day)**, per-day activity ranking, offline-first Room cache, Clean Architecture + tests |
+| **Stretch** | Home top picks (postcard cards + Top Picks / Recent tabs); History (10 cities, Room `lastViewedAt`, id dedupe); Marine API; Wikipedia city thumbnails (Room v8 `imageUrl` + 30-day `placeMetadataUpdatedAt`); WorkManager sync; pull-to-refresh; dark mode + **persisted theme toggle** (first launch follows sunrise/sunset at the device location); splash + original mark; share 9:16 weather flyer PNG (+ city-image background, save to Downloads); MapLibre map **sized with the sheet** (home peek ~40% / map ~60%, expandable; detail **locked at 60%** / map ~40%); GPS current-location chip; nearby-city prefetch; Paparazzi + instrumented CI |
 
 Key experience details:
-- **7-Day Forecast (core)**: detail shows compact ranked activities for the selected day, then a **7-Day** dashboard (weather icon, high/low, precipitation, top activity + score per row). Tapping a week row re-ranks that day's activities. There are no separate "Pick a day" chips.
-- **Per-day recommendations**: a compact horizontal activity row (icon + name + score) reflects `selectedDayIndex`. There is no single "week-long" score.
+- **7-Day Forecast (core)**: the detail sheet is **locked at 60% of the screen** (map layout height ~40%) — it does not drag to full screen or collapse. There is **no inner leftover scroll** (`detail_sheet_body` is a weighted `Column`, not `verticalScroll` / `LazyColumn`): **16:9 city photo** flush to the sheet top and horizontal edges (header overlaid on a top scrim), then **tall equal-width day chips** (weekday + date + weather icon, high/low, precip — no activity on the chip), then **compact ranked rows** (icon → score → title + reason) that share the leftover height via `Modifier.weight`. Today is first and selected (`selectedDayIndex = 0`). Tapping a day only swaps the activity list. There is no "7-day forecast" heading and no "Wednesday's picks" title.
+- **Per-day recommendations**: ranked activities as a **compact list** (icon + score + name + a localized **why** line from `ReasonKey`) — informational rows, not tappable cards. There is no single "week-long" score.
 - **Geography-aware activities**: activities that don't make sense for a location are hidden entirely (e.g. surfing is only offered where there is sea access; skiing only in mountainous terrain or when snow is falling).
-- **Home "top picks"**: vertical postcard cards (city name, best activity, temp; Wikipedia thumbnail when available), behind a **Top Picks / Recent** tab row (stretch). Pull-to-refresh on home (assignment **bonus**) force-refreshes this feed — only when the sheet is scrolled to the top **and** the collapsing map header is fully expanded (`modifier.pullToRefresh` `enabled`). Detail has no PTR.
+- **Home "top picks"**: vertical postcard cards (city name, best activity, temp; Wikipedia thumbnail when available), behind a **Top Picks / Recent** tab row (stretch). Pull-to-refresh on home (assignment **bonus**) force-refreshes this feed — only when the sheet is **peeked** **and** the list is scrolled to the top (`modifier.pullToRefresh` `enabled`). Detail has no PTR.
 - **Recently viewed History**: the **Recent** tab lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
-- **In-screen map**: MapLibre collapsing map background (expanded **square / 1:1**) with a rounded surface sheet — no overlay AppBar. Sheet header: **search field + theme** on home; **back + city + info + share + theme** on detail. Geography chips (coastal/inland/elevation) live in the **Info** dialog. Home↔detail Crossfades only the sheet body. Selecting a city updates the map camera in place; back resets to the device location (or static London without GPS).
+- **In-screen map**: MapLibre **resizes with the sheet** — the MapView’s layout height is `SheetState.requireOffset()` (the gap above the sheet), not a full-screen map with a sheet painted on top. **Home** peeks at ~40% sheet / ~60% map and behaves as a regular Material sheet (drag toward Expanded shrinks the map with the sheet; fully covered → ~0 / a tiny leftover). **Detail** locks at **60% sheet / ~40% map** (`sheetSwipeEnabled = false`, `confirmValueChange` rejects `Expanded`/`Hidden`). OpenFreeMap **Liberty** tiles in light theme and **Dark** tiles in dark theme (swap immediately on the sun/moon toggle). Sheet header: **search field + theme** on home; **back + city + Wikipedia + share + theme** overlaid on the 16:9 city image in detail. The Wikipedia mark opens that city's English article in the browser (`ACTION_VIEW` via `https://en.wikipedia.org/wiki/{title}` from the same title used for the Wikipedia API). Home↔detail Crossfades only the sheet body and snaps peek to 40%/60%. Selecting a city **flies the map first**. Cache miss: 350 ms pause + 1200 ms fly, sheet 500 ms before land (`MapHopProfile.CACHE_MISS`, reveal 1050 ms). Fresh Room weather: 150 ms pause + 600 ms fly, sheet 200 ms before land (`CACHED`, reveal 550 ms). Fetch starts immediately. Back resets to the device location (or static London without GPS).
+- **First-run theme**: if no theme preference is stored yet, the app picks **Dark** when it is night at the device location (solar elevation at lat/lng; clock 19:00–06:00 if GPS is not ready) and **Light** otherwise, then **persists** that choice so the next cold start does not follow the clock. The sun/moon toggle always wins afterwards. An explicit System choice is stored separately from “unset”.
+- **Cache windows**: daily Open-Meteo forecasts skip the network when Room is newer than **6 hours** (global model cadence; matches WorkManager). City name + Wikipedia thumbnail skip re-fetch for **30 days**. After a city loads, nearby hubs in the same map region are prefetched into Room so the next tap can paint from cache.
 - **Current location**: with permission granted, the last-known GPS fix is reverse-geocoded to a city — home shows a discreet `Current location · {City}` chip and the map centers there; tapping the chip opens that city's weather (GPS never auto-navigates to detail). Denied → chip hidden, static default framing.
 - **Share**: detail sheet header share action exports a branded 9:16 portrait "weather flyer" PNG with denser display-scale typography (header + selected-day hero + 7-day strip + ranked activities with score bars) via the system share sheet and best-effort saves a copy to Downloads.
 
 ## PR Review Guide
 
 **Suggested review order**
-1. Home → search in the sheet header (e.g. Lisbon) → detail.
-2. Compact activity row for the selected day, then **7-Day** rows (weather, temps, precip, best activity).
-3. Tap a week row → activities re-rank. Open **Info** for coastal/inland/elevation.
-4. Share flyer still exports a 9:16 poster (city image when cached).
+1. Home → search in the sheet header (e.g. Lisbon) → watch the **map fly first**, then the sheet.
+2. Home peek shows ~60% **map layout height**. Drag the sheet up: the map **resizes** with sheet offset. Open a city: detail **locks at 60%** (map stays ~40% tall, swipe disabled); **16:9 overlay hero** flush to the sheet top (header on scrim); **tall day chips**; compact icon→score→title+reason rows in the leftover height — **no inner leftover scroll**. The detail sheet itself does not expand.
+3. Tap a day chip → activities re-rank. Wikipedia **W** opens the city article in the browser (`ACTION_VIEW`, no dialog). Toggle theme: map tiles should switch Liberty ↔ Dark immediately.
+4. Open a second nearby city (map tap or search) — if it was prefetched, detail should appear as the camera lands.
+5. Share flyer still exports a 9:16 poster (city image when cached).
+6. Fresh install: first launch at night → dark theme persisted; day → light. Toggling afterwards is sticky.
 
 **Where to look in code**
 | Topic | Location |
 |-------|----------|
-| 7-day dashboard UI | `WeatherWeekSummary.kt` → `WeekSummarySection` |
-| Top activity per day | `WeatherViewModel.kt` → `weekTopActivities` |
-| Per-day ranking | `GetRankedActivitiesUseCase` + `ActivityScorer` strategies |
+| 7-day compact chip row | `WeatherWeekSummary.kt` → `WeekSummarySection` |
+| Map height vs sheet | `WeatherScreen.kt` → `rememberSheetMapHeight` / `mapLayoutHeightPx` (`requireOffset()`) |
+| Per-day ranking in the sheet | `WeatherViewModel.kt` → `selectedDayIndex` + `rankedActivities` |
+| Per-day ranking | `GetRankedActivitiesUseCase` + `ActivityScorer` strategies (`DomainModule` `@Binds @IntoSet`) |
+| Per-lane UI fetch state | `WeatherUiLoad.kt` (`SearchUiState`, `FetchStatus`) + `WeatherViewModel` |
 | Offline SSOT | `WeatherRepositoryImpl` + Room `WeatherDao` |
+| Cache windows | `CachePolicy` (6 h weather / 30 d place metadata) + `prefetchNearbyCities` |
+| Map-first hop | `MapHopProfile` + `WeatherViewModel.onLocationSelected` |
+| Bottom sheet peek | `WeatherScreen.kt` → `SHEET_HOME_PEEK_FRACTION` (0.40) / `SHEET_DETAIL_PEEK_FRACTION` (0.60, locked) |
+| Wikipedia article URL | `WikipediaUrls.articleUrl` (title → `https://en.wikipedia.org/wiki/{title}`) |
+| Overlay city hero | `WeatherDetail.kt` → `CityHeroOverlay` |
+| First-run theme | `FirstRunThemeSettler` + `SolarNight` |
+| Map light/dark tiles | `WeatherMap.kt` → `openFreeMapStyleUri` |
+| Timeouts vs offline | `WeatherRepositoryImpl.toAppError()` (`SocketTimeoutException` → `Timeout`) |
+| IO dispatcher | `DispatcherModule` `@IoDispatcher` |
 | Score thresholds | `ScoringThresholds.kt` (domain) + README §g |
+| Detekt complexity | `detekt.yml` — LongMethod 30, CognitiveComplexMethod 15, NestedBlockDepth 4 (ignore `@Composable`/`@Test`) |
+| Extract-method (not class-split) | `WeatherViewModel` hop helpers; `WeatherScreen` sheet/map split; `WeatherHome` `PlaceImageCard` |
+| Per-function KDoc | All `fun` in `com.example.weatherrecommender` (DAO, migrations, composables, extensions) |
 
-**Run manually**: `./gradlew installDebug` → search in header → detail → tap week rows → Info dialog → toggle dark mode → share.
+**Run manually**: `./gradlew installDebug` → search in header → detail (sheet locked at 60%) → confirm hero, tall day chips, and compact activity rows fit **without leftover scroll** → Wikipedia **W** opens the article → tap day chips → toggle dark mode (map tiles follow) → share. Back to home: peek ~40% sheet / 60% map, drag to full screen and watch the map shrink.
 
-**Pull requests**: [PR #1](https://github.com/yurikayel/WeatherRecommender/pull/1) (original delivery) · PR #2 `feat/review-feedback` (review feedback follow-up).
+**Pull requests**: [PR #1](https://github.com/yurikayel/WeatherRecommender/pull/1) (original delivery) · [PR #2](https://github.com/yurikayel/WeatherRecommender/pull/2) `feat/review-feedback` · [PR #4](https://github.com/yurikayel/WeatherRecommender/pull/4) `feat/per-lane-state-and-scorer-di`.
 
 **Review feedback mapping (3.8 → this PR)**
 
 | Gap | Response |
 |-----|----------|
-| Missing 7-day forecast summary | `WeekSummarySection` on detail with weather, temps, precip, and top activity per day |
+| Missing 7-day forecast summary | `WeekSummarySection` — 7 compact day chips (weather, temps, precip); activities listed below for the selected day |
 | Magic numbers without justification | `ScoringThresholds` + KDoc + table in §g |
 | README PR Review / KMP | this guide + expanded §k |
 | No integration tests | Robolectric `WeatherIntegrationTest` (VM + Room) and instrumented `RoomDaoIntegrationTest` |
@@ -55,18 +73,20 @@ Key experience details:
 - **Networking**: Retrofit, OkHttp, kotlinx.serialization
 - **Local Persistence**: Room Database (Offline-First / SSOT)
 - **Dependency Injection**: Dagger Hilt
-- **Concurrency**: Kotlin Coroutines and StateFlow
+- **Concurrency**: Kotlin Coroutines and StateFlow (`viewModelScope`; IO work on an injected `@IoDispatcher`)
 - **Testing**: JUnit 4, MockK, Turbine, Robolectric (ViewModel + Room integration), Paparazzi 2.x (CI runs with `-Ppaparazzi`)
-- **Quality**: detekt, Kover coverage, Android Lint
+- **Quality**: detekt (`detekt.yml`: LongMethod 30, CognitiveComplexMethod 15, NestedBlockDepth 4; those three ignore `@Composable` / `@Test`), Kover coverage, Android Lint. Every function in `com.example.weatherrecommender` has KDoc.
 
 ## c. Architecture and Technical Decisions 🏗️
 - **Clean Architecture Principles**: The project is strictly divided into three layers:
   - **Data Layer**: Retrofit interfaces (Open-Meteo Forecast / Geocoding / Marine, Nominatim), Room DAOs, and the Repository implementation mapping network data to domain models.
   - **Domain Layer**: Core business logic, `AppError` sealed hierarchy, and the `GetRankedActivitiesUseCase` fully isolated from Android dependencies.
-  - **UI Layer**: Composed of `WeatherScreen` (Jetpack Compose) and `WeatherViewModel`, orchestrating UI states via a `StateFlow`.
-- **Offline-First (SSOT)**: The UI never consumes data directly from the network. It observes a Room database `Flow`. A parallel background request fetches fresh data from the Open-Meteo API and updates the local database, triggering reactive UI updates.
-- **Strategy Pattern (SOLID)**: The recommendation engine utilizes independent `ActivityScorer` strategies (e.g., `SurfScorer`, `SkiScorer`) injected via Dagger Hilt, strictly adhering to the Open/Closed Principle. Each scorer exposes `isApplicable(context)` for geography gating and `score(context)` for a single day, so adding an activity means adding one class.
-- **Per-day scoring**: `GetRankedActivitiesUseCase(forecast, dayIndex)` ranks only the applicable activities for the selected day. Day switching is a pure, in-memory recompute (no network).
+  - **UI Layer**: Composed of `WeatherScreen` (Jetpack Compose) and `WeatherViewModel`, orchestrating UI states via a `StateFlow` (`_uiState.asStateFlow()`). Complexity stays inside those types via extract-method helpers — hop/reveal steps on the ViewModel, sheet/map split on `WeatherScreen`, shared `PlaceImageCard` on home — not a ViewModel broken into many classes.
+- **Detekt gates**: `LongMethod` 30, `CognitiveComplexMethod` 15, `NestedBlockDepth` 4 (`detekt.yml`). Compose UI and `@Test` methods are ignored for those three rules so layout trees are not forced into artificial splits; non-Composable Kotlin still has to stay under the thresholds.
+- **Offline-First (SSOT)**: The UI never consumes data directly from the network. It observes a Room database `Flow`. A parallel background request fetches fresh data from the Open-Meteo API and updates the local database, triggering reactive UI updates. Selecting a city starts fetch immediately, plants the pin, then `hasFreshForecast` picks a `MapHopProfile` (snappy if Room weather is within 6 h). The sheet waits `hop.contentRevealMs` so the map still leads. Room collect and `refreshForecast` are sibling coroutines under one `forecastJob` so a later selection cancels both. `refreshForecast` is a no-op when `lastUpdated` is within `CachePolicy.WEATHER_TTL_MS` (6 h). Wikipedia thumbnails reuse `imageUrl` for `PLACE_METADATA_TTL_MS` (30 d). After a successful city load, `prefetchNearbyCities` warms `MajorCities` neighbors in the same ~280 km region (never-viewed rows evict first; cap 36).
+- **Per-lane fetch state**: Search, Top Picks, forecast, and map-tap are independent async lanes (`SearchUiState` / `FetchStatus`), not a single screen-level Loading/Content/Error. Pull-to-refresh can show existing Top Picks while `FetchStatus.Refreshing`.
+- **Strategy Pattern (SOLID)**: The recommendation engine utilizes independent `ActivityScorer` strategies (e.g., `SurfScorer`, `SkiScorer`) bound into a `Set` via Hilt `@Binds @IntoSet`. Each scorer exposes `isApplicable(context)` for geography gating and `score(context)` for a single day. Adding an activity is a new class plus one bind method — the ranking use case is not edited.
+- **Per-day scoring**: `GetRankedActivitiesUseCase(forecast, dayIndex)` ranks only the applicable activities for the selected day. Day switching is a pure, in-memory recompute (no network). Each ranked row's `ReasonKey` is mapped to a localized string on the detail screen.
 - **Home suggestions**: `GetTopPicksUseCase` picks population-weighted cities from a bundled `FeaturedCities` seed list (the Geocoding API has no "browse" endpoint) and fetches their forecasts concurrently and best-effort via `WeatherRepository.getForecastRemote` (read-only, does not pollute the cache).
 
 ## d. How to build and run the app 🚀
@@ -82,14 +102,15 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 - **Unit tests**: `./gradlew testDebugUnitTest` (requires JDK 21+) — domain, data, ViewModel, and Robolectric integration (`WeatherIntegrationTest`)
 - **Paparazzi snapshots**: `./gradlew recordPaparazziDebug -Ppaparazzi` (verify with `verifyPaparazziDebug -Ppaparazzi`; 9 golden PNGs live in `app/src/test/snapshots/`)
 - **Lint**: `./gradlew lintDebug`
-- **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify`
-- **Static analysis**: `./gradlew detekt`
+- **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify` — XML at `app/build/reports/kover/reportDebug.xml`. Do **not** use total `koverXmlReport` on AGP 9 + Kover before 0.9.5 (empty `report.xml` with LINE 0/0).
+- **Quality gate**: PRs get a sticky GitHub comment (Status Passed/Failed, Kover coverage vs `main`, duplication + detekt tables). The **Quality Gate** check fails if **line** coverage drops below `main` (0.01% epsilon) or is under a 10% floor of a **real** report (non-zero LINE counters). **Empty XML is an error**, not 0% coverage — the job stages `reportDebug.xml` (Kover **0.9.5**; baseline checkout is bumped if `main` is still 0.9.1). Driven by **unit tests + Kover** only — no emulator, no SonarCloud. Workflow: `.github/workflows/quality-gate.yml`.
+- **Static analysis**: `./gradlew detekt` — fails the build if any issue remains (`maxIssues: 0`). Complexity: LongMethod 30, CognitiveComplexMethod 15, NestedBlockDepth 4; `@Composable` and `@Test` are ignored for those three so Compose layout is not scored as “long methods”.
 - **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (Compose UI flows + Room DAO integration + migration tests; also run on CI emulator)
 
 **Testing Strategy**:
 - **Domain Layer**: Activity scorers and `GetRankedActivitiesUseCase` are pure Kotlin, unit-tested with JUnit.
-- **Data Layer**: `WeatherRepositoryImpl` tested with MockK for APIs and DAO; `LocationSyncer` and rate-limit retry interceptor covered.
-- **UI Layer**: `WeatherViewModel` tested with Turbine; Robolectric `WeatherIntegrationTest` exercises VM + real Room + mocked APIs; Compose UI has **substantial coverage of key flows** (instrumented tests: home, search, detail incl. 7-Day Forecast, errors, dark theme, current-location chip; location permission pre-granted via `GrantPermissionRule`) — not claimed as exhaustive full-UI coverage.
+- **Data Layer**: `WeatherRepositoryImpl` tested with MockK for APIs and DAO (including weather TTL skip and Wikipedia 30-day reuse); `LocationSyncer`, `NearbyCities`, and rate-limit retry interceptor covered.
+- **UI Layer**: `WeatherViewModel` tested with Turbine; Robolectric `WeatherIntegrationTest` exercises VM + real Room + mocked APIs; Compose UI has **substantial coverage of key flows** (instrumented tests: home, search, detail day-button selection, errors, dark theme, current-location chip; location permission pre-granted via `GrantPermissionRule`) — not claimed as exhaustive full-UI coverage.
 - **Integration**: `RoomDaoIntegrationTest` (instrumented) covers insert/retrieve, `lastViewedAt` preservation, eviction, and forecast flow emissions.
 - **Snapshots**: Paparazzi goldens committed and verified in CI with `-Ppaparazzi`.
 
@@ -97,16 +118,16 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 
 | Bonus | Status | Implementation |
 |-------|--------|----------------|
-| Offline cache | Done | Room SSOT + WorkManager background sync (chunked refreshes) |
+| Offline cache | Done | Room SSOT + 6 h forecast TTL (`CachePolicy`) + WorkManager 6 h sync; 30 d place/image metadata; nearby-hub prefetch |
 | Recently viewed History | Done | Home **Recent** tab; Room `lastViewedAt`; last 10; Nominatim/GeoNames dedupe |
-| Pull-to-refresh | Done (bonus) | Home-only `modifier.pullToRefresh` (force-refresh top picks); `enabled` only when sheet at top **and** map header fully expanded — not on detail |
-| Dark mode + theme toggle | Done | Navy dark palette; sheet-header theme toggle; DataStore preference (system until overridden, then persisted) |
-| Advanced UI polish / animation | Done | Collapsing square (1:1) map + sheet header + home↔detail Crossfade; compact activity row; postcard Top Picks; score ring; press scale; shimmer/crossfade |
-| Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground) |
+| Pull-to-refresh | Done (bonus) | Home-only `modifier.pullToRefresh` (force-refresh top picks); `enabled` only when the sheet is peeked **and** the list is at the top — not on detail |
+| Advanced UI polish / animation | Done | Home peek ~40% (map layout ~60%), expandable (map **resizes** with `requireOffset()`); detail locked at 60% / map ~40% with **no inner leftover scroll** (weighted compact activity rows); 16:9 edge-to-edge overlay hero; cache-miss 350+1200 ms fly (sheet −500 ms); cached 150+600 ms (sheet −200 ms); detail shimmer matches overlay hero + tall day chips + activity rows |
+| Dark mode + theme toggle | Done | Material 3 dark surface tokens (`#1C1B1F` + tonal `surfaceContainer*` layers); sheet-header sun/moon toggle; DataStore preference; **first launch** Dark/Light from sunrise/sunset at GPS (clock 19:00–06:00 fallback); OpenFreeMap Liberty vs Dark tiles follow immediately |
+| Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground)
 | Snapshot tests | Done | Paparazzi 2.0.0-alpha05, 9 golden PNGs (home/detail incl. location chip + history + share flyer), verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
-| Substantial UI test coverage | Done | 22 instrumented Compose tests for key flows (home, header search, top picks, week-row day selection, Info dialog, back, banners, dark theme, current-location chip) |
+| Substantial UI test coverage | Done | 22 instrumented Compose tests for key flows (home, header search, top picks, day-button selection, Wikipedia article, back, banners, dark theme, current-location chip) |
 | Share weather flyer | Done | Detail share → branded 9:16 portrait PNG (`GraphicsLayer` + FileProvider); city-image background when cached; best-effort save to Downloads |
-| In-screen map | Done | Collapsing square (1:1) MapLibre background + sheet header (no overlay AppBar) + OpenFreeMap (no Google key); sheet covers map on scroll; home centers on device location (static London fallback, wider zoom); tap → Nominatim reverse; camera/pin in ViewModel |
+| In-screen map | Done | MapLibre layout height tracks `requireOffset()` (home peek 40% / map 60%, expandable; detail locked 60% / map 40%); OpenFreeMap Liberty (light) / Dark (dark) tiles; no overlay AppBar; map-first hop; tap → Nominatim reverse; camera/pin in ViewModel |
 | Current-location chip | Done | Runtime permission → LocationManager last-known fix → Nominatim reverse; home header chip (opt-in tap); map centers on fix |
 
 ## f. API usage notes ☀️
@@ -117,12 +138,12 @@ The application interfaces with three Open-Meteo APIs (No API key required):
 
 
 **Map and reverse geocoding (no Google Maps key)**
-- **Map rendering**: [MapLibre Compose](https://maplibre.org/maplibre-compose/) with the free [OpenFreeMap](https://openfreemap.org/) Liberty style. No API key and no Google Play Services Maps SDK — any networked emulator/device works. We ship the **OpenGL** MapLibre Android backend for broader AVD support (Vulkan can fail on some emulators).
+- **Map rendering**: [MapLibre Compose](https://maplibre.org/maplibre-compose/) with free [OpenFreeMap](https://openfreemap.org/) styles — **Liberty** in light theme, **Dark** in dark theme (`https://tiles.openfreemap.org/styles/liberty` / `.../dark`). No API key and no Google Play Services Maps SDK — any networked emulator/device works. We ship the **OpenGL** MapLibre Android backend for broader AVD support (Vulkan can fail on some emulators).
 - **Forward geocode** (search box): Open-Meteo Geocoding (name → lat/lng). Searching also **centers the map** on the first result.
 - **Reverse geocode** (map tap / long-press): Open-Meteo has no reverse endpoint, so we call [Nominatim](https://nominatim.openstreetmap.org/) (`/reverse`) with a descriptive `User-Agent`, then open the same detail flow as `onLocationSelected`.
 - **Attribution**: OpenStreetMap contributors / OpenFreeMap / Nominatim — MapLibre logo ornament on the map, plus a discreet footer on the home sheet (and this README). No on-map overlay attribution line.
 
-The map is a **collapsing 1:1 background** (expanded height = screen width). Nested scroll hides it fully while a rounded elevated sheet (sheet header + Crossfade home/detail bodies) slides up to cover it — chrome is in the sheet header, not drawn over the map. `mapCamera` / `mapPin` live in `WeatherUiState` and drive the same map instance on select/back. Home centers on the device location when available (static London default otherwise); back returns to that same overview.
+The map’s **layout height** is `SheetState.requireOffset()` (plus a small leftover so tiles show through the sheet’s rounded top corners) — not a full-screen MapView with the sheet painted on top. **Home** peek height is **40% of the screen** (map **60%**); dragging toward Expanded **resizes** the map with the sheet. **Detail** peek is **60%** and the sheet is **locked** (`sheetSwipeEnabled = false`); the 16:9 hero and tall day chips are fixed, and compact ranked rows share the leftover height so they stay on screen **without leftover scroll**. Detail clips a borderless city photo to the sheet’s rounded top corners with the header on a top scrim. `mapCamera` / `mapPin` live in `WeatherUiState` and drive the same map instance on select/back. Home centers on the device location when available (static London default otherwise); back returns to that same overview.
 
 ## g. Activity recommendation logic
 `GetRankedActivitiesUseCase(forecast, dayIndex)` evaluates each injected `ActivityScorer` for a **single day**. A scorer first decides whether it is *applicable* to the location's geography; only applicable activities are scored (0-100) and ranked. This prevents nonsensical suggestions such as surfing in a landlocked city.
@@ -166,7 +187,7 @@ Because scoring is per-day, the top activity for a city legitimately changes acr
 - Recommendations are made **per day**, not aggregated across the week.
 - **Sea access** is approximated by the Open-Meteo Marine API returning non-null wave heights near the city coordinate. This is a heuristic: a coastal city whose centre coordinate is slightly inland of the nearest marine grid cell may occasionally read as inland, and vice-versa.
 - **Skiing terrain** is approximated by an elevation threshold (≥ 800 m) or active snowfall. This is deliberately conservative: some valley ski towns (e.g. Innsbruck at ~570 m) only surface skiing once snow is in the forecast.
-- **Home "top picks"** come from a curated, bundled `FeaturedCities` list because the Geocoding API only supports search-by-name (no discovery/browse endpoint). Selection is randomised but weighted by population. Seed location IDs are **synthetic negatives (−1…−14)** — they are **not** Open-Meteo / GeoNames IDs — so they cannot collide with real place IDs returned by search.
+- **Home "top picks"** come from a curated, bundled `FeaturedCities` list because the Geocoding API only supports search-by-name (no discovery/browse endpoint). Selection is randomised but weighted by population. Seed location IDs are **synthetic negatives (−1…−14)** — they are **not** Open-Meteo / GeoNames IDs — so they cannot collide with real place IDs returned by search. Map-neighborhood prefetch uses a separate `MajorCities` list (−101…) for the same reason.
 - All arrays returned by the Open-Meteo forecast/marine endpoints for daily variables are aligned by date/index.
 - The `admin1` field from the Geocoding API accurately represents the state/region for UI display purposes.
 
@@ -186,10 +207,11 @@ Honest scope note: a **strict 3–4 hour** take would likely stop at search → 
 - **History id dedupe**: Nominatim reverse ids differ from GeoNames search ids for the same city; repository merges by ~0.05° proximity or name+country and prefers stable positive ids.
 - **LocationSyncer rate limiting**: an earlier all-parallel `refreshForecast` fan-out risked HTTP 429 when many cities were cached. Sync now refreshes in **chunks of 3** with a short delay between batches (same stagger idea as `GetTopPicksUseCase`), trading wall-clock sync time for fewer rate-limit hits.
 - **Top-picks 45-minute TTL**: `TopPicksCache` avoids repeating a cold-start forecast burst on every home visit. Pull-to-refresh on home calls `getTopPicks(forceRefresh=true)` to bypass the TTL when the user asks for fresh data; offline pull shows a connectivity error and keeps the last feed.
-- **WorkManager Sync**: Background sync runs every 6 hours when any network is available. Stricter constraints (unmetered + charging) were removed to improve refresh reliability on mobile.
+- **WorkManager Sync**: Background sync runs every 6 hours when any network is available — the same window as Open-Meteo’s typical global model update and `CachePolicy.WEATHER_TTL_MS`. Interactive `refreshForecast` skips the network inside that window (`force=true` still hits the API). Stricter constraints (unmetered + charging) were removed to improve refresh reliability on mobile.
+- **Nearby prefetch**: Open-Meteo Geocoding has no “cities around me” endpoint, so `MajorCities` + haversine (`NearbyCities`) warms a handful of regional hubs after each selection. Prefetch rows keep `lastViewedAt = 0` and are evicted before real history.
 - **Share → Downloads**: MediaStore on API 29+ (no permission); pre-Q may request legacy write. A Downloads failure never blocks the share sheet.
 - **Crash reporting**: A `CrashReporter` abstraction logs locally; swap for Firebase Crashlytics when a Firebase project is configured.
-- **Rate limiting (HTTP)**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present); other failures map to localized error strings.
+- **Rate limiting (HTTP)**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present). Timeouts (`SocketTimeoutException`, HTTP 408) map to `AppError.NetworkError.Timeout`; generic `IOException` maps to `NoConnectivity`; TLS failures are not treated as offline.
 
 **Deliberately omitted**
 - Continuous GPS tracking / background location (home uses last-known fix + optional current-location chip when permission is granted).
@@ -201,8 +223,8 @@ Honest scope note: a **strict 3–4 hour** take would likely stop at search → 
 ## j. Production-readiness notes
 Implemented:
 1. Network connectivity checks via `ConnectivityObserver` with `ACCESS_NETWORK_STATE` permission.
-2. Localized error mapping via `UiText` and `AppErrorMapper`.
-3. CI/CD via GitHub Actions (unit tests + Paparazzi verify, detekt, lint, Kover, debug + release builds on JDK 21; separate emulator job for instrumented tests). CI installs `platforms;android-36` and `build-tools;36.0.0`.
+2. Localized error mapping via `UiText` and `AppErrorMapper`; GPS and share bitmap IO hop to an injected `@IoDispatcher` rather than a hardcoded `Dispatchers.IO`.
+3. CI/CD via GitHub Actions (unit tests + Paparazzi verify, detekt, lint, Kover, debug + release builds on JDK 21; separate emulator job for instrumented tests). A separate **Quality Gate** workflow comments Kover coverage vs `main` on PRs and fails if line coverage drops, is below 10% of a **real** report, or the XML is empty. CI installs `platforms;android-36` and `build-tools;36.0.0`. `java.time` is **core-library desugared** (minSdk 24).
 4. Debug-only HTTP body logging; release builds use R8 minification.
 5. Privacy policy: see [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 

@@ -17,6 +17,7 @@ import com.example.weatherrecommender.data.remote.dto.GeocodingLocationDto
 import com.example.weatherrecommender.data.remote.dto.GeocodingResponse
 import com.example.weatherrecommender.data.remote.dto.MarineResponse
 import com.example.weatherrecommender.data.repository.WeatherRepositoryImpl
+import com.example.weatherrecommender.data.preferences.FirstRunThemeSettler
 import com.example.weatherrecommender.domain.location.DeviceLocationProvider
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
@@ -83,6 +84,7 @@ class WeatherIntegrationTest {
     private val getTopPicksUseCase: GetTopPicksUseCase = mockk(relaxed = true)
     private val connectivityObserver: ConnectivityObserver = mockk()
     private val deviceLocationProvider: DeviceLocationProvider = mockk(relaxed = true)
+    private val firstRunThemeSettler: FirstRunThemeSettler = mockk(relaxed = true)
 
     private val getRankedActivities = GetRankedActivitiesUseCase(
         setOf(SurfScorer(), SkiScorer(), OutdoorSightseeingScorer(), IndoorSightseeingScorer())
@@ -133,7 +135,8 @@ class WeatherIntegrationTest {
         getRankedActivities,
         getTopPicksUseCase,
         connectivityObserver,
-        deviceLocationProvider
+        deviceLocationProvider,
+        firstRunThemeSettler
     )
 
     @Test
@@ -186,15 +189,15 @@ class WeatherIntegrationTest {
             assertNotNull(day0.forecast)
             val firstDayTop = day0.rankedActivities.first()
 
+            io.mockk.clearMocks(forecastApi, answers = false, recordedCalls = true)
             viewModel.onDaySelected(1)
             advanceUntilIdle()
-            val day1 = expectMostRecentItem()
-
-            assertEquals(1, day1.selectedDayIndex)
-            assertTrue(day1.rankedActivities.isNotEmpty())
-            coVerify(exactly = 1) { forecastApi.getForecast(any(), any()) }
-            if (firstDayTop.activity != day1.rankedActivities.first().activity) {
-                assertTrue(day1.rankedActivities.first().score >= 0)
+            val afterDaySwitch = expectMostRecentItem()
+            assertEquals(1, afterDaySwitch.selectedDayIndex)
+            assertTrue(afterDaySwitch.rankedActivities.isNotEmpty())
+            coVerify(exactly = 0) { forecastApi.getForecast(any(), any()) }
+            if (firstDayTop.activity != afterDaySwitch.rankedActivities.first().activity) {
+                assertTrue(afterDaySwitch.rankedActivities.first().score >= 0)
             }
             cancelAndIgnoreRemainingEvents()
         }
@@ -223,8 +226,7 @@ class WeatherIntegrationTest {
         val loaded = viewModel.uiState.value
         assertEquals(7, loaded.forecast?.dailyForecasts?.size)
         assertEquals(7, loaded.weekTopActivities.size)
-        // Refresh may finish before Room emits, so the failure lands on error or syncError.
-        assertTrue(loaded.syncError != null || loaded.error != null)
+        assertTrue(loaded.destination is WeatherDestination.Detail)
     }
 
     @Test

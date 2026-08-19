@@ -25,6 +25,7 @@ import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WAVE_I
 import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WAVE_MIN_RIDEABLE
 import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WIND_BAD_MIN
 import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WIND_IDEAL_MAX
+import javax.inject.Inject
 import kotlin.math.roundToInt
 
 /**
@@ -57,12 +58,14 @@ interface ActivityScorer {
  * Surfing is only suggested where the coordinate has sea access (detected via the Marine API).
  * The score rewards rideable-but-manageable waves, warm air, and winds that aren't too strong.
  */
-class SurfScorer : ActivityScorer {
+class SurfScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.SURFING
 
+    /** Only where marine data (or geography) says the city has sea access. */
     override fun isApplicable(context: ActivityContext): Boolean =
         context.location.hasSeaAccess
 
+    /** Rewards rideable waves, light wind, and warm air. */
     override fun score(context: ActivityContext): RankedActivity {
         val day = context.day
         val wave = day.waveHeightMax ?: 0.0
@@ -94,15 +97,17 @@ class SurfScorer : ActivityScorer {
  * Skiing is only suggested for mountainous locations (by elevation) or when fresh snow is falling.
  * The score rewards accumulating snowfall and sub-freezing temperatures.
  */
-class SkiScorer : ActivityScorer {
+class SkiScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.SKIING
 
+    /** True on mountains (elevation) or any snowfall today. */
     override fun isApplicable(context: ActivityContext): Boolean {
         val elevation = context.location.elevation
         val mountainous = elevation != null && elevation >= SKI_ELEVATION_MOUNTAIN_MIN
         return mountainous || context.day.snowfallSum > 0.0
     }
 
+    /** Rewards snowfall and sub-freezing air; penalises thaw. */
     override fun score(context: ActivityContext): RankedActivity {
         val day = context.day
         var score = SKI_BASE_SCORE
@@ -126,11 +131,13 @@ class SkiScorer : ActivityScorer {
  * Outdoor sightseeing is always plausible. The score rewards mild, dry days and penalises rain,
  * strong wind, and uncomfortable heat.
  */
-class OutdoorSightseeingScorer : ActivityScorer {
+class OutdoorSightseeingScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.OUTDOOR_SIGHTSEEING
 
+    /** Always applicable; mild dry days score highest. */
     override fun isApplicable(context: ActivityContext): Boolean = true
 
+    /** Penalises rain, heat, and strong wind; rewards a mild average temperature. */
     override fun score(context: ActivityContext): RankedActivity {
         val day = context.day
         var score = OUTDOOR_BASE_SCORE
@@ -153,11 +160,13 @@ class OutdoorSightseeingScorer : ActivityScorer {
  * Indoor sightseeing is always plausible and becomes the go-to option when the weather turns.
  * The score rises with rain, snow, and cold.
  */
-class IndoorSightseeingScorer : ActivityScorer {
+class IndoorSightseeingScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.INDOOR_SIGHTSEEING
 
+    /** Always applicable; bad weather raises the indoor score. */
     override fun isApplicable(context: ActivityContext): Boolean = true
 
+    /** Wet-weather fallback: score rises with rain/snow and cold so indoor climbs when outdoor falls. */
     override fun score(context: ActivityContext): RankedActivity {
         val day = context.day
         var score = INDOOR_BASE_SCORE

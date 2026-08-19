@@ -47,8 +47,8 @@ class WeatherScreenSnapshotTest {
 
     private fun content(state: WeatherUiState, darkTheme: Boolean = false) {
         paparazzi.snapshot {
-            // Default typography uses downloadable Google Fonts, which spawns an Android-only
-            // fetcher thread that crashes under layoutlib; system fonts render deterministically.
+            // M3 default Typography() (Roboto) is deterministic under layoutlib; keep the
+            // explicit instance so snapshots do not depend on platform font fallbacks.
             // Inspection mode keeps MapLibre off the snapshot path (native libs are unavailable).
             CompositionLocalProvider(
                 LocalInspectionMode provides true,
@@ -61,7 +61,8 @@ class WeatherScreenSnapshotTest {
                         onLocationSelected = {},
                         onDaySelected = {},
                         onBack = {},
-                        onRefresh = {}
+                        onRefresh = {},
+                        isDarkTheme = darkTheme
                     )
                 }
             }
@@ -97,27 +98,32 @@ class WeatherScreenSnapshotTest {
                 DailyForecast("2026-07-17", 61, 22.0, 16.0, 8.0, 0.0, 14.0, 0.8),
                 DailyForecast("2026-07-18", 3, 24.0, 17.0, 0.0, 0.0, 12.0, 0.9),
                 DailyForecast("2026-07-19", 71, 2.0, -3.0, 0.0, 5.0, 8.0, 0.5),
-                DailyForecast("2026-07-20", 95, 18.0, 14.0, 12.0, 0.0, 20.0, 1.2)
+                DailyForecast("2026-07-20", 95, 18.0, 14.0, 12.0, 0.0, 20.0, 1.2),
+                DailyForecast("2026-07-21", 0, 26.0, 18.0, 0.0, 0.0, 9.0, 1.1),
+                DailyForecast("2026-07-22", 2, 25.0, 18.0, 0.0, 0.0, 11.0, 1.0)
             )
         ),
         selectedDayIndex = 0,
         rankedActivities = listOf(
             RankedActivity(RecommendedActivity.SURFING, 88, ReasonKey.SURF_IDEAL, listOf(100, 10)),
             RankedActivity(RecommendedActivity.OUTDOOR_SIGHTSEEING, 80, ReasonKey.OUTDOOR_MILD, listOf(23)),
-            RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 45, ReasonKey.INDOOR_BAD_WEATHER)
+            RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 45, ReasonKey.INDOOR_BAD_WEATHER),
+            RankedActivity(RecommendedActivity.SKIING, 12, ReasonKey.SKI_IDEAL, listOf(27, 0))
         ),
         weekTopActivities = listOf(
             RankedActivity(RecommendedActivity.SURFING, 88, ReasonKey.SURF_IDEAL, listOf(100, 10)),
             RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 85, ReasonKey.INDOOR_BAD_WEATHER),
             RankedActivity(RecommendedActivity.OUTDOOR_SIGHTSEEING, 80, ReasonKey.OUTDOOR_MILD, listOf(23)),
             RankedActivity(RecommendedActivity.SKIING, 70, ReasonKey.SKI_IDEAL, listOf(-3, 5)),
-            RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 90, ReasonKey.INDOOR_BAD_WEATHER)
+            RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 90, ReasonKey.INDOOR_BAD_WEATHER),
+            RankedActivity(RecommendedActivity.SURFING, 82, ReasonKey.SURF_IDEAL, listOf(90, 9)),
+            RankedActivity(RecommendedActivity.OUTDOOR_SIGHTSEEING, 78, ReasonKey.OUTDOOR_MILD, listOf(22))
         )
     )
 
     @Test
     fun homeEmpty() {
-        content(WeatherUiState(isLoadingTopPicks = false))
+        content(WeatherUiState())
     }
 
     @Test
@@ -160,7 +166,7 @@ class WeatherScreenSnapshotTest {
             Location(1, "London", 51.5, -0.1, "UK", "England"),
             Location(2, "Paris", 48.8, 2.3, "France", "Ile-de-France")
         )
-        content(WeatherUiState(query = "Lon", searchResults = locations))
+        content(WeatherUiState(query = "Lon", search = SearchUiState.Results(locations)))
     }
 
     @Test
