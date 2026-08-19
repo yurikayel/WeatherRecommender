@@ -63,8 +63,10 @@ class ThemePreferences @Inject constructor(
         }
     }
 
+    /** Current stored mode, or null on first launch. */
     suspend fun currentMode(): ThemeMode? = themeMode.first()
 
+    /** Writes Light, Dark, or System so the next cold start does not re-run first-launch logic. */
     suspend fun setThemeMode(mode: ThemeMode) {
         context.themeDataStore.edit { prefs ->
             prefs[KEY_THEME_MODE] = when (mode) {

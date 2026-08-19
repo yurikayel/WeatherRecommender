@@ -290,6 +290,7 @@ internal fun WeatherSheetHeader(
     }
 }
 
+/** Sun/moon control that toggles [ThemePreferences] Light vs Dark. */
 @Composable
 private fun ThemeToggleIcon(
     isDarkTheme: Boolean,

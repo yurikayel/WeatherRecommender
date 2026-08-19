@@ -51,6 +51,7 @@ class WeatherRepositoryImpl @Inject constructor(
     private val weatherDao: WeatherDao
 ) : WeatherRepository {
 
+    /** Geocodes [query] via Open-Meteo; empty results become an empty list, not an error. */
     override suspend fun searchCity(query: String): AppResult<List<Location>> {
         return try {
             val response = geocodingApi.searchCity(query)
@@ -73,6 +74,7 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
+    /** Reverse-geocodes a map tap through Nominatim into a synthetic-id [Location]. */
     override suspend fun reverseGeocode(latitude: Double, longitude: Double): AppResult<Location> {
         return try {
             val response = nominatimApi.reverseGeocode(latitude, longitude)
@@ -82,6 +84,7 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
+    /** Room SSOT: emits null until daily rows exist for [location]. */
     override fun getForecastFlow(location: Location): Flow<WeatherForecast?> {
         return combine(
             weatherDao.getLocationFlow(location.id),
@@ -98,12 +101,14 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
+    /** True when Room already has days and [CachePolicy.WEATHER_TTL_MS] has not elapsed. */
     override suspend fun hasFreshForecast(location: Location): Boolean {
         val existing = weatherDao.getLocation(location.id)
         val existingDays = weatherDao.getDailyForecasts(location.id)
         return isWeatherFresh(existing, existingDays, System.currentTimeMillis())
     }
 
+    /** Skips Open-Meteo when fresh unless [force]; otherwise fetches, persists, and evicts overflow. */
     override suspend fun refreshForecast(location: Location, force: Boolean): AppResult<Unit> {
         return try {
             val existing = weatherDao.getLocation(location.id)
@@ -132,6 +137,7 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
+    /** Best-effort TTL refresh of nearby hubs, staggered to stay under Open-Meteo rate limits. */
     override suspend fun prefetchNearbyCities(origin: Location) {
         val neighbors = NearbyCities.select(origin, MajorCities.all)
         neighbors.forEachIndexed { index, nearby ->
@@ -146,6 +152,7 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
+    /** True when a location row exists, has days, and lastUpdated is within the weather TTL. */
     private fun isWeatherFresh(
         existing: LocationEntity?,
         existingDays: List<DailyForecastEntity>,
@@ -174,6 +181,7 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
+    /** Fetches forecast+marine without writing Room — used by Top Picks. */
     override suspend fun getForecastRemote(location: Location): AppResult<WeatherForecast> {
         return try {
             Result.Success(fetchRemoteForecast(location, existing = null, now = System.currentTimeMillis()))
@@ -182,6 +190,7 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
+    /** Over-fetches recent rows then collapses Nominatim/GeoNames duplicates to [limit] cities. */
     override fun observeRecentLocations(limit: Int): Flow<List<Location>> {
         // Over-fetch so proximity/name collapse can still fill [limit] unique cities.
         val fetchLimit = (limit * DEDUPE_FETCH_MULTIPLIER).coerceAtLeast(limit)
@@ -192,6 +201,7 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
+    /** Upserts lastViewedAt, merging a synthetic Nominatim id into an existing GeoNames row. */
     override suspend fun markLocationViewed(location: Location) {
         val now = System.currentTimeMillis()
         val existingById = weatherDao.getLocation(location.id)
@@ -313,6 +323,7 @@ class WeatherRepositoryImpl @Inject constructor(
         return fetchWikipediaImageUrl(location.name) ?: cachedUrl
     }
 
+    /** Wikipedia thumbnail URL, or null if the page has no image or the call fails. */
     private suspend fun fetchWikipediaImageUrl(cityName: String): String? {
         return try {
             val response = wikipediaApi.getPageImage(titles = cityName)
@@ -349,6 +360,7 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
+    /** Maps a domain day onto the Room forecast row keyed by [locationId]. */
     private fun DailyForecast.toEntity(locationId: Long) = DailyForecastEntity(
         locationId = locationId,
         date = date,
@@ -400,6 +412,7 @@ class WeatherRepositoryImpl @Inject constructor(
         )
     }
 
+    /** Maps transport failures onto [AppError], rethrowing cancellation so jobs stay cooperative. */
     private fun Exception.toAppError(): AppError {
         // catch (Exception) would otherwise turn Job cancellation into a UI error.
         if (this is CancellationException) throw this

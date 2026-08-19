@@ -28,6 +28,7 @@ class AndroidDeviceLocationProvider @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : DeviceLocationProvider {
 
+    /** Fine or coarse location is granted. */
     override fun hasLocationPermission(): Boolean {
         val fine = ContextCompat.checkSelfPermission(
             context,
@@ -40,6 +41,7 @@ class AndroidDeviceLocationProvider @Inject constructor(
         return fine || coarse
     }
 
+    /** Best last-known fix among GPS, network, and passive providers, or null. */
     @SuppressLint("MissingPermission")
     override suspend fun getLastKnownLocation(): GeoCoordinates? = withContext(ioDispatcher) {
         if (!hasLocationPermission()) return@withContext null

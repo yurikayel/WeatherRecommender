@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions") // Hero/forecast/activity rows split from DetailContent.
+
 package com.example.weatherrecommender.ui
 
 import androidx.compose.animation.Crossfade
@@ -6,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +39,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.RankedActivity
+import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.ui.util.asUiText
 
 private const val DAY_SWITCH_MS = 220
@@ -106,33 +110,49 @@ internal fun DetailContent(
                         .weight(1f)
                 )
             } else if (forecast != null) {
-                WeekSummarySection(
+                DetailForecastBody(
                     forecast = forecast,
                     selectedDayIndex = uiState.selectedDayIndex,
-                    onDaySelected = onDaySelected,
-                    modifier = Modifier.fillMaxWidth()
+                    rankedActivities = uiState.rankedActivities,
+                    onDaySelected = onDaySelected
                 )
-                Crossfade(
-                    targetState = uiState.selectedDayIndex to uiState.rankedActivities,
-                    animationSpec = tween(DAY_SWITCH_MS),
+            }
+        }
+    }
+}
+
+/** Day chips plus a weighted column of ranked activities for the selected day. */
+@Composable
+private fun ColumnScope.DetailForecastBody(
+    forecast: WeatherForecast,
+    selectedDayIndex: Int,
+    rankedActivities: List<RankedActivity>,
+    onDaySelected: (Int) -> Unit
+) {
+    WeekSummarySection(
+        forecast = forecast,
+        selectedDayIndex = selectedDayIndex,
+        onDaySelected = onDaySelected,
+        modifier = Modifier.fillMaxWidth()
+    )
+    Crossfade(
+        targetState = selectedDayIndex to rankedActivities,
+        animationSpec = tween(DAY_SWITCH_MS),
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f)
+            .testTag("detail_activity_list"),
+        label = "day_activities"
+    ) { (_, activities) ->
+        Column(modifier = Modifier.fillMaxSize()) {
+            activities.forEachIndexed { index, ranked ->
+                ActivityItem(
+                    rankedActivity = ranked,
+                    isTopPick = index == 0,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .testTag("detail_activity_list"),
-                    label = "day_activities"
-                ) { (_, activities) ->
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        activities.forEachIndexed { index, ranked ->
-                            ActivityItem(
-                                rankedActivity = ranked,
-                                isTopPick = index == 0,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f)
-                            )
-                        }
-                    }
-                }
+                )
             }
         }
     }
@@ -202,6 +222,7 @@ private fun CityHeroOverlay(
     }
 }
 
+/** Error-container banner for background sync failures that left cached days on screen. */
 @Composable
 private fun SyncErrorBanner(message: String) {
     Card(
@@ -223,6 +244,7 @@ private fun SyncErrorBanner(message: String) {
     }
 }
 
+/** Compact ranked row: icon, score, title, and one-line reason. */
 @Composable
 private fun ActivityItem(
     rankedActivity: RankedActivity,

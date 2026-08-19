@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions") // Chip color/copy extracted from WeekDayButton.
+
 package com.example.weatherrecommender.ui
 
 import androidx.compose.animation.animateColorAsState
@@ -71,6 +73,7 @@ internal fun WeekSummarySection(
     }
 }
 
+/** One tall chip: weekday, date, weather icon, temp range, and precip. */
 @Composable
 private fun WeekDayButton(
     day: DailyForecast,
@@ -79,31 +82,7 @@ private fun WeekDayButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val background by animateColorAsState(
-        targetValue = if (selected) {
-            colorScheme.primary
-        } else {
-            colorScheme.surfaceContainerHighest
-        },
-        animationSpec = tween(250),
-        label = "week_day_bg"
-    )
-    val contentColor by animateColorAsState(
-        targetValue = if (selected) colorScheme.onPrimary else colorScheme.onSurface,
-        animationSpec = tween(250),
-        label = "week_day_content"
-    )
-    val secondaryColor by animateColorAsState(
-        targetValue = if (selected) {
-            colorScheme.onPrimary.copy(alpha = 0.80f)
-        } else {
-            colorScheme.onSurfaceVariant
-        },
-        animationSpec = tween(250),
-        label = "week_day_secondary"
-    )
-
+    val colors = rememberWeekDayChipColors(selected)
     val weekday = isoDateToWeekday(day.date)
     val shortWeekday = isoDateToShortWeekday(day.date)
     val dayOfMonth = isoDateToDayOfMonth(day.date)
@@ -122,7 +101,7 @@ private fun WeekDayButton(
     Column(
         modifier = modifier
             .clip(corner)
-            .background(background)
+            .background(colors.background)
             .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = rowLabel
@@ -132,50 +111,102 @@ private fun WeekDayButton(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceEvenly
     ) {
-        Text(
-            text = shortWeekday,
-            style = MaterialTheme.typography.labelLarge,
-            color = secondaryColor,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-            textAlign = TextAlign.Center,
-            softWrap = false
-        )
-        Text(
-            text = dayOfMonth,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = contentColor,
-            maxLines = 1,
-            textAlign = TextAlign.Center
-        )
-        Icon(
-            imageVector = weatherCodeIcon(day.weatherCode),
-            contentDescription = weatherDesc,
-            tint = contentColor,
-            modifier = Modifier.size(18.dp)
-        )
-        Text(
-            text = stringResource(
-                R.string.week_summary_temp_range_compact,
-                day.maxTemp.roundToInt(),
-                day.minTemp.roundToInt()
-            ),
-            style = MaterialTheme.typography.labelSmall,
-            color = contentColor,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-            textAlign = TextAlign.Center,
-            softWrap = false
-        )
-        Text(
-            text = stringResource(R.string.week_summary_precip, precipMm),
-            style = MaterialTheme.typography.labelSmall,
-            color = secondaryColor,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-            textAlign = TextAlign.Center,
-            softWrap = false
+        WeekDayChipCopy(
+            shortWeekday = shortWeekday,
+            dayOfMonth = dayOfMonth,
+            weatherDesc = weatherDesc,
+            weatherCode = day.weatherCode,
+            maxTemp = day.maxTemp.roundToInt(),
+            minTemp = day.minTemp.roundToInt(),
+            precipMm = precipMm,
+            colors = colors
         )
     }
+}
+
+/** Selected = filled primary; unselected = tonal container. */
+@Composable
+private fun rememberWeekDayChipColors(selected: Boolean): WeekDayChipColors {
+    val colorScheme = MaterialTheme.colorScheme
+    val background by animateColorAsState(
+        targetValue = if (selected) colorScheme.primary else colorScheme.surfaceContainerHighest,
+        animationSpec = tween(250),
+        label = "week_day_bg"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) colorScheme.onPrimary else colorScheme.onSurface,
+        animationSpec = tween(250),
+        label = "week_day_content"
+    )
+    val secondaryColor by animateColorAsState(
+        targetValue = if (selected) {
+            colorScheme.onPrimary.copy(alpha = 0.80f)
+        } else {
+            colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(250),
+        label = "week_day_secondary"
+    )
+    return WeekDayChipColors(background, contentColor, secondaryColor)
+}
+
+private data class WeekDayChipColors(
+    val background: androidx.compose.ui.graphics.Color,
+    val content: androidx.compose.ui.graphics.Color,
+    val secondary: androidx.compose.ui.graphics.Color
+)
+
+/** Stacked weekday, date number, icon, temps, and precip inside a day chip. */
+@Composable
+private fun WeekDayChipCopy(
+    shortWeekday: String,
+    dayOfMonth: String,
+    weatherDesc: String,
+    weatherCode: Int,
+    maxTemp: Int,
+    minTemp: Int,
+    precipMm: Int,
+    colors: WeekDayChipColors
+) {
+    Text(
+        text = shortWeekday,
+        style = MaterialTheme.typography.labelLarge,
+        color = colors.secondary,
+        maxLines = 1,
+        overflow = TextOverflow.Clip,
+        textAlign = TextAlign.Center,
+        softWrap = false
+    )
+    Text(
+        text = dayOfMonth,
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        color = colors.content,
+        maxLines = 1,
+        textAlign = TextAlign.Center
+    )
+    Icon(
+        imageVector = weatherCodeIcon(weatherCode),
+        contentDescription = weatherDesc,
+        tint = colors.content,
+        modifier = Modifier.size(18.dp)
+    )
+    Text(
+        text = stringResource(R.string.week_summary_temp_range_compact, maxTemp, minTemp),
+        style = MaterialTheme.typography.labelSmall,
+        color = colors.content,
+        maxLines = 1,
+        overflow = TextOverflow.Clip,
+        textAlign = TextAlign.Center,
+        softWrap = false
+    )
+    Text(
+        text = stringResource(R.string.week_summary_precip, precipMm),
+        style = MaterialTheme.typography.labelSmall,
+        color = colors.secondary,
+        maxLines = 1,
+        overflow = TextOverflow.Clip,
+        textAlign = TextAlign.Center,
+        softWrap = false
+    )
 }

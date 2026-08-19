@@ -21,6 +21,7 @@ class FirstRunThemeSettler @Inject constructor(
 ) {
     private val mutex = Mutex()
 
+    /** Persists Light/Dark once from solar night (or clock) when DataStore has no theme key. */
     suspend fun settle(
         coordinates: GeoCoordinates?,
         now: Instant = Clock.systemUTC().instant(),

@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions") // Extracted sheet lock / map pane / home-detail bodies.
+
 package com.example.weatherrecommender.ui
 
 import android.Manifest
@@ -194,6 +196,7 @@ fun WeatherScreenContent(
     )
 }
 
+/** Requests fine/coarse location on first composition, or reports an already-granted grant. */
 @Composable
 private fun RequestLocationPermissionEffect(onLocationPermissionResult: (Boolean) -> Unit) {
     val context = LocalContext.current
@@ -218,6 +221,7 @@ private fun RequestLocationPermissionEffect(onLocationPermissionResult: (Boolean
     }
 }
 
+/** Renders the offscreen flyer capture when share is in progress and detail data exists. */
 @Composable
 private fun PendingShareCapture(
     shareInProgress: Boolean,
@@ -262,16 +266,7 @@ private fun MapBottomSheetScaffold(
     onCurrentLocationClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val sheetLocked = rememberUpdatedState(inDetail)
-    val confirmValueChange = remember {
-        { newValue: SheetValue ->
-            if (sheetLocked.value) {
-                newValue == SheetValue.PartiallyExpanded
-            } else {
-                true
-            }
-        }
-    }
+    val confirmValueChange = rememberDetailSheetLock(inDetail)
     val sheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.PartiallyExpanded,
         confirmValueChange = confirmValueChange,
@@ -321,89 +316,225 @@ private fun MapBottomSheetScaffold(
             }
         },
         sheetContent = {
-            Crossfade(
-                targetState = inDetail,
-                animationSpec = tween(BODY_CROSSFADE_MS, easing = FastOutSlowInEasing),
-                modifier = Modifier.fillMaxWidth(),
-                label = "home_detail_crossfade"
-            ) { detail ->
-                if (detail) {
-                    DetailContent(
-                        uiState = uiState,
-                        onDaySelected = onDaySelected,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(peekHeight),
-                        header = {
-                            WeatherSheetHeader(
-                                title = uiState.selectedLocation?.name.orEmpty(),
-                                inDetail = true,
-                                canShare = canShare,
-                                shareInProgress = shareInProgress,
-                                isDarkTheme = isDarkTheme,
-                                sheetFullyExpanded = false,
-                                overlayOnHero = true,
-                                onToggleTheme = onToggleTheme,
-                                onBack = onBack,
-                                onShare = onShare,
-                                wikipediaUrl = wikipediaUrl,
-                                onOpenWikipedia = { url ->
-                                    runCatching { uriHandler.openUri(url) }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp)
-                                    .padding(top = 8.dp, bottom = 4.dp)
-                            )
-                        }
-                    )
-                } else {
-                    Column(Modifier.fillMaxWidth()) {
-                        WeatherSheetHeader(
-                            title = "",
-                            inDetail = false,
-                            canShare = canShare,
-                            shareInProgress = shareInProgress,
-                            isDarkTheme = isDarkTheme,
-                            sheetFullyExpanded = sheetFullyExpanded,
-                            onToggleTheme = onToggleTheme,
-                            onBack = onBack,
-                            onShare = onShare,
-                            searchQuery = uiState.query,
-                            isSearching = uiState.isSearching,
-                            onQueryChange = onQueryChanged,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp)
-                                .padding(top = 4.dp, bottom = 4.dp)
-                        )
-                        HomeContent(
-                            uiState = uiState,
-                            onLocationSelected = onLocationSelected,
-                            onRefresh = onRefresh,
-                            onCurrentLocationClick = onCurrentLocationClick,
-                            sheetPeeked = sheetPeeked
-                        )
-                    }
-                }
-            }
-        }
-    ) {
-        Box(Modifier.fillMaxSize()) {
-            WeatherMapSection(
-                camera = uiState.mapCamera,
-                pin = uiState.mapPin,
-                isResolvingTap = uiState.isResolvingMapTap,
-                onMapTap = onMapTapped,
-                interactive = !sheetFullyExpanded,
-                darkTheme = isDarkTheme,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(mapHeight)
-                    .align(Alignment.TopCenter)
-                    .clipToBounds()
+            SheetBodyCrossfade(
+                uiState = uiState,
+                inDetail = inDetail,
+                peekHeight = peekHeight,
+                canShare = canShare,
+                shareInProgress = shareInProgress,
+                isDarkTheme = isDarkTheme,
+                sheetFullyExpanded = sheetFullyExpanded,
+                sheetPeeked = sheetPeeked,
+                wikipediaUrl = wikipediaUrl,
+                onToggleTheme = onToggleTheme,
+                onBack = onBack,
+                onShare = onShare,
+                onOpenWikipedia = { url -> runCatching { uriHandler.openUri(url) } },
+                onQueryChanged = onQueryChanged,
+                onLocationSelected = onLocationSelected,
+                onDaySelected = onDaySelected,
+                onRefresh = onRefresh,
+                onCurrentLocationClick = onCurrentLocationClick
             )
         }
+    ) {
+        SheetMapPane(
+            uiState = uiState,
+            mapHeight = mapHeight,
+            interactive = !sheetFullyExpanded,
+            isDarkTheme = isDarkTheme,
+            onMapTapped = onMapTapped
+        )
+    }
+}
+
+/** Rejects expand/hide while detail is showing so the sheet stays locked at 60%. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun rememberDetailSheetLock(inDetail: Boolean): (SheetValue) -> Boolean {
+    val sheetLocked = rememberUpdatedState(inDetail)
+    return remember {
+        { newValue: SheetValue ->
+            if (sheetLocked.value) newValue == SheetValue.PartiallyExpanded else true
+        }
+    }
+}
+
+/** MapLibre pane whose height is the gap above the sheet plus the rounded-corner leftover. */
+@Composable
+private fun SheetMapPane(
+    uiState: WeatherUiState,
+    mapHeight: Dp,
+    interactive: Boolean,
+    isDarkTheme: Boolean,
+    onMapTapped: (Double, Double) -> Unit
+) {
+    Box(Modifier.fillMaxSize()) {
+        WeatherMapSection(
+            camera = uiState.mapCamera,
+            pin = uiState.mapPin,
+            isResolvingTap = uiState.isResolvingMapTap,
+            onMapTap = onMapTapped,
+            interactive = interactive,
+            darkTheme = isDarkTheme,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(mapHeight)
+                .align(Alignment.TopCenter)
+                .clipToBounds()
+        )
+    }
+}
+
+/** Crossfades home vs detail inside the sheet so the map instance is not remounted. */
+@Composable
+private fun SheetBodyCrossfade(
+    uiState: WeatherUiState,
+    inDetail: Boolean,
+    peekHeight: Dp,
+    canShare: Boolean,
+    shareInProgress: Boolean,
+    isDarkTheme: Boolean,
+    sheetFullyExpanded: Boolean,
+    sheetPeeked: Boolean,
+    wikipediaUrl: String?,
+    onToggleTheme: () -> Unit,
+    onBack: () -> Unit,
+    onShare: () -> Unit,
+    onOpenWikipedia: (String) -> Unit,
+    onQueryChanged: (String) -> Unit,
+    onLocationSelected: (Location) -> Unit,
+    onDaySelected: (Int) -> Unit,
+    onRefresh: () -> Unit,
+    onCurrentLocationClick: () -> Unit
+) {
+    Crossfade(
+        targetState = inDetail,
+        animationSpec = tween(BODY_CROSSFADE_MS, easing = FastOutSlowInEasing),
+        modifier = Modifier.fillMaxWidth(),
+        label = "home_detail_crossfade"
+    ) { detail ->
+        if (detail) {
+            DetailSheetBody(
+                uiState = uiState,
+                peekHeight = peekHeight,
+                canShare = canShare,
+                shareInProgress = shareInProgress,
+                isDarkTheme = isDarkTheme,
+                wikipediaUrl = wikipediaUrl,
+                onToggleTheme = onToggleTheme,
+                onBack = onBack,
+                onShare = onShare,
+                onOpenWikipedia = onOpenWikipedia,
+                onDaySelected = onDaySelected
+            )
+        } else {
+            HomeSheetBody(
+                uiState = uiState,
+                canShare = canShare,
+                shareInProgress = shareInProgress,
+                isDarkTheme = isDarkTheme,
+                sheetFullyExpanded = sheetFullyExpanded,
+                sheetPeeked = sheetPeeked,
+                onToggleTheme = onToggleTheme,
+                onBack = onBack,
+                onShare = onShare,
+                onQueryChanged = onQueryChanged,
+                onLocationSelected = onLocationSelected,
+                onRefresh = onRefresh,
+                onCurrentLocationClick = onCurrentLocationClick
+            )
+        }
+    }
+}
+
+/** Locked 60% detail: overlay header on the hero, then day chips and ranked activities. */
+@Composable
+private fun DetailSheetBody(
+    uiState: WeatherUiState,
+    peekHeight: Dp,
+    canShare: Boolean,
+    shareInProgress: Boolean,
+    isDarkTheme: Boolean,
+    wikipediaUrl: String?,
+    onToggleTheme: () -> Unit,
+    onBack: () -> Unit,
+    onShare: () -> Unit,
+    onOpenWikipedia: (String) -> Unit,
+    onDaySelected: (Int) -> Unit
+) {
+    DetailContent(
+        uiState = uiState,
+        onDaySelected = onDaySelected,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(peekHeight),
+        header = {
+            WeatherSheetHeader(
+                title = uiState.selectedLocation?.name.orEmpty(),
+                inDetail = true,
+                canShare = canShare,
+                shareInProgress = shareInProgress,
+                isDarkTheme = isDarkTheme,
+                sheetFullyExpanded = false,
+                overlayOnHero = true,
+                onToggleTheme = onToggleTheme,
+                onBack = onBack,
+                onShare = onShare,
+                wikipediaUrl = wikipediaUrl,
+                onOpenWikipedia = onOpenWikipedia,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 8.dp, bottom = 4.dp)
+            )
+        }
+    )
+}
+
+/** Expandable home sheet: search chrome plus [HomeContent]. */
+@Composable
+private fun HomeSheetBody(
+    uiState: WeatherUiState,
+    canShare: Boolean,
+    shareInProgress: Boolean,
+    isDarkTheme: Boolean,
+    sheetFullyExpanded: Boolean,
+    sheetPeeked: Boolean,
+    onToggleTheme: () -> Unit,
+    onBack: () -> Unit,
+    onShare: () -> Unit,
+    onQueryChanged: (String) -> Unit,
+    onLocationSelected: (Location) -> Unit,
+    onRefresh: () -> Unit,
+    onCurrentLocationClick: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth()) {
+        WeatherSheetHeader(
+            title = "",
+            inDetail = false,
+            canShare = canShare,
+            shareInProgress = shareInProgress,
+            isDarkTheme = isDarkTheme,
+            sheetFullyExpanded = sheetFullyExpanded,
+            onToggleTheme = onToggleTheme,
+            onBack = onBack,
+            onShare = onShare,
+            searchQuery = uiState.query,
+            isSearching = uiState.isSearching,
+            onQueryChange = onQueryChanged,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(top = 4.dp, bottom = 4.dp)
+        )
+        HomeContent(
+            uiState = uiState,
+            onLocationSelected = onLocationSelected,
+            onRefresh = onRefresh,
+            onCurrentLocationClick = onCurrentLocationClick,
+            sheetPeeked = sheetPeeked
+        )
     }
 }
 
@@ -443,6 +574,7 @@ private fun rememberSheetMapHeight(
 internal fun mapLayoutHeightPx(sheetOffsetPx: Float, cornerOverlapPx: Float): Float =
     sheetOffsetPx.coerceAtLeast(0f) + cornerOverlapPx.coerceAtLeast(0f)
 
+/** True on API 28 and below when WRITE_EXTERNAL_STORAGE is still missing. */
 private fun needsLegacyWritePermission(context: android.content.Context): Boolean {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return false
     return ContextCompat.checkSelfPermission(
@@ -451,6 +583,7 @@ private fun needsLegacyWritePermission(context: android.content.Context): Boolea
     ) != PackageManager.PERMISSION_GRANTED
 }
 
+/** True when fine or coarse location permission is already granted. */
 private fun hasLocationPermission(context: android.content.Context): Boolean {
     val fine = ContextCompat.checkSelfPermission(
         context,
@@ -463,6 +596,7 @@ private fun hasLocationPermission(context: android.content.Context): Boolean {
     return fine || coarse
 }
 
+/** Snackbar copy for share success, Downloads save, or failure. */
 private fun shareOutcomeMessage(
     outcome: ShareWeatherOutcome,
     failed: String,

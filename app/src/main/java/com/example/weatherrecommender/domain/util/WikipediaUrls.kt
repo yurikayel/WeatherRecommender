@@ -11,6 +11,7 @@ import java.net.URLEncoder
 object WikipediaUrls {
     private const val EN_ARTICLE_BASE = "https://en.wikipedia.org/wiki/"
 
+    /** Encodes [title] as an en.wikipedia.org/wiki path, or null when blank. */
     fun articleUrl(title: String?): String? {
         val normalized = title?.trim().orEmpty()
         if (normalized.isEmpty()) return null

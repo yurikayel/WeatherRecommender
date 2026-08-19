@@ -61,9 +61,11 @@ interface ActivityScorer {
 class SurfScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.SURFING
 
+    /** Only where marine data (or geography) says the city has sea access. */
     override fun isApplicable(context: ActivityContext): Boolean =
         context.location.hasSeaAccess
 
+    /** Rewards rideable waves, light wind, and warm air. */
     override fun score(context: ActivityContext): RankedActivity {
         val day = context.day
         val wave = day.waveHeightMax ?: 0.0
@@ -98,12 +100,14 @@ class SurfScorer @Inject constructor() : ActivityScorer {
 class SkiScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.SKIING
 
+    /** True on mountains (elevation) or any snowfall today. */
     override fun isApplicable(context: ActivityContext): Boolean {
         val elevation = context.location.elevation
         val mountainous = elevation != null && elevation >= SKI_ELEVATION_MOUNTAIN_MIN
         return mountainous || context.day.snowfallSum > 0.0
     }
 
+    /** Rewards snowfall and sub-freezing air; penalises thaw. */
     override fun score(context: ActivityContext): RankedActivity {
         val day = context.day
         var score = SKI_BASE_SCORE
@@ -130,11 +134,11 @@ class SkiScorer @Inject constructor() : ActivityScorer {
 class OutdoorSightseeingScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.OUTDOOR_SIGHTSEEING
 
+    /** Always applicable; mild dry days score highest. */
     override fun isApplicable(context: ActivityContext): Boolean = true
 
+    /** Penalises rain, heat, and strong wind; rewards a mild average temperature. */
     override fun score(context: ActivityContext): RankedActivity {
-        val day = context.day
-        var score = OUTDOOR_BASE_SCORE
 
         if (day.precipitationSum > OUTDOOR_PRECIP_BAD_MIN) score -= 45
         if (day.avgTemp in OUTDOOR_TEMP_MILD_MIN..OUTDOOR_TEMP_MILD_MAX) score += 35
@@ -157,6 +161,7 @@ class OutdoorSightseeingScorer @Inject constructor() : ActivityScorer {
 class IndoorSightseeingScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.INDOOR_SIGHTSEEING
 
+    /** Always applicable; bad weather raises the indoor score. */
     override fun isApplicable(context: ActivityContext): Boolean = true
 
     override fun score(context: ActivityContext): RankedActivity {

@@ -80,37 +80,8 @@ abstract class WeatherDatabase : RoomDatabase() {
          */
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS location_entity_new (
-                        id INTEGER NOT NULL,
-                        name TEXT NOT NULL,
-                        latitude REAL NOT NULL,
-                        longitude REAL NOT NULL,
-                        country TEXT NOT NULL,
-                        admin1 TEXT,
-                        lastUpdated INTEGER NOT NULL,
-                        elevation REAL,
-                        population INTEGER,
-                        featureCode TEXT,
-                        hasSeaAccess INTEGER NOT NULL,
-                        lastViewedAt INTEGER NOT NULL,
-                        PRIMARY KEY(id)
-                    )
-                    """.trimIndent()
-                )
-                db.execSQL(
-                    """
-                    INSERT INTO location_entity_new (
-                        id, name, latitude, longitude, country, admin1, lastUpdated,
-                        elevation, population, featureCode, hasSeaAccess, lastViewedAt
-                    )
-                    SELECT
-                        id, name, latitude, longitude, country, admin1, lastUpdated,
-                        elevation, population, featureCode, hasSeaAccess, lastViewedAt
-                    FROM location_entity
-                    """.trimIndent()
-                )
+                db.execSQL(LOCATION_V6_CREATE)
+                db.execSQL(LOCATION_V6_COPY)
                 db.execSQL("DROP TABLE location_entity")
                 db.execSQL("ALTER TABLE location_entity_new RENAME TO location_entity")
             }
@@ -135,5 +106,34 @@ abstract class WeatherDatabase : RoomDatabase() {
                 )
             }
         }
+
+        private const val LOCATION_V6_CREATE = """
+                    CREATE TABLE IF NOT EXISTS location_entity_new (
+                        id INTEGER NOT NULL,
+                        name TEXT NOT NULL,
+                        latitude REAL NOT NULL,
+                        longitude REAL NOT NULL,
+                        country TEXT NOT NULL,
+                        admin1 TEXT,
+                        lastUpdated INTEGER NOT NULL,
+                        elevation REAL,
+                        population INTEGER,
+                        featureCode TEXT,
+                        hasSeaAccess INTEGER NOT NULL,
+                        lastViewedAt INTEGER NOT NULL,
+                        PRIMARY KEY(id)
+                    )
+                    """
+
+        private const val LOCATION_V6_COPY = """
+                    INSERT INTO location_entity_new (
+                        id, name, latitude, longitude, country, admin1, lastUpdated,
+                        elevation, population, featureCode, hasSeaAccess, lastViewedAt
+                    )
+                    SELECT
+                        id, name, latitude, longitude, country, admin1, lastUpdated,
+                        elevation, population, featureCode, hasSeaAccess, lastViewedAt
+                    FROM location_entity
+                    """
     }
 }

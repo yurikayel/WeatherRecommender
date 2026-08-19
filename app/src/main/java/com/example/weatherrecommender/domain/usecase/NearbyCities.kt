@@ -12,6 +12,7 @@ import kotlin.math.sqrt
  */
 object NearbyCities {
 
+    /** Nearby populated hubs within [CachePolicy] distance, sorted by population then distance. */
     fun select(
         origin: Location,
         candidates: List<Location>,
@@ -39,9 +40,11 @@ object NearbyCities {
             .toList()
     }
 
+    /** Great-circle distance in kilometres between two locations. */
     fun haversineKm(a: Location, b: Location): Double =
         haversineKm(a.latitude, a.longitude, b.latitude, b.longitude)
 
+    /** Great-circle distance in kilometres between two WGS84 points. */
     fun haversineKm(
         lat1: Double,
         lon1: Double,

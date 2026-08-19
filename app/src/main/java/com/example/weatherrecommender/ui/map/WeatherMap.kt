@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions") // Hop helpers extracted from WeatherMapLibre.
+
 package com.example.weatherrecommender.ui.map
 
 import androidx.compose.foundation.background
@@ -96,6 +98,7 @@ fun WeatherMapSection(
     }
 }
 
+/** Live MapLibre view: hop animation, theme-keyed tiles, and a circle pin. */
 @Composable
 private fun WeatherMapLibre(
     camera: MapCameraPosition,
@@ -110,30 +113,8 @@ private fun WeatherMapLibre(
             zoom = camera.zoom
         )
     )
-
-    LaunchedEffect(
-        camera.latitude,
-        camera.longitude,
-        camera.zoom,
-        camera.hop
-    ) {
-        delay(camera.hop.delayMs.milliseconds)
-        cameraState.animateTo(
-            finalPosition = CameraPosition(
-                target = Position(longitude = camera.longitude, latitude = camera.latitude),
-                zoom = camera.zoom
-            ),
-            duration = camera.hop.durationMs.milliseconds
-        )
-    }
-
-    val pinGeoJson = remember(pin?.latitude, pin?.longitude) {
-        if (pin == null) {
-            EMPTY_FEATURE_COLLECTION
-        } else {
-            """{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[${pin.longitude},${pin.latitude}]},"properties":{}}]}"""
-        }
-    }
+    AnimateMapHop(camera = camera, cameraState = cameraState)
+    val pinGeoJson = rememberPinGeoJson(pin)
     val pinFill = if (darkTheme) PIN_COLOR_DARK else PIN_COLOR_LIGHT
 
     // Key the map on theme so MapLibre loads the matching style JSON instead of keeping
@@ -153,14 +134,10 @@ private fun WeatherMapLibre(
                 ornamentOptions = OrnamentOptions.OnlyLogo
             ),
             onMapClick = { position, _ ->
-                if (!interactive) return@MaplibreMap ClickResult.Pass
-                onMapTap(position.latitude, position.longitude)
-                ClickResult.Consume
+                handleMapTap(interactive, position.latitude, position.longitude, onMapTap)
             },
             onMapLongClick = { position, _ ->
-                if (!interactive) return@MaplibreMap ClickResult.Pass
-                onMapTap(position.latitude, position.longitude)
-                ClickResult.Consume
+                handleMapTap(interactive, position.latitude, position.longitude, onMapTap)
             }
         ) {
             val source = rememberGeoJsonSource(data = GeoJsonData.JsonString(pinGeoJson))
@@ -176,6 +153,49 @@ private fun WeatherMapLibre(
     }
 }
 
+/** Flies the camera after the hop delay using that hop's duration. */
+@Composable
+private fun AnimateMapHop(
+    camera: MapCameraPosition,
+    cameraState: org.maplibre.compose.camera.CameraState
+) {
+    LaunchedEffect(camera.latitude, camera.longitude, camera.zoom, camera.hop) {
+        delay(camera.hop.delayMs.milliseconds)
+        cameraState.animateTo(
+            finalPosition = CameraPosition(
+                target = Position(longitude = camera.longitude, latitude = camera.latitude),
+                zoom = camera.zoom
+            ),
+            duration = camera.hop.durationMs.milliseconds
+        )
+    }
+}
+
+/** GeoJSON FeatureCollection for the selected pin, or an empty collection when none. */
+@Composable
+private fun rememberPinGeoJson(pin: Location?): String {
+    return remember(pin?.latitude, pin?.longitude) {
+        if (pin == null) {
+            EMPTY_FEATURE_COLLECTION
+        } else {
+            """{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[${pin.longitude},${pin.latitude}]},"properties":{}}]}"""
+        }
+    }
+}
+
+/** Consumes a tap when the map is interactive; otherwise lets it pass through. */
+private fun handleMapTap(
+    interactive: Boolean,
+    latitude: Double,
+    longitude: Double,
+    onMapTap: (Double, Double) -> Unit
+): ClickResult {
+    if (!interactive) return ClickResult.Pass
+    onMapTap(latitude, longitude)
+    return ClickResult.Consume
+}
+
+/** Inspection/Paparazzi stand-in that shows the pin label without loading tiles. */
 @Composable
 private fun MapPlaceholder(pin: Location?) {
     Box(
