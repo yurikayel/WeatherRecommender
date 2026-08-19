@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -24,6 +25,7 @@ import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetState
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -33,16 +35,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -81,11 +89,12 @@ fun WeatherScreen(
 /**
  * Stateless, testable root of the Weather screen.
  *
- * A full-screen MapLibre map stays mounted while a Material 3 [BottomSheetScaffold] Crossfades
- * home vs detail. Home peeks at [SHEET_HOME_PEEK_FRACTION] (~40%, map ~60%) and drags to full
- * screen. Detail locks at [SHEET_DETAIL_PEEK_FRACTION] (~60%, map ~40%) with swipe disabled;
- * overflow scrolls inside the sheet. The map instance is not remounted on select/back. Modes are
- * derived from [WeatherUiState.destination].
+ * MapLibre’s **layout height** tracks the sheet (not a full-screen map with a sheet painted on
+ * top). Home peeks at [SHEET_HOME_PEEK_FRACTION] so the map is ~60%; dragging toward Expanded
+ * shrinks the map with [SheetState.requireOffset]. Detail locks at
+ * [SHEET_DETAIL_PEEK_FRACTION] (map ~40%, [sheetSwipeEnabled] = false). Home vs detail
+ * Crossfades only the sheet body so the map instance is not remounted. Modes are derived from
+ * [WeatherUiState.destination].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -229,10 +238,10 @@ private fun PendingShareCapture(
 }
 
 /**
- * Full-screen map with a persistent Material 3 bottom sheet.
- * Home peeks at [SHEET_HOME_PEEK_FRACTION] and can expand; detail locks at
- * [SHEET_DETAIL_PEEK_FRACTION] with swipe disabled. Home↔detail Crossfade lives in the sheet
- * so MapLibre is not remounted.
+ * Map + Material 3 bottom sheet. The map’s height is [SheetState.requireOffset] (the gap above
+ * the sheet) plus a corner overlap so tiles show through the sheet’s rounded top. Home peeks
+ * at [SHEET_HOME_PEEK_FRACTION] and can expand; detail locks at [SHEET_DETAIL_PEEK_FRACTION]
+ * with swipe disabled. Home↔detail Crossfade lives in the sheet so MapLibre is not remounted.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -272,6 +281,11 @@ private fun MapBottomSheetScaffold(
     val sheetShape = RoundedCornerShape(topStart = SheetTopCorner, topEnd = SheetTopCorner)
     val peekFraction = if (inDetail) SHEET_DETAIL_PEEK_FRACTION else SHEET_HOME_PEEK_FRACTION
     val peekHeight = LocalConfiguration.current.screenHeightDp.dp * peekFraction
+    val mapHeight = rememberSheetMapHeight(
+        sheetState = sheetState,
+        peekFraction = peekFraction,
+        cornerOverlap = SheetTopCorner
+    )
     val sheetFullyExpanded = !inDetail && sheetState.currentValue == SheetValue.Expanded
     val sheetPeeked = sheetState.currentValue == SheetValue.PartiallyExpanded
     val uriHandler = LocalUriHandler.current
@@ -371,17 +385,59 @@ private fun MapBottomSheetScaffold(
             }
         }
     ) {
-        WeatherMapSection(
-            camera = uiState.mapCamera,
-            pin = uiState.mapPin,
-            isResolvingTap = uiState.isResolvingMapTap,
-            onMapTap = onMapTapped,
-            interactive = !sheetFullyExpanded,
-            darkTheme = isDarkTheme,
-            modifier = Modifier.fillMaxSize()
-        )
+        Box(Modifier.fillMaxSize()) {
+            WeatherMapSection(
+                camera = uiState.mapCamera,
+                pin = uiState.mapPin,
+                isResolvingTap = uiState.isResolvingMapTap,
+                onMapTap = onMapTapped,
+                interactive = !sheetFullyExpanded,
+                darkTheme = isDarkTheme,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(mapHeight)
+                    .align(Alignment.TopCenter)
+                    .clipToBounds()
+            )
+        }
     }
 }
+
+/**
+ * Live map height: [SheetState.requireOffset] is the sheet’s top Y (home peek → ~60% map,
+ * detail lock → ~40%, Expanded → ~0). [cornerOverlap] keeps a leftover so tiles paint through
+ * the sheet’s rounded corners instead of a full-size map hidden underneath.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun rememberSheetMapHeight(
+    sheetState: SheetState,
+    peekFraction: Float,
+    cornerOverlap: Dp
+): Dp {
+    val density = LocalDensity.current
+    val fallbackPx = with(density) {
+        (LocalConfiguration.current.screenHeightDp.dp * (1f - peekFraction)).toPx()
+    }
+    val overlapPx = with(density) { cornerOverlap.toPx() }
+    val heightPx by produceState(
+        initialValue = mapLayoutHeightPx(fallbackPx, overlapPx),
+        key1 = sheetState,
+        key2 = fallbackPx,
+        key3 = overlapPx
+    ) {
+        value = mapLayoutHeightPx(fallbackPx, overlapPx)
+        snapshotFlow {
+            val offset = runCatching { sheetState.requireOffset() }.getOrDefault(fallbackPx)
+            mapLayoutHeightPx(offset, overlapPx)
+        }.collect { value = it }
+    }
+    return with(density) { heightPx.toDp() }
+}
+
+/** Sheet top Y plus corner overlap; expanded sheet (offset ~0) leaves only the leftover. */
+internal fun mapLayoutHeightPx(sheetOffsetPx: Float, cornerOverlapPx: Float): Float =
+    sheetOffsetPx.coerceAtLeast(0f) + cornerOverlapPx.coerceAtLeast(0f)
 
 private fun needsLegacyWritePermission(context: android.content.Context): Boolean {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return false

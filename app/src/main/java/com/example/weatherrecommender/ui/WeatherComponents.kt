@@ -65,27 +65,27 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
 
 /**
  * Weight/size metrics shared by [DetailContent] and [PremiumShimmerLoadingState] so loading
- * never flashes a different geometry (overlay hero + 7 tall day buttons + activity rows).
- * Heights are fixed so the locked 60% detail sheet can inner-scroll; the hero (and usually
- * the day row) is visible at that height, and scrolling reveals activities.
+ * never flashes a different geometry (16:9 overlay hero + compact 7-day chips + activity rows).
+ * The locked 60% sheet scrolls as one column; after the hero moves off, activities keep the
+ * remaining viewport.
  */
 internal object DetailLayout {
     const val ForecastDays = 7
     const val ActivitySlots = 4
-    val HeroHeight = 168.dp
-    val DayRowHeight = 140.dp
+    const val HeroAspectRatio = 16f / 9f
+    val DayRowHeight = 92.dp
     val ActivityRowMinHeight = 64.dp
     val BlockSpacing = 8.dp
     val AfterDayRowSpacing = 12.dp
     val ActivitySpacing = 6.dp
     val DayButtonSpacing = 4.dp
-    val DayButtonCorner = 12.dp
+    val DayButtonCorner = 10.dp
     val SheetHorizontalPadding = 8.dp
     val SheetBottomPadding = 16.dp
 }
 
 /**
- * Skeleton for the day-row + activity column under the overlay hero. Geometry matches
+ * Skeleton for the compact day-row + activity column under the overlay hero. Geometry matches
  * [DetailContent]'s loaded body. The hero (including header overlay) is drawn by
  * [DetailContent] itself so loading never drops the overlay chrome.
  */

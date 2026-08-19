@@ -38,18 +38,17 @@ import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * MapLibre map used as the collapsing background in
- * [com.example.weatherrecommender.ui.WeatherScreenContent].
- *
- * Height is owned by the parent (full-screen behind the bottom sheet). Chrome lives in
- * the sheet (home header, or detail overlay on the city hero) — nothing is drawn over the map.
- * Keeping this outside the home/detail Crossfade avoids remount flash when selecting a city or
- * going back. [darkTheme] swaps OpenFreeMap Liberty vs Dark immediately (same MapLibre instance
- * family; style URI is keyed so tiles don't stay on the previous palette).
+ * MapLibre map whose **layout height** is owned by
+ * [com.example.weatherrecommender.ui.WeatherScreenContent] (sheet offset, not full-screen
+ * behind an overlay). Chrome lives in the sheet (home header, or detail overlay on the city
+ * hero) — nothing is drawn over the map. Keeping this outside the home/detail Crossfade
+ * avoids remount flash when selecting a city or going back. [darkTheme] swaps OpenFreeMap
+ * Liberty vs Dark immediately (same MapLibre instance family; style URI is keyed so tiles
+ * don't stay on the previous palette).
  *
  * Under Paparazzi / inspection mode, renders a lightweight placeholder that follows Material
- * colors. Legal tile attribution is via MapLibre's built-in logo ornament plus README / discreet
- * footer — no on-map overlay text.
+ * colors. Legal tile attribution is via MapLibre's built-in logo ornament plus README /
+ * discreet footer — no on-map overlay text.
  */
 @Composable
 fun WeatherMapSection(

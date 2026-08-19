@@ -44,8 +44,8 @@ import kotlin.time.Duration.Companion.milliseconds
  *  - **Detail** ([WeatherDestination.Detail]): the forecast with a per-day selector; [rankedActivities]
  *    always reflects [selectedDayIndex].
  *
- * The map is driven by [mapCamera] / [mapPin]; [WeatherScreenContent] keeps a single map instance
- * mounted behind a Material 3 bottom sheet while the sheet body Crossfades home↔detail.
+ * The map is driven by [mapCamera] / [mapPin]; [WeatherScreenContent] keeps a single map
+ * instance whose layout height tracks the sheet while the sheet body Crossfades home↔detail.
  *
  * @property query The current search query (updated immediately; the network path is debounced).
  * @property search Geocoding lane: idle, in-flight (optionally with previous hits), or results.

@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,11 +43,10 @@ import com.example.weatherrecommender.ui.util.asUiText
 private const val DAY_SWITCH_MS = 220
 
 /**
- * Detail body inside the map bottom sheet: an edge-to-edge city hero (header overlaid),
- * a full-width row of tall day buttons, and a vertical column of ranked activities.
- * The sheet itself is locked at 60% of the screen; this column scrolls when content
- * overflows that height. Tapping a day re-ranks activities (handled by
- * [WeatherViewModel.onDaySelected]). Pull-to-refresh is home-only.
+ * Detail body inside the map bottom sheet: one outer [verticalScroll] (same pattern as home)
+ * covering the city hero, a compact 7-day row, and ranked activities for the selected day.
+ * The sheet is locked at 60%; tapping a day only swaps the activity list via
+ * [WeatherViewModel.onDaySelected]. Pull-to-refresh is home-only.
  */
 @Composable
 internal fun DetailContent(
@@ -71,7 +70,7 @@ internal fun DetailContent(
             header = header,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(DetailLayout.HeroHeight)
+                .aspectRatio(DetailLayout.HeroAspectRatio)
         )
 
         Column(
@@ -106,10 +105,7 @@ internal fun DetailContent(
                     forecast = forecast,
                     selectedDayIndex = uiState.selectedDayIndex,
                     onDaySelected = onDaySelected,
-                    compact = false,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(DetailLayout.DayRowHeight)
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Crossfade(
                     targetState = uiState.selectedDayIndex to uiState.rankedActivities,
@@ -140,9 +136,10 @@ internal fun DetailContent(
 }
 
 /**
- * Edge-to-edge photo (or placeholder/shimmer) flush to the sheet's top. The sheet Surface
- * clips this to the rounded top corners — no inner card inset. [header] sits on a top-down
- * scrim so white chrome stays readable even when [imageUrl] is missing.
+ * Edge-to-edge photo (or placeholder/shimmer) flush to the sheet’s top. The sheet Surface
+ * clips this to the rounded top corners — no inner card inset. Height comes from a 16:9
+ * [aspectRatio] (placeholder uses the same box so layout does not jump). [header] sits on a
+ * short top scrim so chrome stays readable while the photo still meets the sheet edge.
  */
 @Composable
 private fun CityHeroOverlay(
@@ -185,9 +182,9 @@ private fun CityHeroOverlay(
                 .background(
                     Brush.verticalGradient(
                         colorStops = arrayOf(
-                            0f to Color.Black.copy(alpha = 0.72f),
-                            0.55f to Color.Black.copy(alpha = 0.28f),
-                            1f to Color.Transparent
+                            0f to Color.Black.copy(alpha = 0.55f),
+                            0.38f to Color.Black.copy(alpha = 0.18f),
+                            0.62f to Color.Transparent
                         )
                     )
                 )
