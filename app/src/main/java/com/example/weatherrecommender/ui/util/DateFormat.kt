@@ -23,6 +23,7 @@ fun isoDateToDayOfMonth(isoDate: String): String = formatIso(isoDate, "d") ?: is
 /** Returns a short localized month + day for an ISO date, e.g. "Jul 17". */
 fun isoDateToShortDate(isoDate: String): String = formatIso(isoDate, "MMM d") ?: isoDate.takeLast(5)
 
+/** Parses [isoDate] and formats with [outputPattern] in the default locale; null on parse failure. */
 private fun formatIso(isoDate: String, outputPattern: String): String? {
     return try {
         val parsed = SimpleDateFormat(ISO_PATTERN, Locale.US).parse(isoDate) ?: return null

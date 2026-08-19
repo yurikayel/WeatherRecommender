@@ -216,6 +216,7 @@ private fun saveBitmapToDownloadsMediaStore(
     return success
 }
 
+/** Pre-Q fallback: writes the PNG under public Downloads when write permission is already granted. */
 @Suppress("DEPRECATION")
 private fun saveBitmapToDownloadsLegacy(
     context: Context,
@@ -245,12 +246,14 @@ private fun saveBitmapToDownloadsLegacy(
     return wrote
 }
 
+/** Builds `WeatherRecommender_{city}_{yyyy-MM-dd}.png` for Downloads and share cache files. */
 internal fun buildDownloadsFileName(cityName: String, date: Date = Date()): String {
     val city = sanitizeCityForFilename(cityName)
     val datePart = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(date)
     return "WeatherRecommender_${city}_$datePart.png"
 }
 
+/** Keeps alphanumeric characters from [cityName] so the file name is filesystem-safe. */
 internal fun sanitizeCityForFilename(cityName: String): String {
     val sanitized = cityName
         .replace(Regex("[^A-Za-z0-9]+"), "_")

@@ -24,24 +24,29 @@ class NetworkConnectivityObserver(
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
+    /** Emits the current network state, then distinct updates from [ConnectivityManager] callbacks. */
     override fun observe(): Flow<ConnectivityStatus> {
         return callbackFlow {
             val callback = object : ConnectivityManager.NetworkCallback() {
+                /** Network is usable; treat as [ConnectivityStatus.Available]. */
                 override fun onAvailable(network: Network) {
                     super.onAvailable(network)
                     launch { send(ConnectivityStatus.Available) }
                 }
 
+                /** The network is about to drop; emit [ConnectivityStatus.Losing]. */
                 override fun onLosing(network: Network, maxMsToLive: Int) {
                     super.onLosing(network, maxMsToLive)
                     launch { send(ConnectivityStatus.Losing) }
                 }
 
+                /** The tracked network is gone; emit [ConnectivityStatus.Lost]. */
                 override fun onLost(network: Network) {
                     super.onLost(network)
                     launch { send(ConnectivityStatus.Lost) }
                 }
 
+                /** No network satisfied the request; emit [ConnectivityStatus.Unavailable]. */
                 override fun onUnavailable() {
                     super.onUnavailable()
                     launch { send(ConnectivityStatus.Unavailable) }

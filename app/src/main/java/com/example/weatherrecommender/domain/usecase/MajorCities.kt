@@ -56,6 +56,7 @@ object MajorCities {
         city(-143, "Cape Town", -33.9249, 18.4241, "South Africa", "Western Cape", 3_433_441, 25.0)
     )
 
+    /** Builds a regional-hub [Location] with a synthetic negative [id] for prefetch identity. */
     private fun city(
         id: Long,
         name: String,

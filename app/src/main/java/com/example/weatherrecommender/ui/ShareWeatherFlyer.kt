@@ -159,6 +159,10 @@ private object FlyerType {
     )
 }
 
+/**
+ * Off-screen 9:16 Compose tree captured as the share PNG.
+ * Uses a fixed light palette (plus city-photo overlay when cached) so exports look the same in any theme.
+ */
 @Composable
 internal fun ShareWeatherFlyer(
     location: Location,
@@ -236,6 +240,7 @@ internal fun ShareWeatherFlyer(
     }
 }
 
+/** Brand mark, city name, region, and forecast date range at the top of the flyer. */
 @Composable
 private fun FlyerHeader(location: Location, days: List<DailyForecast>, hasImage: Boolean) {
     val textPrimary = if (hasImage) Color.White else FlyerInk
@@ -293,6 +298,7 @@ private fun FlyerHeader(location: Location, days: List<DailyForecast>, hasImage:
     }
 }
 
+/** Selected-day weather icon, weekday, high, conditions, and overnight low. */
 @Composable
 private fun FlyerHero(day: DailyForecast, hasImage: Boolean) {
     val textPrimary = if (hasImage) Color.White else FlyerInk
@@ -346,6 +352,7 @@ private fun FlyerHero(day: DailyForecast, hasImage: Boolean) {
     }
 }
 
+/** Equal-width 7-day strip: weekday, weather icon, and high/low for each forecast day. */
 @Composable
 private fun FlyerForecastStrip(days: List<DailyForecast>, hasImage: Boolean) {
     FlyerSectionLabel(
@@ -367,6 +374,7 @@ private fun FlyerForecastStrip(days: List<DailyForecast>, hasImage: Boolean) {
     }
 }
 
+/** One column in the flyer week strip for a single [day]. */
 @Composable
 private fun FlyerDayColumn(
     day: DailyForecast,
@@ -413,6 +421,7 @@ private fun FlyerDayColumn(
     }
 }
 
+/** Top three ranked activities for [day], shown as compact icon + name + score rows. */
 @Composable
 private fun FlyerActivities(day: DailyForecast, activities: List<RankedActivity>, hasImage: Boolean) {
     FlyerSectionLabel(
@@ -431,6 +440,7 @@ private fun FlyerActivities(day: DailyForecast, activities: List<RankedActivity>
     }
 }
 
+/** One activity on the flyer: icon, localized name, and score tinted by the high/mid bands. */
 @Composable
 private fun FlyerActivityItem(ranked: RankedActivity, hasImage: Boolean) {
     val textPrimary = if (hasImage) Color.White else FlyerInk
@@ -463,6 +473,7 @@ private fun FlyerActivityItem(ranked: RankedActivity, hasImage: Boolean) {
     }
 }
 
+/** Section heading; white on photo backgrounds, muted ink on the solid flyer palette. */
 @Composable
 private fun FlyerSectionLabel(text: String, hasImage: Boolean) {
     val textColor = if (hasImage) Color.White.copy(alpha = 0.9f) else FlyerMuted
@@ -481,6 +492,7 @@ private fun flyerScoreColor(score: Int): Color = when {
     else -> PremiumErrorLight
 }
 
+/** Pastel chip fill matching the detail-screen weather category for [weatherCode]. */
 private fun flyerPastelFor(weatherCode: Int): Color = when (weatherUiCategory(weatherCode)) {
     WeatherUiCategory.CLEAR -> PastelSunnyLight
     WeatherUiCategory.RAIN -> PastelRainLight

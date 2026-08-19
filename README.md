@@ -49,6 +49,9 @@ Key experience details:
 | Timeouts vs offline | `WeatherRepositoryImpl.toAppError()` (`SocketTimeoutException` → `Timeout`) |
 | IO dispatcher | `DispatcherModule` `@IoDispatcher` |
 | Score thresholds | `ScoringThresholds.kt` (domain) + README §g |
+| Detekt complexity | `detekt.yml` — LongMethod 30, CognitiveComplexMethod 15, NestedBlockDepth 4 (ignore `@Composable`/`@Test`) |
+| Extract-method (not class-split) | `WeatherViewModel` hop helpers; `WeatherScreen` sheet/map split; `WeatherHome` `PlaceImageCard` |
+| Per-function KDoc | All `fun` in `com.example.weatherrecommender` (DAO, migrations, composables, extensions) |
 
 **Run manually**: `./gradlew installDebug` → search in header → detail (sheet locked at 60%) → confirm hero, tall day chips, and compact activity rows fit **without leftover scroll** → Wikipedia **W** opens the article → tap day chips → toggle dark mode (map tiles follow) → share. Back to home: peek ~40% sheet / 60% map, drag to full screen and watch the map shrink.
 
@@ -72,13 +75,14 @@ Key experience details:
 - **Dependency Injection**: Dagger Hilt
 - **Concurrency**: Kotlin Coroutines and StateFlow (`viewModelScope`; IO work on an injected `@IoDispatcher`)
 - **Testing**: JUnit 4, MockK, Turbine, Robolectric (ViewModel + Room integration), Paparazzi 2.x (CI runs with `-Ppaparazzi`)
-- **Quality**: detekt, Kover coverage, Android Lint
+- **Quality**: detekt (`detekt.yml`: LongMethod 30, CognitiveComplexMethod 15, NestedBlockDepth 4; those three ignore `@Composable` / `@Test`), Kover coverage, Android Lint. Every function in `com.example.weatherrecommender` has KDoc.
 
 ## c. Architecture and Technical Decisions 🏗️
 - **Clean Architecture Principles**: The project is strictly divided into three layers:
   - **Data Layer**: Retrofit interfaces (Open-Meteo Forecast / Geocoding / Marine, Nominatim), Room DAOs, and the Repository implementation mapping network data to domain models.
   - **Domain Layer**: Core business logic, `AppError` sealed hierarchy, and the `GetRankedActivitiesUseCase` fully isolated from Android dependencies.
-  - **UI Layer**: Composed of `WeatherScreen` (Jetpack Compose) and `WeatherViewModel`, orchestrating UI states via a `StateFlow` (`_uiState.asStateFlow()`).
+  - **UI Layer**: Composed of `WeatherScreen` (Jetpack Compose) and `WeatherViewModel`, orchestrating UI states via a `StateFlow` (`_uiState.asStateFlow()`). Complexity stays inside those types via extract-method helpers — hop/reveal steps on the ViewModel, sheet/map split on `WeatherScreen`, shared `PlaceImageCard` on home — not a ViewModel broken into many classes.
+- **Detekt gates**: `LongMethod` 30, `CognitiveComplexMethod` 15, `NestedBlockDepth` 4 (`detekt.yml`). Compose UI and `@Test` methods are ignored for those three rules so layout trees are not forced into artificial splits; non-Composable Kotlin still has to stay under the thresholds.
 - **Offline-First (SSOT)**: The UI never consumes data directly from the network. It observes a Room database `Flow`. A parallel background request fetches fresh data from the Open-Meteo API and updates the local database, triggering reactive UI updates. Selecting a city starts fetch immediately, plants the pin, then `hasFreshForecast` picks a `MapHopProfile` (snappy if Room weather is within 6 h). The sheet waits `hop.contentRevealMs` so the map still leads. Room collect and `refreshForecast` are sibling coroutines under one `forecastJob` so a later selection cancels both. `refreshForecast` is a no-op when `lastUpdated` is within `CachePolicy.WEATHER_TTL_MS` (6 h). Wikipedia thumbnails reuse `imageUrl` for `PLACE_METADATA_TTL_MS` (30 d). After a successful city load, `prefetchNearbyCities` warms `MajorCities` neighbors in the same ~280 km region (never-viewed rows evict first; cap 36).
 - **Per-lane fetch state**: Search, Top Picks, forecast, and map-tap are independent async lanes (`SearchUiState` / `FetchStatus`), not a single screen-level Loading/Content/Error. Pull-to-refresh can show existing Top Picks while `FetchStatus.Refreshing`.
 - **Strategy Pattern (SOLID)**: The recommendation engine utilizes independent `ActivityScorer` strategies (e.g., `SurfScorer`, `SkiScorer`) bound into a `Set` via Hilt `@Binds @IntoSet`. Each scorer exposes `isApplicable(context)` for geography gating and `score(context)` for a single day. Adding an activity is a new class plus one bind method — the ranking use case is not edited.
@@ -100,7 +104,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 - **Lint**: `./gradlew lintDebug`
 - **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify` — XML at `app/build/reports/kover/reportDebug.xml`. Do **not** use total `koverXmlReport` on AGP 9 + Kover before 0.9.5 (empty `report.xml` with LINE 0/0).
 - **Quality gate**: PRs get a sticky GitHub comment (Status Passed/Failed, Kover coverage vs `main`, duplication + detekt tables). The **Quality Gate** check fails if **line** coverage drops below `main` (0.01% epsilon) or is under a 10% floor of a **real** report (non-zero LINE counters). **Empty XML is an error**, not 0% coverage — the job stages `reportDebug.xml` (Kover **0.9.5**; baseline checkout is bumped if `main` is still 0.9.1). Driven by **unit tests + Kover** only — no emulator, no SonarCloud. Workflow: `.github/workflows/quality-gate.yml`.
-- **Static analysis**: `./gradlew detekt`
+- **Static analysis**: `./gradlew detekt` — fails the build if any issue remains (`maxIssues: 0`). Complexity: LongMethod 30, CognitiveComplexMethod 15, NestedBlockDepth 4; `@Composable` and `@Test` are ignored for those three so Compose layout is not scored as “long methods”.
 - **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (Compose UI flows + Room DAO integration + migration tests; also run on CI emulator)
 
 **Testing Strategy**:

@@ -56,6 +56,7 @@ class FeaturedCities @Inject constructor() {
         return selected
     }
 
+    /** Builds a seed [Location] with synthetic negative [id] and coastal access resolved later. */
     private fun city(
         id: Long,
         name: String,

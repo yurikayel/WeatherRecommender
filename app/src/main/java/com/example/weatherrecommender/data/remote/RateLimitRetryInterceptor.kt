@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit
  */
 class RateLimitRetryInterceptor : Interceptor {
 
+    /** Proceeds non-GET immediately; retries GET on HTTP 429 up to [MAX_RETRIES]. */
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         if (request.method != "GET") {
@@ -30,6 +31,7 @@ class RateLimitRetryInterceptor : Interceptor {
         }
     }
 
+    /** Seconds from [Retry-After] when parseable; otherwise exponential backoff from [attempt]. */
     private fun retryDelayMs(retryAfterHeader: String?, attempt: Int): Long {
         retryAfterHeader?.toLongOrNull()?.let { seconds ->
             return TimeUnit.SECONDS.toMillis(seconds.coerceAtMost(MAX_RETRY_AFTER_SECONDS))

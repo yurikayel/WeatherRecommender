@@ -18,6 +18,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
+    /** Builds the singleton Room database with v1–v8 migrations and no destructive fallback. */
     @Provides
     @Singleton
     fun provideWeatherDatabase(@ApplicationContext context: Context): WeatherDatabase {
@@ -39,6 +40,7 @@ object DatabaseModule {
             .build()
     }
 
+    /** Exposes the database's [WeatherDao] to the rest of the graph. */
     @Provides
     fun provideWeatherDao(database: WeatherDatabase): WeatherDao {
         return database.weatherDao()

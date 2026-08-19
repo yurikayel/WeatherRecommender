@@ -139,6 +139,8 @@ class OutdoorSightseeingScorer @Inject constructor() : ActivityScorer {
 
     /** Penalises rain, heat, and strong wind; rewards a mild average temperature. */
     override fun score(context: ActivityContext): RankedActivity {
+        val day = context.day
+        var score = OUTDOOR_BASE_SCORE
 
         if (day.precipitationSum > OUTDOOR_PRECIP_BAD_MIN) score -= 45
         if (day.avgTemp in OUTDOOR_TEMP_MILD_MIN..OUTDOOR_TEMP_MILD_MAX) score += 35
@@ -164,6 +166,7 @@ class IndoorSightseeingScorer @Inject constructor() : ActivityScorer {
     /** Always applicable; bad weather raises the indoor score. */
     override fun isApplicable(context: ActivityContext): Boolean = true
 
+    /** Wet-weather fallback: score rises with rain/snow and cold so indoor climbs when outdoor falls. */
     override fun score(context: ActivityContext): RankedActivity {
         val day = context.day
         var score = INDOOR_BASE_SCORE

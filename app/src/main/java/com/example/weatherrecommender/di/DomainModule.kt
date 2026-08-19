@@ -20,18 +20,22 @@ import dagger.multibindings.IntoSet
 @InstallIn(SingletonComponent::class)
 abstract class DomainModule {
 
+    /** Registers [SurfScorer] in the ranking set. */
     @Binds
     @IntoSet
     abstract fun bindSurfScorer(impl: SurfScorer): ActivityScorer
 
+    /** Registers [SkiScorer] in the ranking set. */
     @Binds
     @IntoSet
     abstract fun bindSkiScorer(impl: SkiScorer): ActivityScorer
 
+    /** Registers [OutdoorSightseeingScorer] in the ranking set. */
     @Binds
     @IntoSet
     abstract fun bindOutdoorSightseeingScorer(impl: OutdoorSightseeingScorer): ActivityScorer
 
+    /** Registers [IndoorSightseeingScorer] in the ranking set. */
     @Binds
     @IntoSet
     abstract fun bindIndoorSightseeingScorer(impl: IndoorSightseeingScorer): ActivityScorer
