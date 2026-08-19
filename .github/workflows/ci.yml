@@ -44,7 +44,7 @@ jobs:
       run: ./gradlew koverVerify
 
     - name: Generate Kover coverage report
-      run: ./gradlew koverXmlReport
+      run: ./gradlew koverXmlReportDebug
 
     - name: Run lint
       run: ./gradlew lintDebug

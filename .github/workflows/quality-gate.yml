@@ -61,21 +61,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Separate invocations: AGP 9 + Kover 0.9.1 may not make koverXmlReport depend on tests.
-      - name: Unit tests
-        run: ./gradlew testDebugUnitTest --no-daemon
-
-      - name: Kover XML report
-        if: success()
-        run: ./gradlew koverXmlReport --no-daemon
-
-      - name: Detekt reports
-        if: always()
-        run: ./gradlew detekt --no-daemon || true
-
-      # Main does not have this script until the workflow lands; always take it from the PR head.
+      # Main does not have these scripts / Kover 0.9.5 until the workflow lands.
+      # Sparse-checkout into qg-tools so we do not wipe app/build after Gradle.
       - name: Checkout quality-gate scripts
-        if: always()
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -83,6 +71,21 @@ jobs:
           sparse-checkout: |
             .github/scripts
           sparse-checkout-cone-mode: false
+
+      # Baseline checks out main (Kover 0.9.1). Total koverXmlReport then writes
+      # report.xml with LINE 0/0. Bump to 0.9.5 so koverXmlReportDebug exists.
+      - name: Ensure Kover 0.9.5+
+        run: python3 qg-tools/.github/scripts/quality_gate.py ensure-kover --root .
+
+      # One invocation so Kover's task graph includes unit tests. Do not use total
+      # `koverXmlReport`: on AGP 9 + Kover < 0.9.5 it has no test deps and writes
+      # app/build/reports/kover/report.xml with LINE covered=0 missed=0 (parsed as 0.00%).
+      - name: Unit tests + Kover XML
+        run: ./gradlew testDebugUnitTest koverXmlReportDebug --no-daemon
+
+      - name: Detekt reports
+        if: always()
+        run: ./gradlew detekt --no-daemon || true
 
       - name: Stage reports
         if: always()
@@ -94,7 +97,7 @@ jobs:
         with:
           name: quality-${{ matrix.side }}
           path: artifacts/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
 
   quality-gate:

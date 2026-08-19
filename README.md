@@ -98,7 +98,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 - **Unit tests**: `./gradlew testDebugUnitTest` (requires JDK 21+) — domain, data, ViewModel, and Robolectric integration (`WeatherIntegrationTest`)
 - **Paparazzi snapshots**: `./gradlew recordPaparazziDebug -Ppaparazzi` (verify with `verifyPaparazziDebug -Ppaparazzi`; 9 golden PNGs live in `app/src/test/snapshots/`)
 - **Lint**: `./gradlew lintDebug`
-- **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify`
+- **Coverage**: `./gradlew koverXmlReportDebug` / `koverVerify` — XML at `app/build/reports/kover/reportDebug.xml`. Do not use total `koverXmlReport` on AGP 9 (empty `report.xml`).
 - **Quality gate**: PRs get a sticky GitHub comment (Status Passed/Failed, Kover coverage vs `main`, duplication + detekt tables). The **Quality Gate** check fails if **line** coverage drops below `main` (0.01% epsilon) or under a 10% floor. Driven by **unit tests + Kover** only — no emulator, no SonarCloud. Workflow: `.github/workflows/quality-gate.yml`.
 - **Static analysis**: `./gradlew detekt`
 - **Instrumented UI tests**: `./gradlew connectedDebugAndroidTest` (Compose UI flows + Room DAO integration + migration tests; also run on CI emulator)

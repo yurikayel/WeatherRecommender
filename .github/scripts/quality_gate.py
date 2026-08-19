@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import xml.etree.ElementTree as ET
 from collections import Counter
@@ -20,6 +21,13 @@ from typing import Any
 LINE_EPSILON = 0.01  # percentage points; ignore float noise
 LINE_FLOOR = 10.0  # absolute floor; main already beats this
 KOVER_COUNTERS = ("LINE", "INSTRUCTION", "METHOD", "BRANCH")
+# Android debug variant first — total report.xml is empty on AGP 9 + Kover < 0.9.5.
+KOVER_XML_RELATIVE = (
+    Path("app") / "build" / "reports" / "kover" / "reportDebug.xml",
+    Path("app") / "build" / "reports" / "kover" / "report.xml",
+    Path("app") / "build" / "reports" / "kover" / "xml" / "reportDebug.xml",
+    Path("app") / "build" / "reports" / "kover" / "xml" / "report.xml",
+)
 TABLE_LABELS = {
     "LINE": "Lines",
     "INSTRUCTION": "Instructions",
@@ -41,22 +49,60 @@ def _parse_xml(path: Path) -> ET.Element:
     return tree.getroot()
 
 
+def _counter_entry(missed: int, covered: int) -> dict[str, float | int]:
+    total = missed + covered
+    pct = (100.0 * covered / total) if total else 0.0
+    return {"covered": covered, "missed": missed, "total": total, "pct": pct}
+
+
 def parse_kover(path: Path) -> dict[str, dict[str, float | int]]:
-    """Parse report-level JaCoCo/Kover counters (not per-package)."""
+    """Parse JaCoCo/Kover counters: report-level LINE/BRANCH/METHOD/INSTRUCTION.
+
+    Uses direct children of <report> (JaCoCo totals). If those are 0/0 (empty
+    total report) but packages have data, sums package-level counters instead.
+    Nested class/sourcefile counters are not mixed into the totals.
+    """
     root = _parse_xml(path)
-    out: dict[str, dict[str, float | int]] = {}
+    report_level: dict[str, tuple[int, int]] = {}
+    package_missed: dict[str, int] = {kind: 0 for kind in KOVER_COUNTERS}
+    package_covered: dict[str, int] = {kind: 0 for kind in KOVER_COUNTERS}
     for child in list(root):
-        if _local_tag(child.tag) != "counter":
-            continue
-        kind = child.attrib.get("type")
-        if kind not in KOVER_COUNTERS:
-            continue
-        missed = int(child.attrib.get("missed", "0"))
-        covered = int(child.attrib.get("covered", "0"))
-        total = missed + covered
-        pct = (100.0 * covered / total) if total else 0.0
-        out[kind] = {"covered": covered, "missed": missed, "total": total, "pct": pct}
+        tag = _local_tag(child.tag)
+        if tag == "counter":
+            kind = child.attrib.get("type")
+            if kind not in KOVER_COUNTERS:
+                continue
+            report_level[kind] = (
+                int(child.attrib.get("missed", "0")),
+                int(child.attrib.get("covered", "0")),
+            )
+        elif tag == "package":
+            for grandchild in list(child):
+                if _local_tag(grandchild.tag) != "counter":
+                    continue
+                kind = grandchild.attrib.get("type")
+                if kind not in KOVER_COUNTERS:
+                    continue
+                package_missed[kind] += int(grandchild.attrib.get("missed", "0"))
+                package_covered[kind] += int(grandchild.attrib.get("covered", "0"))
+
+    out: dict[str, dict[str, float | int]] = {}
+    for kind in KOVER_COUNTERS:
+        report = report_level.get(kind)
+        pkg_total = package_missed[kind] + package_covered[kind]
+        if report is not None and (report[0] + report[1]) > 0:
+            out[kind] = _counter_entry(*report)
+        elif pkg_total > 0:
+            out[kind] = _counter_entry(package_missed[kind], package_covered[kind])
+        elif report is not None:
+            out[kind] = _counter_entry(*report)
     return out
+
+
+def line_coverage_empty(parsed: dict[str, dict[str, float | int]] | None) -> bool:
+    if not parsed or "LINE" not in parsed:
+        return True
+    return int(parsed["LINE"]["total"]) == 0
 
 
 def parse_detekt_issues(path: Path | None) -> int | None:
@@ -101,18 +147,22 @@ def duplication_from_src(src_root: Path) -> dict[str, float | int]:
 
 
 def find_kover_xml(root: Path) -> Path | None:
-    reports = root / "app" / "build" / "reports" / "kover"
-    preferred = [
-        reports / "reportDebug.xml",
-        reports / "report.xml",
-        reports / "xml" / "reportDebug.xml",
-        reports / "xml" / "report.xml",
-    ]
-    for candidate in preferred:
-        if candidate.is_file():
+    """Return the best Kover XML. Prefer a non-empty debug report over empty total XML."""
+    preferred = [root / rel for rel in KOVER_XML_RELATIVE]
+    matches = sorted(
+        p for p in root.glob("**/build/reports/kover/**/*.xml") if p not in preferred
+    )
+    candidates = [p for p in preferred + matches if p.is_file()]
+    if not candidates:
+        return None
+    for candidate in candidates:
+        try:
+            parsed = parse_kover(candidate)
+        except Exception:  # noqa: BLE001 — skip unreadable files while searching
+            continue
+        if not line_coverage_empty(parsed):
             return candidate
-    matches = sorted(root.glob("**/build/reports/kover/**/*.xml"))
-    return matches[0] if matches else None
+    return candidates[0]
 
 
 def find_detekt_xml(root: Path) -> Path | None:
@@ -162,22 +212,37 @@ def evaluate(
 ) -> tuple[bool, list[str]]:
     reasons: list[str] = []
     if not current_kover or "LINE" not in current_kover:
-        reasons.append("No current Kover LINE counters (unit tests may have failed).")
+        reasons.append(
+            "kover XML not found at app/build/reports/kover/reportDebug.xml "
+            "(also searched report.xml and **/build/reports/kover/**/*.xml)."
+        )
+        return False, reasons
+    if line_coverage_empty(current_kover):
+        reasons.append(
+            "kover XML has no LINE coverage data (covered=0 missed=0). "
+            "Empty total report — expected koverXmlReportDebug output at "
+            "app/build/reports/kover/reportDebug.xml, not an uninstrumented report.xml."
+        )
         return False, reasons
     current_line = float(current_kover["LINE"]["pct"])
     if current_line + 1e-9 < LINE_FLOOR:
         reasons.append(
             f"Line coverage {current_line:.2f}% is below the {LINE_FLOOR:.0f}% floor."
         )
-    if baseline_kover and "LINE" in baseline_kover:
+    baseline_usable = (
+        baseline_kover is not None
+        and "LINE" in baseline_kover
+        and not line_coverage_empty(baseline_kover)
+    )
+    if baseline_usable:
         base_line = float(baseline_kover["LINE"]["pct"])
         delta = current_line - base_line
         if delta < -LINE_EPSILON:
             reasons.append(
                 f"Line coverage dropped vs baseline ({base_line:.2f}% → {current_line:.2f}%, Δ {delta:.2f}%)."
             )
-    elif baseline_kover is None:
-        reasons.append("Baseline Kover report missing; cannot compare to main.")
+    else:
+        reasons.append("Baseline Kover report missing or empty; cannot compare to main.")
         return False, reasons
     return (len(reasons) == 0), reasons
 
@@ -283,12 +348,13 @@ def cmd_stage(args: argparse.Namespace) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     kover = find_kover_xml(root)
+    expected = root / KOVER_XML_RELATIVE[0]
     if kover:
         dest = out / "kover.xml"
         dest.write_bytes(kover.read_bytes())
         print(f"staged kover: {kover} -> {dest}")
     else:
-        print("warning: no Kover XML found", file=sys.stderr)
+        print(f"kover XML not found at {expected}", file=sys.stderr)
 
     detekt = find_detekt_xml(root)
     if detekt:
@@ -302,6 +368,54 @@ def cmd_stage(args: argparse.Namespace) -> int:
     dup = duplication_from_src(src)
     (out / "duplication.json").write_text(json.dumps(dup, indent=2) + "\n", encoding="utf-8")
     print(f"staged duplication: {dup}")
+
+    if kover is None:
+        return 1
+    try:
+        parsed = parse_kover(kover)
+    except Exception as exc:  # noqa: BLE001
+        print(f"kover XML at {kover} could not be parsed: {exc}", file=sys.stderr)
+        return 1
+    if line_coverage_empty(parsed):
+        print(
+            f"kover XML at {kover} has no LINE coverage data "
+            f"(covered={parsed.get('LINE', {}).get('covered', 0)} "
+            f"missed={parsed.get('LINE', {}).get('missed', 0)}). "
+            f"Empty report — expected non-zero counters from koverXmlReportDebug "
+            f"at {expected}.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+MIN_KOVER = (0, 9, 5)
+
+
+def cmd_ensure_kover(args: argparse.Namespace) -> int:
+    """Bump Kover < 0.9.5 so AGP 9 generates koverXmlReportDebug (kotlinx-kover#785)."""
+    toml = Path(args.root).resolve() / "gradle" / "libs.versions.toml"
+    if not toml.is_file():
+        print(f"gradle version catalog not found at {toml}", file=sys.stderr)
+        return 1
+    text = toml.read_text(encoding="utf-8")
+    match = re.search(r'^kover\s*=\s*"(\d+)\.(\d+)\.(\d+)"', text, re.MULTILINE)
+    if not match:
+        print(f"kover version not found in {toml}", file=sys.stderr)
+        return 1
+    version = tuple(int(part) for part in match.groups())
+    if version >= MIN_KOVER:
+        print(f"kover {'.'.join(map(str, version))} already >= 0.9.5")
+        return 0
+    updated = re.sub(
+        r'^kover\s*=\s*"\d+\.\d+\.\d+"',
+        'kover = "0.9.5"',
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    toml.write_text(updated, encoding="utf-8")
+    print(f"bumped kover {'.'.join(map(str, version))} -> 0.9.5 for AGP 9 XML reports")
     return 0
 
 
@@ -396,6 +510,46 @@ def cmd_self_test(_args: argparse.Namespace) -> int:
         low = {"LINE": {"pct": 9.0, "covered": 9, "missed": 91, "total": 100}}
         ok, reasons = evaluate(low, {"LINE": {"pct": 9.0, "covered": 9, "missed": 91, "total": 100}})
         assert not ok, reasons
+
+        empty_xml = """<?xml version="1.0" ?>
+<report name="Kover Gradle Plugin XML report for :app">
+<counter type="INSTRUCTION" missed="0" covered="0"/>
+<counter type="BRANCH" missed="0" covered="0"/>
+<counter type="LINE" missed="0" covered="0"/>
+<counter type="METHOD" missed="0" covered="0"/>
+<counter type="CLASS" missed="0" covered="0"/>
+</report>
+"""
+        empty_path = Path(tmp) / "empty.xml"
+        empty_path.write_text(empty_xml, encoding="utf-8")
+        empty_parsed = parse_kover(empty_path)
+        assert line_coverage_empty(empty_parsed), empty_parsed
+        ok, reasons = evaluate(empty_parsed, {"LINE": {"pct": 65.0, "covered": 65, "missed": 35, "total": 100}})
+        assert not ok, reasons
+        assert "no LINE coverage data" in reasons[0], reasons
+        assert "10%" not in reasons[0], reasons
+
+        pkg_only = """<?xml version="1.0" encoding="UTF-8"?>
+<report name="app">
+  <package name="com/example">
+    <counter type="LINE" missed="30" covered="70"/>
+    <counter type="BRANCH" missed="5" covered="5"/>
+    <counter type="METHOD" missed="10" covered="90"/>
+    <counter type="INSTRUCTION" missed="40" covered="60"/>
+  </package>
+</report>
+"""
+        pkg_path = Path(tmp) / "pkg.xml"
+        pkg_path.write_text(pkg_only, encoding="utf-8")
+        pkg_parsed = parse_kover(pkg_path)
+        assert pkg_parsed["LINE"]["pct"] == 70.0, pkg_parsed
+
+        ok, reasons = evaluate(
+            {"LINE": {"pct": 65.0, "covered": 65, "missed": 35, "total": 100}},
+            {"LINE": {"pct": 0.0, "covered": 0, "missed": 0, "total": 0}},
+        )
+        assert not ok, reasons
+        assert any("Baseline" in r for r in reasons), reasons
     print("self-test ok")
     return 0
 
@@ -408,6 +562,13 @@ def main(argv: list[str] | None = None) -> int:
     stage.add_argument("--root", default=".")
     stage.add_argument("--out", required=True)
     stage.set_defaults(func=cmd_stage)
+
+    ensure = sub.add_parser(
+        "ensure-kover",
+        help="Bump Kover < 0.9.5 so AGP 9 emits koverXmlReportDebug",
+    )
+    ensure.add_argument("--root", default=".")
+    ensure.set_defaults(func=cmd_ensure_kover)
 
     compare = sub.add_parser("compare", help="Write PR comment markdown and JSON")
     compare.add_argument("--current", required=True)

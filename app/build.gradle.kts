@@ -95,6 +95,13 @@ kover {
                 packages("com.example.weatherrecommender.data.*")
             }
         }
+        // AGP 9 + Kover < 0.9.5: total `koverXmlReport` has no test deps and writes an empty
+        // report.xml (0/0 counters). Debug variant is what unit tests + the quality gate use.
+        variant("debug") {
+            xml {
+                xmlFile.set(layout.buildDirectory.file("reports/kover/reportDebug.xml"))
+            }
+        }
         total {
             xml {
                 onCheck = true
@@ -204,4 +211,9 @@ tasks.withType<Test>().configureEach {
     }
     // Paparazzi + Gradle 9: disable HTML test reports to avoid internal API breakage.
     reports.html.required.set(false)
+}
+
+// AGP 9 historically omitted test deps on Kover report tasks (kotlinx-kover#785).
+tasks.matching { it.name == "koverXmlReportDebug" || it.name == "koverXmlReport" }.configureEach {
+    dependsOn("testDebugUnitTest")
 }
