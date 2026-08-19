@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -34,17 +35,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.Location
+import com.example.weatherrecommender.domain.util.WikipediaUrls
 import com.example.weatherrecommender.ui.map.WeatherMapSection
 import kotlinx.coroutines.launch
 
@@ -78,9 +82,10 @@ fun WeatherScreen(
  * Stateless, testable root of the Weather screen.
  *
  * A full-screen MapLibre map stays mounted while a Material 3 [BottomSheetScaffold] Crossfades
- * home vs detail. Peek height is [SHEET_PEEK_FRACTION] of the screen (~40%), so ~60% of the map
- * stays visible. The sheet drags to full screen and its content scrolls. The map instance is not
- * remounted on select/back. Modes are derived from [WeatherUiState.destination].
+ * home vs detail. Home peeks at [SHEET_HOME_PEEK_FRACTION] (~40%, map ~60%) and drags to full
+ * screen. Detail locks at [SHEET_DETAIL_PEEK_FRACTION] (~60%, map ~40%) with swipe disabled;
+ * overflow scrolls inside the sheet. The map instance is not remounted on select/back. Modes are
+ * derived from [WeatherUiState.destination].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -225,8 +230,9 @@ private fun PendingShareCapture(
 
 /**
  * Full-screen map with a persistent Material 3 bottom sheet.
- * Peek is [SHEET_PEEK_FRACTION] of screen height (map ~60% visible); drag expands to full screen.
- * Home↔detail Crossfade lives in the sheet so MapLibre is not remounted.
+ * Home peeks at [SHEET_HOME_PEEK_FRACTION] and can expand; detail locks at
+ * [SHEET_DETAIL_PEEK_FRACTION] with swipe disabled. Home↔detail Crossfade lives in the sheet
+ * so MapLibre is not remounted.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -247,30 +253,38 @@ private fun MapBottomSheetScaffold(
     onCurrentLocationClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val sheetLocked = rememberUpdatedState(inDetail)
+    val confirmValueChange = remember {
+        { newValue: SheetValue ->
+            if (sheetLocked.value) {
+                newValue == SheetValue.PartiallyExpanded
+            } else {
+                true
+            }
+        }
+    }
     val sheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.PartiallyExpanded,
+        confirmValueChange = confirmValueChange,
         skipHiddenState = true
     )
     val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
-    var showInfoDialog by remember { mutableStateOf(false) }
     val sheetShape = RoundedCornerShape(topStart = SheetTopCorner, topEnd = SheetTopCorner)
-    val peekHeight = LocalConfiguration.current.screenHeightDp.dp * SHEET_PEEK_FRACTION
-    val sheetFullyExpanded = sheetState.currentValue == SheetValue.Expanded
+    val peekFraction = if (inDetail) SHEET_DETAIL_PEEK_FRACTION else SHEET_HOME_PEEK_FRACTION
+    val peekHeight = LocalConfiguration.current.screenHeightDp.dp * peekFraction
+    val sheetFullyExpanded = !inDetail && sheetState.currentValue == SheetValue.Expanded
     val sheetPeeked = sheetState.currentValue == SheetValue.PartiallyExpanded
+    val uriHandler = LocalUriHandler.current
+    val wikipediaUrl = WikipediaUrls.articleUrl(uiState.selectedLocation?.name)
 
-    // Map-first hops need the map visible: snap back to peek on home↔detail.
+    // Snap to the destination peek (40% home / 60% detail) without waiting for a drag.
     LaunchedEffect(inDetail) {
-        if (sheetState.currentValue != SheetValue.PartiallyExpanded) {
+        sheetState.partialExpand()
+    }
+    LaunchedEffect(inDetail, sheetState.currentValue) {
+        if (inDetail && sheetState.currentValue != SheetValue.PartiallyExpanded) {
             sheetState.partialExpand()
         }
-    }
-
-    val loc = uiState.selectedLocation
-    if (showInfoDialog && loc != null) {
-        LocationInfoDialog(
-            location = loc,
-            onDismiss = { showInfoDialog = false }
-        )
     }
 
     BottomSheetScaffold(
@@ -278,6 +292,7 @@ private fun MapBottomSheetScaffold(
         scaffoldState = scaffoldState,
         containerColor = Color.Transparent,
         sheetPeekHeight = peekHeight,
+        sheetSwipeEnabled = !inDetail,
         sheetShape = sheetShape,
         sheetContainerColor = MaterialTheme.colorScheme.surface,
         sheetTonalElevation = 1.dp,
@@ -298,6 +313,9 @@ private fun MapBottomSheetScaffold(
                     DetailContent(
                         uiState = uiState,
                         onDaySelected = onDaySelected,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(peekHeight),
                         header = {
                             WeatherSheetHeader(
                                 title = uiState.selectedLocation?.name.orEmpty(),
@@ -305,12 +323,15 @@ private fun MapBottomSheetScaffold(
                                 canShare = canShare,
                                 shareInProgress = shareInProgress,
                                 isDarkTheme = isDarkTheme,
-                                sheetFullyExpanded = sheetFullyExpanded,
+                                sheetFullyExpanded = false,
                                 overlayOnHero = true,
                                 onToggleTheme = onToggleTheme,
                                 onBack = onBack,
                                 onShare = onShare,
-                                onInfoClick = { showInfoDialog = true },
+                                wikipediaUrl = wikipediaUrl,
+                                onOpenWikipedia = { url ->
+                                    runCatching { uriHandler.openUri(url) }
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 12.dp)
@@ -394,6 +415,8 @@ private fun shareOutcomeMessage(
 }
 
 private const val BODY_CROSSFADE_MS = 280
-/** Peek fraction of screen height. Map remains ~60% visible behind the sheet. */
-private const val SHEET_PEEK_FRACTION = 0.40f
+/** Home peek: ~40% sheet so ~60% of the map stays visible. */
+private const val SHEET_HOME_PEEK_FRACTION = 0.40f
+/** Locked detail height: ~60% sheet so ~40% of the map stays visible. */
+private const val SHEET_DETAIL_PEEK_FRACTION = 0.60f
 private val SheetTopCorner = 24.dp

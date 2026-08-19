@@ -23,7 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -48,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,8 +66,8 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
 /**
  * Weight/size metrics shared by [DetailContent] and [PremiumShimmerLoadingState] so loading
  * never flashes a different geometry (overlay hero + 7 tall day buttons + activity rows).
- * Heights are fixed so the sheet can scroll; at peek the hero (and usually the day row) is
- * visible, and expanding/scrolling reveals activities.
+ * Heights are fixed so the locked 60% detail sheet can inner-scroll; the hero (and usually
+ * the day row) is visible at that height, and scrolling reveals activities.
  */
 internal object DetailLayout {
     const val ForecastDays = 7
@@ -205,9 +205,9 @@ internal fun CustomSearchBar(
 
 
 /**
- * First row of sheet chrome: city label + theme toggle on home; back, city, share, and
- * theme on detail. Home places this below the sheet edge. Detail overlays it on the city
- * hero ([overlayOnHero]) so it does not consume a separate vertical block.
+ * First row of sheet chrome: city label + theme toggle on home; back, city, Wikipedia,
+ * share, and theme on detail. Home places this below the sheet edge. Detail overlays it on
+ * the city hero ([overlayOnHero]) so it does not consume a separate vertical block.
  */
 @Composable
 internal fun WeatherSheetHeader(
@@ -223,7 +223,8 @@ internal fun WeatherSheetHeader(
     searchQuery: String = "",
     isSearching: Boolean = false,
     onQueryChange: (String) -> Unit = {},
-    onInfoClick: (() -> Unit)? = null,
+    wikipediaUrl: String? = null,
+    onOpenWikipedia: (String) -> Unit = {},
     overlayOnHero: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -268,11 +269,14 @@ internal fun WeatherSheetHeader(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (inDetail && onInfoClick != null) {
-                    IconButton(onClick = onInfoClick) {
+                if (inDetail) {
+                    IconButton(
+                        onClick = { wikipediaUrl?.let(onOpenWikipedia) },
+                        enabled = wikipediaUrl != null
+                    ) {
                         Icon(
-                            Icons.Filled.Info,
-                            contentDescription = stringResource(R.string.detail_info)
+                            painter = painterResource(R.drawable.ic_wikipedia),
+                            contentDescription = stringResource(R.string.detail_wikipedia)
                         )
                     }
                 }

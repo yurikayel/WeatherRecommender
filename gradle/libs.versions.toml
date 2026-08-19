@@ -30,8 +30,10 @@ datastore = "1.1.7"
 maplibreCompose = "0.13.0"
 maplibreAndroid = "13.0.2"
 robolectric = "4.14.1"
+desugarJdkLibs = "2.1.5"
 
 [libraries]
+desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
 androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "androidxCoreSplashscreen" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }

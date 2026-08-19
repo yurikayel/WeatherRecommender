@@ -21,7 +21,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,34 +36,33 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.weatherrecommender.R
-import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
 import com.example.weatherrecommender.domain.model.ScoringThresholds
 import com.example.weatherrecommender.ui.util.asUiText
-import kotlin.math.roundToInt
 
 private const val DAY_SWITCH_MS = 220
 
 /**
  * Detail body inside the map bottom sheet: an edge-to-edge city hero (header overlaid),
  * a full-width row of tall day buttons, and a vertical column of ranked activities.
- * Content scrolls with the sheet. At peek the hero (and usually the day row) is visible;
- * expanding or scrolling reveals activities. Tapping a day re-ranks activities
- * (handled by [WeatherViewModel.onDaySelected]). Pull-to-refresh is home-only.
+ * The sheet itself is locked at 60% of the screen; this column scrolls when content
+ * overflows that height. Tapping a day re-ranks activities (handled by
+ * [WeatherViewModel.onDaySelected]). Pull-to-refresh is home-only.
  */
 @Composable
 internal fun DetailContent(
     uiState: WeatherUiState,
     onDaySelected: (Int) -> Unit,
-    header: @Composable () -> Unit
+    header: @Composable () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val imageUrl = uiState.selectedLocation?.imageUrl ?: uiState.forecast?.location?.imageUrl
     val showLoadingShimmer = uiState.isLoadingForecast && uiState.forecast == null
     val forecast = uiState.forecast
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
+            .testTag("detail_sheet_body")
             .verticalScroll(rememberScrollState())
     ) {
         CityHeroOverlay(
@@ -202,44 +200,6 @@ private fun CityHeroOverlay(
             header()
         }
     }
-}
-
-@Composable
-internal fun LocationInfoDialog(
-    location: Location,
-    onDismiss: () -> Unit
-) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(text = location.name)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                val subtitle = listOfNotNull(location.admin1, location.country).joinToString(", ")
-                if (subtitle.isNotBlank()) {
-                    Text(text = subtitle, style = MaterialTheme.typography.bodyLarge)
-                }
-                Text(
-                    text = stringResource(
-                        if (location.hasSeaAccess) R.string.chip_coastal else R.string.chip_inland
-                    ),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                location.elevation?.let {
-                    Text(
-                        text = stringResource(R.string.chip_elevation, it.roundToInt()),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(android.R.string.ok))
-            }
-        }
-    )
 }
 
 @Composable

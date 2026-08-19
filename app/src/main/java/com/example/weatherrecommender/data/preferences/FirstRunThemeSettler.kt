@@ -2,6 +2,7 @@ package com.example.weatherrecommender.data.preferences
 
 import com.example.weatherrecommender.domain.location.GeoCoordinates
 import com.example.weatherrecommender.domain.util.SolarNight
+import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
 import javax.inject.Inject
@@ -22,7 +23,7 @@ class FirstRunThemeSettler @Inject constructor(
 
     suspend fun settle(
         coordinates: GeoCoordinates?,
-        now: Instant = Instant.now(),
+        now: Instant = Clock.systemUTC().instant(),
         zone: ZoneId = ZoneId.systemDefault()
     ) {
         mutex.withLock {

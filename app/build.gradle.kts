@@ -30,6 +30,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
+        // java.time (Instant, ZonedDateTime, Clock) on minSdk 24.
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures {
       compose = true
@@ -102,6 +104,8 @@ dependencies {
   val composeBom = platform(libs.androidx.compose.bom)
   implementation(composeBom)
   androidTestImplementation(composeBom)
+
+  coreLibraryDesugaring(libs.desugar.jdk.libs)
 
   // Core Android dependencies
   implementation(libs.androidx.core.ktx)

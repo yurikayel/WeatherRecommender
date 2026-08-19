@@ -21,6 +21,7 @@ import com.example.weatherrecommender.theme.WeatherRecommenderTheme
 import com.example.weatherrecommender.ui.WeatherScreen
 import com.example.weatherrecommender.ui.WeatherViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import java.time.Clock
 import java.time.ZonedDateTime
 import javax.inject.Inject
 import kotlinx.coroutines.delay
@@ -51,7 +52,7 @@ class MainActivity : ComponentActivity() {
                 initialValue = null
             )
             val clockNight = remember {
-                SolarNight.isNightByLocalClock(ZonedDateTime.now())
+                SolarNight.isNightByLocalClock(ZonedDateTime.now(Clock.systemDefaultZone()))
             }
             val darkTheme = storedMode.resolveRenderedDarkTheme(
                 systemInDarkTheme = isSystemInDarkTheme(),
