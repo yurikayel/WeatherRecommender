@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -66,21 +67,20 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
 /**
  * Weight/size metrics shared by [DetailContent] and [PremiumShimmerLoadingState] so loading
  * never flashes a different geometry (16:9 overlay hero + 7-day chips + compact activity rows).
- * The locked 60% sheet scrolls as one column; after the hero moves off, activities keep the
- * remaining viewport.
+ * The locked 60% sheet does not scroll: the hero keeps its 16:9 height, day chips stay
+ * [DayRowHeight], and ranked activity rows share the leftover space equally.
  */
 internal object DetailLayout {
     const val ForecastDays = 7
     const val ActivitySlots = 4
     const val HeroAspectRatio = 16f / 9f
     val DayRowHeight = 128.dp
-    val ActivityRowMinHeight = 56.dp
     val BlockSpacing = 8.dp
     val AfterDayRowSpacing = 8.dp
     val DayButtonSpacing = 4.dp
     val DayButtonCorner = 12.dp
     val SheetHorizontalPadding = 8.dp
-    val SheetBottomPadding = 16.dp
+    val SheetBottomPadding = 8.dp
 }
 
 /**
@@ -93,7 +93,7 @@ internal fun PremiumShimmerLoadingState(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(DetailLayout.AfterDayRowSpacing)
     ) {
         Row(
@@ -112,12 +112,12 @@ internal fun PremiumShimmerLoadingState(
                 )
             }
         }
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
             repeat(DetailLayout.ActivitySlots) {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(DetailLayout.ActivityRowMinHeight)
+                        .weight(1f)
                         .clip(RoundedCornerShape(4.dp))
                         .shimmerEffect()
                 )

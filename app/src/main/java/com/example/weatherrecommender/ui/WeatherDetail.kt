@@ -10,15 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -43,10 +41,12 @@ import com.example.weatherrecommender.ui.util.asUiText
 private const val DAY_SWITCH_MS = 220
 
 /**
- * Detail body inside the map bottom sheet: one outer [verticalScroll] (same pattern as home)
- * covering the city hero, a 7-day row, and ranked activities for the selected day.
- * The sheet is locked at 60%; tapping a day only swaps the activity list via
- * [WeatherViewModel.onDaySelected]. Pull-to-refresh is home-only.
+ * Detail body inside the map bottom sheet. The sheet is locked at 60% and this column
+ * fills that height — there is no [androidx.compose.foundation.verticalScroll]. The 16:9
+ * hero takes its aspect-ratio height; day chips stay [DetailLayout.DayRowHeight]; ranked
+ * activity rows share the remaining space via [Modifier.weight] so every row stays on
+ * screen. Tapping a day only swaps the activity list via [WeatherViewModel.onDaySelected].
+ * Pull-to-refresh is home-only.
  */
 @Composable
 internal fun DetailContent(
@@ -61,8 +61,8 @@ internal fun DetailContent(
 
     Column(
         modifier = modifier
+            .fillMaxSize()
             .testTag("detail_sheet_body")
-            .verticalScroll(rememberScrollState())
     ) {
         CityHeroOverlay(
             imageUrl = imageUrl,
@@ -76,6 +76,7 @@ internal fun DetailContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
                 .padding(
                     start = DetailLayout.SheetHorizontalPadding,
                     end = DetailLayout.SheetHorizontalPadding,
@@ -99,7 +100,11 @@ internal fun DetailContent(
             }
 
             if (showLoadingShimmer) {
-                PremiumShimmerLoadingState()
+                PremiumShimmerLoadingState(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                )
             } else if (forecast != null) {
                 WeekSummarySection(
                     forecast = forecast,
@@ -112,20 +117,18 @@ internal fun DetailContent(
                     animationSpec = tween(DAY_SWITCH_MS),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .weight(1f)
                         .testTag("detail_activity_list"),
                     label = "day_activities"
                 ) { (_, activities) ->
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxSize()) {
                         activities.forEachIndexed { index, ranked ->
-                            if (index > 0) {
-                                HorizontalDivider(
-                                    color = MaterialTheme.colorScheme.outlineVariant
-                                )
-                            }
                             ActivityItem(
                                 rankedActivity = ranked,
                                 isTopPick = index == 0,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
                             )
                         }
                     }
@@ -229,16 +232,22 @@ private fun ActivityItem(
     val colorScheme = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = modifier
-            .heightIn(min = DetailLayout.ActivityRowMinHeight)
-            .padding(horizontal = 4.dp, vertical = 6.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.padding(horizontal = 4.dp, vertical = 2.dp)
     ) {
         Icon(
             activityIcon(rankedActivity.activity),
             contentDescription = null,
             tint = colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(18.dp)
+        )
+        Text(
+            text = rankedActivity.score.toString(),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = if (isTopPick) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isTopPick) colorScheme.primary else colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(min = 28.dp)
         )
         Column(
             modifier = Modifier.weight(1f),
@@ -246,7 +255,7 @@ private fun ActivityItem(
         ) {
             Text(
                 text = rankedActivity.activity.asUiText().asString(),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 color = colorScheme.onSurface,
                 maxLines = 1,
@@ -254,17 +263,11 @@ private fun ActivityItem(
             )
             Text(
                 text = rankedActivity.reasonKey.asUiText(rankedActivity.reasonArgs).asString(),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Text(
-            text = rankedActivity.score.toString(),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = if (isTopPick) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (isTopPick) colorScheme.primary else colorScheme.onSurfaceVariant
-        )
     }
 }

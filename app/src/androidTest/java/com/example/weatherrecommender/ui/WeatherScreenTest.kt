@@ -8,7 +8,6 @@ import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -17,7 +16,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -130,10 +128,8 @@ class WeatherScreenTest {
         composeTestRule.waitForIdle()
     }
 
-    /** Detail is locked at 60%; activities may sit below the fold — scroll the outer sheet. */
+    /** Detail is locked at 60%; ranked rows share the leftover space and stay on screen. */
     private fun assertDisplayedInDetailSheet(text: String) {
-        composeTestRule.onNodeWithTag("detail_sheet_body")
-            .performScrollToNode(hasText(text))
         composeTestRule.onNodeWithText(text).assertIsDisplayed()
     }
 
