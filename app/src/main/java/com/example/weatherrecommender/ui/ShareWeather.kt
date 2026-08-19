@@ -34,6 +34,7 @@ import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -56,7 +57,8 @@ internal fun ShareWeatherCapture(
     days: List<DailyForecast>,
     selectedDayIndex: Int,
     rankedActivities: List<RankedActivity>,
-    onComplete: (ShareWeatherOutcome) -> Unit
+    onComplete: (ShareWeatherOutcome) -> Unit,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     val context = LocalContext.current
     val graphicsLayer = rememberGraphicsLayer()
@@ -100,7 +102,7 @@ internal fun ShareWeatherCapture(
         delay(64.milliseconds)
         val outcome = try {
             val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 shareWeatherBitmap(context, bitmap, location.name)
             }
         } catch (_: Exception) {

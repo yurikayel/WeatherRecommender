@@ -25,6 +25,7 @@ import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WAVE_I
 import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WAVE_MIN_RIDEABLE
 import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WIND_BAD_MIN
 import com.example.weatherrecommender.domain.model.ScoringThresholds.SURF_WIND_IDEAL_MAX
+import javax.inject.Inject
 import kotlin.math.roundToInt
 
 /**
@@ -57,7 +58,7 @@ interface ActivityScorer {
  * Surfing is only suggested where the coordinate has sea access (detected via the Marine API).
  * The score rewards rideable-but-manageable waves, warm air, and winds that aren't too strong.
  */
-class SurfScorer : ActivityScorer {
+class SurfScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.SURFING
 
     override fun isApplicable(context: ActivityContext): Boolean =
@@ -94,7 +95,7 @@ class SurfScorer : ActivityScorer {
  * Skiing is only suggested for mountainous locations (by elevation) or when fresh snow is falling.
  * The score rewards accumulating snowfall and sub-freezing temperatures.
  */
-class SkiScorer : ActivityScorer {
+class SkiScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.SKIING
 
     override fun isApplicable(context: ActivityContext): Boolean {
@@ -126,7 +127,7 @@ class SkiScorer : ActivityScorer {
  * Outdoor sightseeing is always plausible. The score rewards mild, dry days and penalises rain,
  * strong wind, and uncomfortable heat.
  */
-class OutdoorSightseeingScorer : ActivityScorer {
+class OutdoorSightseeingScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.OUTDOOR_SIGHTSEEING
 
     override fun isApplicable(context: ActivityContext): Boolean = true
@@ -153,7 +154,7 @@ class OutdoorSightseeingScorer : ActivityScorer {
  * Indoor sightseeing is always plausible and becomes the go-to option when the weather turns.
  * The score rises with rain, snow, and cold.
  */
-class IndoorSightseeingScorer : ActivityScorer {
+class IndoorSightseeingScorer @Inject constructor() : ActivityScorer {
     override val activityType = RecommendedActivity.INDOOR_SIGHTSEEING
 
     override fun isApplicable(context: ActivityContext): Boolean = true

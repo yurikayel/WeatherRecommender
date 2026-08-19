@@ -10,7 +10,7 @@ This is a native Android app that implements the Concierge Weather Recommender a
 
 Key experience details:
 - **7-Day Forecast (core)**: detail shows compact ranked activities for the selected day, then a **7-Day** dashboard (weather icon, high/low, precipitation, top activity + score per row). Tapping a week row re-ranks that day's activities. There are no separate "Pick a day" chips.
-- **Per-day recommendations**: a compact horizontal activity row (icon + name + score) reflects `selectedDayIndex`. There is no single "week-long" score.
+- **Per-day recommendations**: a compact activity row (icon + name + score) plus a localized **why** line from `ReasonKey` reflects `selectedDayIndex`. There is no single "week-long" score.
 - **Geography-aware activities**: activities that don't make sense for a location are hidden entirely (e.g. surfing is only offered where there is sea access; skiing only in mountainous terrain or when snow is falling).
 - **Home "top picks"**: vertical postcard cards (city name, best activity, temp; Wikipedia thumbnail when available), behind a **Top Picks / Recent** tab row (stretch). Pull-to-refresh on home (assignment **bonus**) force-refreshes this feed — only when the sheet is scrolled to the top **and** the collapsing map header is fully expanded (`modifier.pullToRefresh` `enabled`). Detail has no PTR.
 - **Recently viewed History**: the **Recent** tab lists up to 10 cities the user explicitly opened (search, top-pick, or map tap). Persisted via Room `lastViewedAt`; Nominatim/GeoNames id collisions are collapsed by proximity/name.
@@ -22,7 +22,7 @@ Key experience details:
 
 **Suggested review order**
 1. Home → search in the sheet header (e.g. Lisbon) → detail.
-2. Compact activity row for the selected day, then **7-Day** rows (weather, temps, precip, best activity).
+2. Compact activity row for the selected day (score + reason), then **7-Day** rows (weather, temps, precip, best activity).
 3. Tap a week row → activities re-rank. Open **Info** for coastal/inland/elevation.
 4. Share flyer still exports a 9:16 poster (city image when cached).
 
@@ -31,13 +31,16 @@ Key experience details:
 |-------|----------|
 | 7-day dashboard UI | `WeatherWeekSummary.kt` → `WeekSummarySection` |
 | Top activity per day | `WeatherViewModel.kt` → `weekTopActivities` |
-| Per-day ranking | `GetRankedActivitiesUseCase` + `ActivityScorer` strategies |
+| Per-day ranking | `GetRankedActivitiesUseCase` + `ActivityScorer` strategies (`DomainModule` `@Binds @IntoSet`) |
+| Per-lane UI fetch state | `WeatherUiLoad.kt` (`SearchUiState`, `FetchStatus`) + `WeatherViewModel` |
 | Offline SSOT | `WeatherRepositoryImpl` + Room `WeatherDao` |
+| Timeouts vs offline | `WeatherRepositoryImpl.toAppError()` (`SocketTimeoutException` → `Timeout`) |
+| IO dispatcher | `DispatcherModule` `@IoDispatcher` |
 | Score thresholds | `ScoringThresholds.kt` (domain) + README §g |
 
 **Run manually**: `./gradlew installDebug` → search in header → detail → tap week rows → Info dialog → toggle dark mode → share.
 
-**Pull requests**: [PR #1](https://github.com/yurikayel/WeatherRecommender/pull/1) (original delivery) · PR #2 `feat/review-feedback` (review feedback follow-up).
+**Pull requests**: [PR #1](https://github.com/yurikayel/WeatherRecommender/pull/1) (original delivery) · [PR #2](https://github.com/yurikayel/WeatherRecommender/pull/2) `feat/review-feedback` · this PR `feat/per-lane-state-and-scorer-di`.
 
 **Review feedback mapping (3.8 → this PR)**
 
@@ -55,7 +58,7 @@ Key experience details:
 - **Networking**: Retrofit, OkHttp, kotlinx.serialization
 - **Local Persistence**: Room Database (Offline-First / SSOT)
 - **Dependency Injection**: Dagger Hilt
-- **Concurrency**: Kotlin Coroutines and StateFlow
+- **Concurrency**: Kotlin Coroutines and StateFlow (`viewModelScope`; IO work on an injected `@IoDispatcher`)
 - **Testing**: JUnit 4, MockK, Turbine, Robolectric (ViewModel + Room integration), Paparazzi 2.x (CI runs with `-Ppaparazzi`)
 - **Quality**: detekt, Kover coverage, Android Lint
 
@@ -63,10 +66,11 @@ Key experience details:
 - **Clean Architecture Principles**: The project is strictly divided into three layers:
   - **Data Layer**: Retrofit interfaces (Open-Meteo Forecast / Geocoding / Marine, Nominatim), Room DAOs, and the Repository implementation mapping network data to domain models.
   - **Domain Layer**: Core business logic, `AppError` sealed hierarchy, and the `GetRankedActivitiesUseCase` fully isolated from Android dependencies.
-  - **UI Layer**: Composed of `WeatherScreen` (Jetpack Compose) and `WeatherViewModel`, orchestrating UI states via a `StateFlow`.
-- **Offline-First (SSOT)**: The UI never consumes data directly from the network. It observes a Room database `Flow`. A parallel background request fetches fresh data from the Open-Meteo API and updates the local database, triggering reactive UI updates.
-- **Strategy Pattern (SOLID)**: The recommendation engine utilizes independent `ActivityScorer` strategies (e.g., `SurfScorer`, `SkiScorer`) injected via Dagger Hilt, strictly adhering to the Open/Closed Principle. Each scorer exposes `isApplicable(context)` for geography gating and `score(context)` for a single day, so adding an activity means adding one class.
-- **Per-day scoring**: `GetRankedActivitiesUseCase(forecast, dayIndex)` ranks only the applicable activities for the selected day. Day switching is a pure, in-memory recompute (no network).
+  - **UI Layer**: Composed of `WeatherScreen` (Jetpack Compose) and `WeatherViewModel`, orchestrating UI states via a `StateFlow` (`_uiState.asStateFlow()`).
+- **Offline-First (SSOT)**: The UI never consumes data directly from the network. It observes a Room database `Flow`. A parallel background request fetches fresh data from the Open-Meteo API and updates the local database, triggering reactive UI updates. Selecting a city runs Room collect and `refreshForecast` as sibling coroutines under one `forecastJob` so a later selection cancels both.
+- **Per-lane fetch state**: Search, Top Picks, forecast, and map-tap are independent async lanes (`SearchUiState` / `FetchStatus`), not a single screen-level Loading/Content/Error. Pull-to-refresh can show existing Top Picks while `FetchStatus.Refreshing`.
+- **Strategy Pattern (SOLID)**: The recommendation engine utilizes independent `ActivityScorer` strategies (e.g., `SurfScorer`, `SkiScorer`) bound into a `Set` via Hilt `@Binds @IntoSet`. Each scorer exposes `isApplicable(context)` for geography gating and `score(context)` for a single day. Adding an activity is a new class plus one bind method — the ranking use case is not edited.
+- **Per-day scoring**: `GetRankedActivitiesUseCase(forecast, dayIndex)` ranks only the applicable activities for the selected day. Day switching is a pure, in-memory recompute (no network). Each ranked row's `ReasonKey` is mapped to a localized string on the detail screen.
 - **Home suggestions**: `GetTopPicksUseCase` picks population-weighted cities from a bundled `FeaturedCities` seed list (the Geocoding API has no "browse" endpoint) and fetches their forecasts concurrently and best-effort via `WeatherRepository.getForecastRemote` (read-only, does not pollute the cache).
 
 ## d. How to build and run the app 🚀
@@ -189,7 +193,7 @@ Honest scope note: a **strict 3–4 hour** take would likely stop at search → 
 - **WorkManager Sync**: Background sync runs every 6 hours when any network is available. Stricter constraints (unmetered + charging) were removed to improve refresh reliability on mobile.
 - **Share → Downloads**: MediaStore on API 29+ (no permission); pre-Q may request legacy write. A Downloads failure never blocks the share sheet.
 - **Crash reporting**: A `CrashReporter` abstraction logs locally; swap for Firebase Crashlytics when a Firebase project is configured.
-- **Rate limiting (HTTP)**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present); other failures map to localized error strings.
+- **Rate limiting (HTTP)**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present). Timeouts (`SocketTimeoutException`, HTTP 408) map to `AppError.NetworkError.Timeout`; generic `IOException` maps to `NoConnectivity`; TLS failures are not treated as offline.
 
 **Deliberately omitted**
 - Continuous GPS tracking / background location (home uses last-known fix + optional current-location chip when permission is granted).
@@ -201,7 +205,7 @@ Honest scope note: a **strict 3–4 hour** take would likely stop at search → 
 ## j. Production-readiness notes
 Implemented:
 1. Network connectivity checks via `ConnectivityObserver` with `ACCESS_NETWORK_STATE` permission.
-2. Localized error mapping via `UiText` and `AppErrorMapper`.
+2. Localized error mapping via `UiText` and `AppErrorMapper`; GPS and share bitmap IO hop to an injected `@IoDispatcher` rather than a hardcoded `Dispatchers.IO`.
 3. CI/CD via GitHub Actions (unit tests + Paparazzi verify, detekt, lint, Kover, debug + release builds on JDK 21; separate emulator job for instrumented tests). CI installs `platforms;android-36` and `build-tools;36.0.0`.
 4. Debug-only HTTP body logging; release builds use R8 minification.
 5. Privacy policy: see [PRIVACY_POLICY.md](PRIVACY_POLICY.md).

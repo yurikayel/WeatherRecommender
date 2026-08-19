@@ -115,6 +115,16 @@ class WeatherRepositoryImplTest {
     }
 
     @Test
+    fun `searchCity maps SocketTimeoutException to Timeout`() = runTest {
+        coEvery { geocodingApi.searchCity(any()) } throws java.net.SocketTimeoutException("read timed out")
+
+        val result = repository.searchCity("Lon")
+
+        assertTrue(result is Result.Error)
+        assertEquals(AppError.NetworkError.Timeout, (result as Result.Error).error)
+    }
+
+    @Test
     fun `searchCity maps 429 to RateLimitExceeded`() = runTest {
         coEvery { geocodingApi.searchCity(any()) } throws HttpException(
             Response.error<String>(429, "".toResponseBody())

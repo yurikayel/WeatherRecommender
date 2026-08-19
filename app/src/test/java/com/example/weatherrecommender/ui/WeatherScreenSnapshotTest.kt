@@ -117,7 +117,7 @@ class WeatherScreenSnapshotTest {
 
     @Test
     fun homeEmpty() {
-        content(WeatherUiState(isLoadingTopPicks = false))
+        content(WeatherUiState())
     }
 
     @Test
@@ -160,7 +160,7 @@ class WeatherScreenSnapshotTest {
             Location(1, "London", 51.5, -0.1, "UK", "England"),
             Location(2, "Paris", 48.8, 2.3, "France", "Ile-de-France")
         )
-        content(WeatherUiState(query = "Lon", searchResults = locations))
+        content(WeatherUiState(query = "Lon", search = SearchUiState.Results(locations)))
     }
 
     @Test

@@ -327,6 +327,8 @@ class WeatherRepositoryImpl @Inject constructor(
 
     private fun Exception.toAppError(): AppError {
         return when (this) {
+            is java.net.SocketTimeoutException -> AppError.NetworkError.Timeout
+            is javax.net.ssl.SSLException -> AppError.NetworkError.Unknown(this)
             is IOException -> AppError.NetworkError.NoConnectivity
             is HttpException -> {
                 when (code()) {

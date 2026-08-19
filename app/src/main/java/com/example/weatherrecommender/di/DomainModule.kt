@@ -1,34 +1,38 @@
 package com.example.weatherrecommender.di
 
 import com.example.weatherrecommender.domain.usecase.scorer.ActivityScorer
-import com.example.weatherrecommender.domain.usecase.scorer.SkiScorer
-import com.example.weatherrecommender.domain.usecase.scorer.SurfScorer
-import dagger.Module
-import dagger.Provides
-import dagger.hilt.InstallIn
-import dagger.hilt.components.SingletonComponent
-import dagger.multibindings.ElementsIntoSet
 import com.example.weatherrecommender.domain.usecase.scorer.IndoorSightseeingScorer
 import com.example.weatherrecommender.domain.usecase.scorer.OutdoorSightseeingScorer
+import com.example.weatherrecommender.domain.usecase.scorer.SkiScorer
+import com.example.weatherrecommender.domain.usecase.scorer.SurfScorer
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
 
 /**
- * Hilt module for providing domain-layer dependencies, specifically strategy pattern implementations.
+ * Binds each [ActivityScorer] into the set consumed by [com.example.weatherrecommender.domain.usecase.GetRankedActivitiesUseCase].
+ *
+ * A new activity is one class plus one `@Binds @IntoSet` method — the use case is not edited.
  */
 @Module
 @InstallIn(SingletonComponent::class)
-object DomainModule {
+abstract class DomainModule {
 
-    /**
-     * Provides the set of [ActivityScorer] strategies used to rank weather activities.
-     */
-    @Provides
-    @ElementsIntoSet
-    fun provideActivityScorers(): Set<ActivityScorer> {
-        return setOf(
-            SurfScorer(),
-            SkiScorer(),
-            OutdoorSightseeingScorer(),
-            IndoorSightseeingScorer()
-        )
-    }
+    @Binds
+    @IntoSet
+    abstract fun bindSurfScorer(impl: SurfScorer): ActivityScorer
+
+    @Binds
+    @IntoSet
+    abstract fun bindSkiScorer(impl: SkiScorer): ActivityScorer
+
+    @Binds
+    @IntoSet
+    abstract fun bindOutdoorSightseeingScorer(impl: OutdoorSightseeingScorer): ActivityScorer
+
+    @Binds
+    @IntoSet
+    abstract fun bindIndoorSightseeingScorer(impl: IndoorSightseeingScorer): ActivityScorer
 }

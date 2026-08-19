@@ -265,33 +265,40 @@ private fun SyncErrorBanner(message: String) {
 }
 @Composable
 private fun ActivityItem(rankedActivity: RankedActivity) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Icon(
-            activityIcon(rankedActivity.activity),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.size(24.dp)
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                activityIcon(rankedActivity.activity),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(24.dp)
+            )
+            Text(
+                text = rankedActivity.activity.asUiText().asString(),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            Text(
+                text = rankedActivity.score.toString(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    rankedActivity.score > ScoringThresholds.SCORE_HIGH -> MaterialTheme.colorScheme.primary
+                    rankedActivity.score > ScoringThresholds.SCORE_MID -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.error
+                }
+            )
+        }
         Text(
-            text = rankedActivity.activity.asUiText().asString(),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-        )
-        Text(
-            text = rankedActivity.score.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = when {
-                rankedActivity.score > ScoringThresholds.SCORE_HIGH -> MaterialTheme.colorScheme.primary
-                rankedActivity.score > ScoringThresholds.SCORE_MID -> MaterialTheme.colorScheme.secondary
-                else -> MaterialTheme.colorScheme.error
-            }
+            text = rankedActivity.reasonKey.asUiText(rankedActivity.reasonArgs).asString(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

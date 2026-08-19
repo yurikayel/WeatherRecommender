@@ -110,8 +110,7 @@ class WeatherScreenTest {
         setContent(
             WeatherUiState(
                 deviceLocation = lisbon,
-                topPicks = emptyList(),
-                isLoadingTopPicks = false
+                topPicks = emptyList()
             )
         )
 
@@ -159,7 +158,7 @@ class WeatherScreenTest {
 
     @Test
     fun home_emptyTopPicks_showsOfflineHint() {
-        setContent(WeatherUiState(topPicks = emptyList(), isLoadingTopPicks = false))
+        setContent(WeatherUiState(topPicks = emptyList()))
 
         composeTestRule
             .onNodeWithText("Connect to the internet to see today's suggestions.")
@@ -208,7 +207,6 @@ class WeatherScreenTest {
         setContent(
             WeatherUiState(
                 topPicks = emptyList(),
-                isLoadingTopPicks = false,
                 recentHistory = listOf(london, lisbon)
             )
         )
@@ -234,7 +232,7 @@ class WeatherScreenTest {
             london,
             Location(3, "Paris", 48.8, 2.3, "France", "Ile-de-France")
         )
-        setContent(WeatherUiState(searchResults = locations, query = "Lon"))
+        setContent(WeatherUiState(search = SearchUiState.Results(locations), query = "Lon"))
 
         composeTestRule.onNodeWithText("📍 London, England, UK").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("📍 Paris, Ile-de-France, France").performScrollTo().assertIsDisplayed()
@@ -244,7 +242,7 @@ class WeatherScreenTest {
     fun search_tappingResult_invokesLocationSelected() {
         var selected: Location? = null
         setContent(
-            WeatherUiState(searchResults = listOf(london), query = "Lon"),
+            WeatherUiState(search = SearchUiState.Results(listOf(london)), query = "Lon"),
             onLocationSelected = { selected = it }
         )
 
@@ -307,7 +305,7 @@ class WeatherScreenTest {
             WeatherUiState(
                 destination = WeatherDestination.Detail(london),
                 forecast = null,
-                isLoadingForecast = true
+                forecastFetch = FetchStatus.Loading
             )
         )
 
@@ -403,7 +401,6 @@ class WeatherScreenTest {
         setContent(
             WeatherUiState(
                 destination = WeatherDestination.Detail(london),
-                isLoadingForecast = false,
                 error = UiText.DynamicString("Server error")
             )
         )
