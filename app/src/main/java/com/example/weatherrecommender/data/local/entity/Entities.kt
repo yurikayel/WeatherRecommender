@@ -23,7 +23,12 @@ data class LocationEntity(
     /** Epoch millis when the user last opened this location; 0 means never viewed. */
     val lastViewedAt: Long = 0L,
     /** URL to a background image for this city, usually fetched from Wikipedia. */
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    /**
+     * When [imageUrl] (and stable name) were last confirmed. 0 = unknown (treat existing
+     * thumbnail as still valid until the next successful persist).
+     */
+    val placeMetadataUpdatedAt: Long = 0L
 )
 
 /**

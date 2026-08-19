@@ -64,29 +64,53 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
     RecommendedActivity.SKIING -> Icons.Outlined.DownhillSkiing
 }
 
-/** Skeleton placeholder shown while a city's forecast loads. Mirrors the loaded detail body. */
+/**
+ * Skeleton for the detail sheet. Geometry matches [DetailContent]: 180 dp hero, weekday,
+ * ranked-activity row (icon + name + score + reason), then seven 52 dp week rows.
+ *
+ * @param showHeroPlaceholder When the city has no cached image URL yet.
+ */
 @Composable
-internal fun PremiumShimmerLoadingState() {
+internal fun PremiumShimmerLoadingState(showHeroPlaceholder: Boolean = true) {
     Column {
-        Box(Modifier.width(120.dp).height(28.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
+        if (showHeroPlaceholder) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .shimmerEffect()
+            )
+            Spacer(Modifier.height(12.dp))
+        }
+        Box(Modifier.width(140.dp).height(28.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
         Spacer(Modifier.height(16.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
         ) {
-            listOf(108.dp, 96.dp, 58.dp, 48.dp).forEach { nameWidth ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(Modifier.size(24.dp).clip(CircleShape).shimmerEffect())
+            listOf(108.dp, 96.dp, 88.dp).forEach { nameWidth ->
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(Modifier.size(24.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
+                        Box(
+                            Modifier.width(nameWidth).height(16.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect()
+                        )
+                        Box(Modifier.width(28.dp).height(18.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
+                    }
                     Box(
-                        Modifier.width(nameWidth).height(16.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect()
+                        Modifier
+                            .width(nameWidth + 48.dp)
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .shimmerEffect()
                     )
-                    Box(Modifier.width(24.dp).height(18.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
                 }
             }
         }

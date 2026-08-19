@@ -37,7 +37,8 @@ fun LocationEntity.toDomain(): Location {
  */
 fun Location.toEntity(
     lastUpdated: Long = System.currentTimeMillis(),
-    lastViewedAt: Long = 0L
+    lastViewedAt: Long = 0L,
+    placeMetadataUpdatedAt: Long = 0L
 ): LocationEntity {
     return LocationEntity(
         id = this.id,
@@ -52,7 +53,8 @@ fun Location.toEntity(
         featureCode = this.featureCode,
         hasSeaAccess = this.hasSeaAccess,
         lastViewedAt = lastViewedAt,
-        imageUrl = this.imageUrl
+        imageUrl = this.imageUrl,
+        placeMetadataUpdatedAt = placeMetadataUpdatedAt
     )
 }
 

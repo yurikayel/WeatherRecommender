@@ -17,6 +17,7 @@ import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
 import com.example.weatherrecommender.domain.util.ConnectivityObserver
 import com.example.weatherrecommender.domain.util.ConnectivityStatus
 import com.example.weatherrecommender.ui.map.MapCameraPosition
+import com.example.weatherrecommender.ui.map.MapHopProfile
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -28,6 +29,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -72,6 +74,8 @@ class WeatherViewModelTest {
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Available)
         every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
         coEvery { repository.markLocationViewed(any()) } returns Unit
+        coEvery { repository.prefetchNearbyCities(any()) } returns Unit
+        coEvery { repository.hasFreshForecast(any()) } returns false
         coEvery { getTopPicksUseCase(any(), any()) } returns emptyList()
         every { deviceLocationProvider.hasLocationPermission() } returns false
         coEvery { deviceLocationProvider.getLastKnownLocation() } returns null
@@ -351,12 +355,49 @@ class WeatherViewModelTest {
         backgroundScope.launch { viewModel.uiState.collect {} }
 
         viewModel.onLocationSelected(location)
+        // Pin is synchronous; hop profile waits for the Room freshness check.
+        assertEquals(location, viewModel.uiState.value.mapPin)
+        assertTrue(viewModel.uiState.value.destination is WeatherDestination.Home)
+
+        runCurrent()
+        val flying = viewModel.uiState.value
+        assertEquals(location.latitude, flying.mapCamera.latitude, 0.0)
+        assertEquals(MapHopProfile.CACHE_MISS, flying.mapCamera.hop)
+        assertTrue(flying.destination is WeatherDestination.Home)
+
+        advanceTimeBy(MapHopProfile.CACHE_MISS.contentRevealMs - 1)
+        assertTrue(viewModel.uiState.value.destination is WeatherDestination.Home)
+
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(location.latitude, state.mapCamera.latitude, 0.0)
         assertEquals(location.longitude, state.mapCamera.longitude, 0.0)
         assertEquals(location, state.mapPin)
+        assertTrue(state.destination is WeatherDestination.Detail)
+    }
+
+    @Test
+    fun `cached location selection uses the snappy hop and reveals earlier`() = runTest {
+        coEvery { repository.hasFreshForecast(location) } returns true
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationSelected(location)
+        runCurrent()
+
+        val flying = viewModel.uiState.value
+        assertEquals(MapHopProfile.CACHED, flying.mapCamera.hop)
+        assertTrue(flying.destination is WeatherDestination.Home)
+
+        advanceTimeBy(MapHopProfile.CACHED.contentRevealMs - 1)
+        assertTrue(viewModel.uiState.value.destination is WeatherDestination.Home)
+
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.destination is WeatherDestination.Detail)
     }
 
     @Test

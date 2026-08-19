@@ -1,7 +1,9 @@
 package com.example.weatherrecommender.data.repository
 
 import com.example.weatherrecommender.data.local.dao.WeatherDao
+import com.example.weatherrecommender.data.local.entity.DailyForecastEntity
 import com.example.weatherrecommender.data.mapper.toEntity
+import com.example.weatherrecommender.domain.model.CachePolicy
 import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
@@ -201,13 +203,103 @@ class WeatherRepositoryImplTest {
     @Test
     fun `refreshForecast evicts oldest locations when cache exceeds cap`() = runTest {
         coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
-        coEvery { weatherDao.getLocationCount() } returns 21
-        coEvery { weatherDao.getOldestLocationIds(1) } returns listOf(99L)
+        coEvery { weatherDao.getLocationCount() } returnsMany listOf(37, 36)
+        coEvery { weatherDao.getUnviewedOldestIds(1) } returns listOf(99L)
 
         val result = repository.refreshForecast(location)
 
         assertTrue(result is Result.Success)
         coVerify { weatherDao.deleteLocationWithForecasts(99L) }
+    }
+
+    @Test
+    fun `refreshForecast skips network when weather cache is within Open-Meteo TTL`() = runTest {
+        val fresh = location.toEntity(
+            lastUpdated = System.currentTimeMillis(),
+            lastViewedAt = 1L
+        )
+        coEvery { weatherDao.getLocation(location.id) } returns fresh
+        coEvery { weatherDao.getDailyForecasts(location.id) } returns listOf(
+            DailyForecastEntity(
+                locationId = 1,
+                date = "2026-07-16",
+                maxTemp = 22.0,
+                minTemp = 12.0,
+                weatherCode = 0,
+                precipitationSum = 0.0,
+                maxWindSpeed = 10.0,
+                snowfallSum = 0.0
+            )
+        )
+
+        val result = repository.refreshForecast(location)
+
+        assertTrue(result is Result.Success)
+        coVerify(exactly = 0) { forecastApi.getForecast(any(), any()) }
+        coVerify(exactly = 0) { weatherDao.insertLocationWithForecast(any(), any()) }
+    }
+
+    @Test
+    fun `hasFreshForecast is true when Room weather is within TTL`() = runTest {
+        coEvery { weatherDao.getLocation(location.id) } returns location.toEntity(
+            lastUpdated = System.currentTimeMillis(),
+            lastViewedAt = 1L
+        )
+        coEvery { weatherDao.getDailyForecasts(location.id) } returns listOf(
+            DailyForecastEntity(
+                locationId = 1,
+                date = "2026-07-16",
+                maxTemp = 22.0,
+                minTemp = 12.0,
+                weatherCode = 0,
+                precipitationSum = 0.0,
+                maxWindSpeed = 10.0,
+                snowfallSum = 0.0
+            )
+        )
+
+        assertTrue(repository.hasFreshForecast(location))
+    }
+
+    @Test
+    fun `hasFreshForecast is false when Room is empty or stale`() = runTest {
+        coEvery { weatherDao.getLocation(location.id) } returns null
+        coEvery { weatherDao.getDailyForecasts(location.id) } returns emptyList()
+        assertTrue(!repository.hasFreshForecast(location))
+
+        coEvery { weatherDao.getLocation(location.id) } returns location.toEntity(
+            lastUpdated = System.currentTimeMillis() - CachePolicy.WEATHER_TTL_MS - 1
+        )
+        coEvery { weatherDao.getDailyForecasts(location.id) } returns listOf(
+            DailyForecastEntity(
+                locationId = 1,
+                date = "2026-07-16",
+                maxTemp = 22.0,
+                minTemp = 12.0,
+                weatherCode = 0,
+                precipitationSum = 0.0,
+                maxWindSpeed = 10.0,
+                snowfallSum = 0.0
+            )
+        )
+        assertTrue(!repository.hasFreshForecast(location))
+    }
+
+    @Test
+    fun `refreshForecast does not refetch Wikipedia when place metadata is fresh`() = runTest {
+        val staleWeather = location.copy(imageUrl = "https://example.com/london.jpg").toEntity(
+            lastUpdated = System.currentTimeMillis() - CachePolicy.WEATHER_TTL_MS - 1,
+            lastViewedAt = 1L,
+            placeMetadataUpdatedAt = System.currentTimeMillis()
+        )
+        coEvery { weatherDao.getLocation(location.id) } returns staleWeather
+        coEvery { weatherDao.getDailyForecasts(location.id) } returns emptyList()
+        coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
+
+        val result = repository.refreshForecast(location.copy(imageUrl = "https://example.com/london.jpg"))
+
+        assertTrue(result is Result.Success)
+        coVerify(exactly = 0) { wikipediaApi.getPageImage(any(), any(), any(), any(), any()) }
     }
 
     @Test

@@ -33,6 +33,7 @@ import org.maplibre.compose.sources.rememberGeoJsonSource
 import org.maplibre.compose.style.BaseStyle
 import org.maplibre.compose.util.ClickResult
 import org.maplibre.spatialk.geojson.Position
+import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -105,13 +106,19 @@ private fun WeatherMapLibre(
         )
     )
 
-    LaunchedEffect(camera.latitude, camera.longitude, camera.zoom) {
+    LaunchedEffect(
+        camera.latitude,
+        camera.longitude,
+        camera.zoom,
+        camera.hop
+    ) {
+        delay(camera.hop.delayMs.milliseconds)
         cameraState.animateTo(
             finalPosition = CameraPosition(
                 target = Position(longitude = camera.longitude, latitude = camera.latitude),
                 zoom = camera.zoom
             ),
-            duration = 1200.milliseconds
+            duration = camera.hop.durationMs.milliseconds
         )
     }
 

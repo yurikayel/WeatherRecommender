@@ -44,6 +44,9 @@ interface WeatherDao {
     @Query("SELECT * FROM daily_forecast_entity WHERE locationId = :locationId ORDER BY date ASC")
     fun getDailyForecastsFlow(locationId: Long): Flow<List<DailyForecastEntity>>
 
+    @Query("SELECT * FROM daily_forecast_entity WHERE locationId = :locationId ORDER BY date ASC")
+    suspend fun getDailyForecasts(locationId: Long): List<DailyForecastEntity>
+
     /**
      * Retrieves a single location by its [locationId] for one-shot reads (e.g., workers).
      */
@@ -83,6 +86,9 @@ interface WeatherDao {
      */
     @Query("SELECT COUNT(*) FROM location_entity")
     suspend fun getLocationCount(): Int
+
+    @Query("SELECT id FROM location_entity WHERE lastViewedAt = 0 ORDER BY lastUpdated ASC LIMIT :count")
+    suspend fun getUnviewedOldestIds(count: Int): List<Long>
 
     /**
      * Retrieves the IDs of the oldest (least recently updated) locations, limited by [count].

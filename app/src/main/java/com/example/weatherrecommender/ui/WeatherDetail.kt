@@ -104,6 +104,8 @@ internal fun DetailContent(
     ) {
         val location = uiState.selectedLocation
         val imageUrl = location?.imageUrl ?: uiState.forecast?.location?.imageUrl
+        val showLoadingShimmer = uiState.isLoadingForecast && uiState.forecast == null
+
         if (imageUrl != null) {
             Card(
                 modifier = Modifier
@@ -127,9 +129,8 @@ internal fun DetailContent(
             }
         }
 
-        if (uiState.isLoadingForecast && uiState.forecast == null) {
-            Spacer(Modifier.height(16.dp))
-            PremiumShimmerLoadingState()
+        if (showLoadingShimmer) {
+            PremiumShimmerLoadingState(showHeroPlaceholder = imageUrl == null)
         }
 
         uiState.error?.let { error ->

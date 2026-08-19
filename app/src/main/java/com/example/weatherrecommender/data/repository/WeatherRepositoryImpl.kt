@@ -13,11 +13,15 @@ import com.example.weatherrecommender.data.remote.WikipediaApi
 import com.example.weatherrecommender.data.remote.dto.NominatimResponse
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.AppResult
+import com.example.weatherrecommender.domain.model.CachePolicy
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.Result
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
+import com.example.weatherrecommender.domain.usecase.MajorCities
+import com.example.weatherrecommender.domain.usecase.NearbyCities
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -93,14 +97,31 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun refreshForecast(location: Location): AppResult<Unit> {
+    override suspend fun hasFreshForecast(location: Location): Boolean {
+        val existing = weatherDao.getLocation(location.id)
+        val existingDays = weatherDao.getDailyForecasts(location.id)
+        return isWeatherFresh(existing, existingDays, System.currentTimeMillis())
+    }
+
+    override suspend fun refreshForecast(location: Location, force: Boolean): AppResult<Unit> {
         return try {
-            val forecast = fetchRemoteForecast(location)
-            // Preserve view history across forecast REPLACE upserts.
             val existing = weatherDao.getLocation(location.id)
+            val existingDays = weatherDao.getDailyForecasts(location.id)
+            val now = System.currentTimeMillis()
+            if (!force && isWeatherFresh(existing, existingDays, now)) {
+                return Result.Success(Unit)
+            }
+
+            val forecast = fetchRemoteForecast(location, existing, now)
             val existingViewedAt = existing?.lastViewedAt ?: 0L
             weatherDao.insertLocationWithForecast(
-                location = forecast.location.toEntity(lastViewedAt = existingViewedAt),
+                location = forecast.location.toEntity(
+                    lastViewedAt = existingViewedAt,
+                    placeMetadataUpdatedAt = forecast.location.let { loc ->
+                        existing?.placeMetadataUpdatedAt.takeIf { existing?.imageUrl == loc.imageUrl && it != 0L }
+                            ?: now
+                    }
+                ),
                 forecasts = forecast.dailyForecasts.map { it.toEntity(location.id) }
             )
             evictStaleLocationsIfNeeded()
@@ -110,22 +131,49 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun prefetchNearbyCities(origin: Location) {
+        val neighbors = NearbyCities.select(origin, MajorCities.all)
+        neighbors.forEachIndexed { index, nearby ->
+            if (index > 0) delay(PREFETCH_STAGGER_MS)
+            try {
+                refreshForecast(nearby, force = false)
+            } catch (_: Exception) {
+                // Best-effort warm of the map neighborhood.
+            }
+        }
+    }
+
+    private fun isWeatherFresh(
+        existing: LocationEntity?,
+        existingDays: List<DailyForecastEntity>,
+        now: Long
+    ): Boolean {
+        if (existing == null || existingDays.isEmpty()) return false
+        return now - existing.lastUpdated < CachePolicy.WEATHER_TTL_MS
+    }
+
     /**
-     * Keeps the Room cache bounded by evicting the least-recently-updated locations once the
-     * cap is exceeded. SyncWorker only iterates stored locations, so this also bounds background sync.
+     * Keeps the Room cache bounded. Prefetched (never viewed) cities are evicted first so
+     * history survives. SyncWorker only iterates stored locations, so this also bounds background sync.
      */
     private suspend fun evictStaleLocationsIfNeeded() {
         val overflow = weatherDao.getLocationCount() - MAX_CACHED_LOCATIONS
         if (overflow <= 0) return
 
-        weatherDao.getOldestLocationIds(overflow).forEach { locationId ->
+        val unviewed = weatherDao.getUnviewedOldestIds(overflow)
+        unviewed.forEach { locationId ->
+            weatherDao.deleteLocationWithForecasts(locationId)
+        }
+        val remaining = weatherDao.getLocationCount() - MAX_CACHED_LOCATIONS
+        if (remaining <= 0) return
+        weatherDao.getOldestLocationIds(remaining).forEach { locationId ->
             weatherDao.deleteLocationWithForecasts(locationId)
         }
     }
 
     override suspend fun getForecastRemote(location: Location): AppResult<WeatherForecast> {
         return try {
-            Result.Success(fetchRemoteForecast(location))
+            Result.Success(fetchRemoteForecast(location, existing = null, now = System.currentTimeMillis()))
         } catch (e: Exception) {
             Result.Error(e.toAppError())
         }
@@ -208,7 +256,11 @@ class WeatherRepositoryImpl @Inject constructor(
      * Fetches the forecast (and best-effort marine data) for a location and assembles the domain
      * model, resolving sea access from wave data. Does not persist anything.
      */
-    private suspend fun fetchRemoteForecast(location: Location): WeatherForecast {
+    private suspend fun fetchRemoteForecast(
+        location: Location,
+        existing: LocationEntity?,
+        now: Long
+    ): WeatherForecast {
         val forecastResponse = forecastApi.getForecast(
             latitude = location.latitude,
             longitude = location.longitude
@@ -218,10 +270,7 @@ class WeatherRepositoryImpl @Inject constructor(
         val waveByDate = fetchWaveHeightsByDate(location)
         val hasSeaAccess = waveByDate?.values?.any { it != null } ?: location.hasSeaAccess
 
-        var imageUrl = location.imageUrl
-        if (imageUrl == null) {
-            imageUrl = fetchWikipediaImageUrl(location.name)
-        }
+        val imageUrl = resolveImageUrl(location, existing, now)
 
         val dailyForecasts = daily.time.indices.map { i ->
             val date = daily.time.getOrNull(i) ?: ""
@@ -241,6 +290,24 @@ class WeatherRepositoryImpl @Inject constructor(
             location = location.copy(hasSeaAccess = hasSeaAccess, imageUrl = imageUrl),
             dailyForecasts = dailyForecasts
         )
+    }
+
+    /**
+     * City pictures and names change rarely. Reuse a stored Wikipedia URL for
+     * [CachePolicy.PLACE_METADATA_TTL_MS] (and treat a missing timestamp as still valid).
+     */
+    private suspend fun resolveImageUrl(
+        location: Location,
+        existing: LocationEntity?,
+        now: Long
+    ): String? {
+        val cachedUrl = location.imageUrl ?: existing?.imageUrl
+        val metadataAt = existing?.placeMetadataUpdatedAt ?: 0L
+        val metadataFresh = cachedUrl != null && (
+            metadataAt == 0L || now - metadataAt < CachePolicy.PLACE_METADATA_TTL_MS
+        )
+        if (metadataFresh) return cachedUrl
+        return fetchWikipediaImageUrl(location.name) ?: cachedUrl
     }
 
     private suspend fun fetchWikipediaImageUrl(cityName: String): String? {
@@ -288,8 +355,9 @@ class WeatherRepositoryImpl @Inject constructor(
     )
 
     private companion object {
-        const val MAX_CACHED_LOCATIONS = 20
+        const val MAX_CACHED_LOCATIONS = 36
         const val DEDUPE_FETCH_MULTIPLIER = 3
+        const val PREFETCH_STAGGER_MS = 150L
     }
 
     /**
