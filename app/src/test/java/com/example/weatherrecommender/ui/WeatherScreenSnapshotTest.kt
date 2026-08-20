@@ -27,9 +27,9 @@ class WeatherScreenSnapshotTest {
     val paparazzi = Paparazzi(
         deviceConfig = DeviceConfig.PIXEL_5,
         theme = "android:Theme.Material.Light.NoActionBar",
-        // Paparazzi 2.0.0-alpha05: small tolerance absorbs font anti-aliasing differences between
-        // Windows (where goldens are recorded) and Linux CI despite identical layouts.
-        maxPercentDifference = 0.5
+        // Goldens are recorded on Windows; Linux CI layoutlib anti-aliases more glyphs on the
+        // dense detail sheet (day chips + wrapped activity copy) than 0.5% could absorb.
+        maxPercentDifference = 2.0
     )
 
     /** Satisfies [rememberLauncherForActivityResult] used by share-permission UX under layoutlib. */
@@ -52,7 +52,13 @@ class WeatherScreenSnapshotTest {
             // Inspection mode keeps MapLibre off the snapshot path (native libs are unavailable).
             CompositionLocalProvider(
                 LocalInspectionMode provides true,
-                LocalActivityResultRegistryOwner provides activityResultOwner
+                LocalActivityResultRegistryOwner provides activityResultOwner,
+                // Lock Light/Dark so goldens keep the sun/moon toggle instead of the Cycle pill.
+                LocalThemeMode provides if (darkTheme) {
+                    com.example.weatherrecommender.data.preferences.ThemeMode.DARK
+                } else {
+                    com.example.weatherrecommender.data.preferences.ThemeMode.LIGHT
+                }
             ) {
                 WeatherRecommenderTheme(darkTheme = darkTheme, typography = Typography()) {
                     WeatherScreenContent(

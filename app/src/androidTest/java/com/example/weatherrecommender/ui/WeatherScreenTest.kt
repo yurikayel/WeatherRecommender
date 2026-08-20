@@ -22,6 +22,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import com.example.weatherrecommender.data.preferences.ThemeMode
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
@@ -85,6 +86,7 @@ class WeatherScreenTest {
     private fun setContent(
         state: WeatherUiState,
         darkTheme: Boolean = false,
+        themeMode: ThemeMode = ThemeMode.CYCLE,
         onQueryChanged: (String) -> Unit = {},
         onLocationSelected: (Location) -> Unit = {},
         onDaySelected: (Int) -> Unit = {},
@@ -93,7 +95,10 @@ class WeatherScreenTest {
     ) {
         openedUri = null
         composeTestRule.setContent {
-            CompositionLocalProvider(LocalUriHandler provides capturingUriHandler) {
+            CompositionLocalProvider(
+                LocalUriHandler provides capturingUriHandler,
+                LocalThemeMode provides themeMode
+            ) {
                 WeatherRecommenderTheme(darkTheme = darkTheme) {
                     WeatherScreenContent(
                         uiState = state,
@@ -140,10 +145,24 @@ class WeatherScreenTest {
         setContent(WeatherUiState())
 
         composeTestRule.onAllNodesWithText("Plan your day").assertCountEquals(0)
-        composeTestRule.onNodeWithContentDescription("Switch to dark mode").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Switch to light mode").assertIsDisplayed()
+        composeTestRule.onNodeWithText("CYCLE").assertIsDisplayed()
         // Search lives in the fixed sheet header — not inside the scrollable body.
         composeTestRule.onNodeWithText("Search a city…").assertIsDisplayed()
         composeTestRule.onNodeWithText("Top Picks").assertIsDisplayed()
+    }
+
+    @Test
+    fun themeToggle_contentDescriptionIsUniquePerMode() {
+        setContent(WeatherUiState(), themeMode = ThemeMode.LIGHT)
+        composeTestRule.onNodeWithContentDescription("Switch to dark mode").assertIsDisplayed()
+
+        setContent(WeatherUiState(), darkTheme = true, themeMode = ThemeMode.DARK)
+        composeTestRule.onNodeWithContentDescription("Switch to cycle mode").assertIsDisplayed()
+
+        setContent(WeatherUiState(), themeMode = ThemeMode.CYCLE)
+        composeTestRule.onNodeWithContentDescription("Switch to light mode").assertIsDisplayed()
+        composeTestRule.onNodeWithText("CYCLE").assertIsDisplayed()
     }
 
     @Test

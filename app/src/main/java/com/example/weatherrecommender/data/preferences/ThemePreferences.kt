@@ -21,22 +21,23 @@ private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
 private val KEY_THEME_SOURCE = stringPreferencesKey("theme_source")
 
 /**
- * Persisted light/dark preference.
+ * Persisted appearance preference.
  *
  * `null` on [ThemePreferences.themeMode] means first launch (no key written yet).
- * First-run settling writes [ThemeMode.LIGHT] or [ThemeMode.DARK] from day/night at the
- * device location. An explicit [ThemeMode.SYSTEM] is stored as `"system"` so it is distinct
- * from unset — later choosing System still follows the OS.
+ * First-run settling writes [ThemeMode.CYCLE] so cold start is not unset. Cycle follows
+ * day/night at the device; Light and Dark are sticky user locks. Legacy `"system"` rows
+ * map to [ThemeMode.CYCLE] (day/night, not OS follow).
  */
 enum class ThemeMode {
-    SYSTEM,
+    CYCLE,
     LIGHT,
     DARK
 }
 
 /**
- * Who last wrote [ThemeMode]. Clock-provisional first-run may be replaced by GPS once;
- * GPS and explicit user/system choices are sticky.
+ * Who last wrote [ThemeMode]. [ThemeSource.USER] is a Light/Dark lock that GPS must not
+ * overwrite. [ThemeSource.CLOCK] marks automatic Cycle (first-run or the Cycle toggle).
+ * [ThemeSource.GPS] remains for legacy first-run rows.
  */
 enum class ThemeSource {
     CLOCK,
@@ -45,23 +46,29 @@ enum class ThemeSource {
 }
 
 /** Resolves whether Compose should use the dark color scheme for a stored preference. */
-fun ThemeMode.resolveDarkTheme(systemInDarkTheme: Boolean): Boolean = when (this) {
-    ThemeMode.SYSTEM -> systemInDarkTheme
+fun ThemeMode.resolveDarkTheme(isNight: Boolean): Boolean = when (this) {
+    ThemeMode.CYCLE -> isNight
     ThemeMode.LIGHT -> false
     ThemeMode.DARK -> true
 }
 
 /**
- * Like [ThemeMode.resolveDarkTheme], with first-run unset falling back to [unsetIsNight]
- * (clock or solar) until [ThemePreferences] is written.
+ * Like [ThemeMode.resolveDarkTheme], with first-run unset treated as Cycle until
+ * [ThemePreferences] is written.
  */
-fun ThemeMode?.resolveRenderedDarkTheme(
-    systemInDarkTheme: Boolean,
-    unsetIsNight: Boolean
-): Boolean = when (this) {
-    null -> unsetIsNight
-    else -> resolveDarkTheme(systemInDarkTheme)
+fun ThemeMode?.resolveRenderedDarkTheme(isNight: Boolean): Boolean =
+    (this ?: ThemeMode.CYCLE).resolveDarkTheme(isNight)
+
+/** Light → Dark → Cycle → Light. Unset is treated as Cycle. */
+fun ThemeMode?.nextToggleMode(): ThemeMode = when (this) {
+    ThemeMode.LIGHT -> ThemeMode.DARK
+    ThemeMode.DARK -> ThemeMode.CYCLE
+    ThemeMode.CYCLE, null -> ThemeMode.LIGHT
 }
+
+/** Cycle is automatic (not a lock); Light/Dark from the toggle are user locks. */
+fun ThemeMode.sourceWhenSelected(): ThemeSource =
+    if (this == ThemeMode.CYCLE) ThemeSource.CLOCK else ThemeSource.USER
 
 @Singleton
 class ThemePreferences @Inject constructor(
@@ -76,7 +83,7 @@ class ThemePreferences @Inject constructor(
 
     /**
      * Who wrote the stored mode. Missing source with an existing mode is [ThemeSource.USER]
-     * so upgrades do not re-open first-run GPS override.
+     * so upgrades do not re-open first-run GPS override of a Light/Dark lock.
      */
     suspend fun currentSource(): ThemeSource? {
         val prefs = context.themeDataStore.data.first()
@@ -84,8 +91,8 @@ class ThemePreferences @Inject constructor(
     }
 
     /**
-     * Writes Light, Dark, or System. [source] defaults to [ThemeSource.USER] so the sun/moon
-     * toggle and an explicit System choice cannot be overwritten by a later GPS fix.
+     * Writes Cycle, Light, or Dark. [source] defaults to [ThemeSource.USER] so a Light/Dark
+     * lock cannot be overwritten by a later GPS fix.
      */
     suspend fun setThemeMode(mode: ThemeMode, source: ThemeSource = ThemeSource.USER) {
         context.themeDataStore.edit { prefs ->
@@ -94,34 +101,32 @@ class ThemePreferences @Inject constructor(
         }
     }
 
-    /**
-     * Flips between light and dark based on the currently rendered theme.
-     * After the first toggle, the explicit choice replaces first-run / system-follow.
-     */
-    suspend fun toggle(currentlyDark: Boolean) {
-        setThemeMode(if (currentlyDark) ThemeMode.LIGHT else ThemeMode.DARK)
+    /** Advances Light → Dark → Cycle → Light, persisting Cycle as automatic. */
+    suspend fun advanceThemeMode(current: ThemeMode?) {
+        val next = current.nextToggleMode()
+        setThemeMode(next, next.sourceWhenSelected())
     }
 }
 
 /** Storage token for a [ThemeMode]. */
-private fun ThemeMode.storageValue(): String = when (this) {
-    ThemeMode.SYSTEM -> "system"
+internal fun ThemeMode.storageValue(): String = when (this) {
+    ThemeMode.CYCLE -> "cycle"
     ThemeMode.LIGHT -> "light"
     ThemeMode.DARK -> "dark"
 }
 
 /** Storage token for a [ThemeSource]. */
-private fun ThemeSource.storageValue(): String = when (this) {
+internal fun ThemeSource.storageValue(): String = when (this) {
     ThemeSource.CLOCK -> "clock"
     ThemeSource.GPS -> "gps"
     ThemeSource.USER -> "user"
 }
 
 /** Reads the stored theme enum, or null when the key has never been written. */
-private fun Preferences.storedThemeMode(): ThemeMode? = when (this[KEY_THEME_MODE]) {
+internal fun Preferences.storedThemeMode(): ThemeMode? = when (this[KEY_THEME_MODE]) {
     "light" -> ThemeMode.LIGHT
     "dark" -> ThemeMode.DARK
-    "system" -> ThemeMode.SYSTEM
+    "cycle", "system" -> ThemeMode.CYCLE
     else -> null
 }
 
@@ -129,7 +134,7 @@ private fun Preferences.storedThemeMode(): ThemeMode? = when (this[KEY_THEME_MOD
  * Reads who wrote the theme. A legacy row with a mode but no source is treated as user-set
  * so a later GPS fix cannot flip an already-chosen appearance.
  */
-private fun Preferences.storedThemeSource(): ThemeSource? {
+internal fun Preferences.storedThemeSource(): ThemeSource? {
     val source = when (this[KEY_THEME_SOURCE]) {
         "clock" -> ThemeSource.CLOCK
         "gps" -> ThemeSource.GPS

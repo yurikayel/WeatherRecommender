@@ -1,20 +1,16 @@
 package com.example.weatherrecommender.data.preferences
 
-import com.example.weatherrecommender.domain.location.GeoCoordinates
-import com.example.weatherrecommender.domain.util.SolarNight
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Writes the first-launch [ThemeMode] from day/night at the device location.
+ * Persists [ThemeMode.CYCLE] once on first launch so cold start is not unset.
  *
- * A clock-only settle is provisional: a later GPS fix may replace it once.
- * A GPS settle, and any user/system choice, is sticky.
+ * Solar/clock only affect rendered light/dark while the stored mode is Cycle.
+ * A clock-provisional Light/Dark from an older build is migrated to Cycle;
+ * GPS and user Light/Dark locks stay sticky.
  */
 @Singleton
 class FirstRunThemeSettler @Inject constructor(
@@ -22,60 +18,48 @@ class FirstRunThemeSettler @Inject constructor(
 ) {
     private val mutex = Mutex()
 
-    /** Persists Light/Dark from solar night (or clock) when first-run is still open. */
-    suspend fun settle(
-        coordinates: GeoCoordinates?,
-        now: Instant = Clock.systemUTC().instant(),
-        zone: ZoneId = ZoneId.systemDefault()
-    ) {
+    /** Writes Cycle when first-run is still open; no-ops once Cycle or a lock is stored. */
+    suspend fun settle() {
         mutex.withLock {
             val write = firstRunThemeWrite(
                 existingMode = themePreferences.currentMode(),
-                existingSource = themePreferences.currentSource(),
-                hasCoordinates = coordinates != null,
-                isNight = isNightNow(coordinates, now, zone)
+                existingSource = themePreferences.currentSource()
             ) ?: return
             themePreferences.setThemeMode(write.mode, write.source)
         }
     }
-
-    /** Solar night at [coordinates], or local-clock 19:00–06:00 when GPS is missing. */
-    private fun isNightNow(
-        coordinates: GeoCoordinates?,
-        now: Instant,
-        zone: ZoneId
-    ): Boolean {
-        return if (coordinates != null) {
-            SolarNight.isNightAt(coordinates.latitude, coordinates.longitude, now)
-        } else {
-            SolarNight.isNightByLocalClock(now.atZone(zone))
-        }
-    }
 }
 
-/** Mode + provenance to persist on first run (or clock→GPS override). */
+/** Mode + provenance to persist on first run (or clock→Cycle migration). */
 internal data class FirstRunThemeWrite(
     val mode: ThemeMode,
     val source: ThemeSource
 )
 
 /**
- * @return Light/Dark plus CLOCK or GPS, or null when first-run is closed
- * (user/system choice, or GPS already settled, or a second clock settle).
+ * @return Cycle plus CLOCK, or null when first-run is closed (already Cycle, a user/GPS
+ * Light/Dark lock, or a second automatic settle).
  */
 internal fun firstRunThemeWrite(
     existingMode: ThemeMode?,
-    existingSource: ThemeSource?,
-    hasCoordinates: Boolean,
-    isNight: Boolean
+    existingSource: ThemeSource?
 ): FirstRunThemeWrite? {
-    val source = existingSource ?: existingMode?.let { ThemeSource.USER }
-    val closed = source == ThemeSource.USER ||
-        source == ThemeSource.GPS ||
-        (source == ThemeSource.CLOCK && !hasCoordinates)
+    val closed = existingMode == ThemeMode.CYCLE ||
+        isStickyLightOrDarkLock(existingMode, existingSource)
     if (closed) return null
-    return FirstRunThemeWrite(
-        mode = if (isNight) ThemeMode.DARK else ThemeMode.LIGHT,
-        source = if (hasCoordinates) ThemeSource.GPS else ThemeSource.CLOCK
-    )
+    return FirstRunThemeWrite(ThemeMode.CYCLE, ThemeSource.CLOCK)
+}
+
+/**
+ * True when a stored Light/Dark must not be replaced by Cycle: user choice, legacy GPS
+ * settle, or a mode row with no source (treated as user). Clock-provisional Light/Dark
+ * from older builds is not sticky.
+ */
+internal fun isStickyLightOrDarkLock(
+    existingMode: ThemeMode?,
+    existingSource: ThemeSource?
+): Boolean {
+    val isLockMode = existingMode == ThemeMode.LIGHT || existingMode == ThemeMode.DARK
+    val source = existingSource ?: ThemeSource.USER
+    return isLockMode && source != ThemeSource.CLOCK
 }

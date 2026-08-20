@@ -481,7 +481,7 @@ class WeatherViewModel @Inject constructor(
      */
     fun onLocationPermissionResult(granted: Boolean) {
         if (!granted) {
-            viewModelScope.launch { firstRunThemeSettler.settle(coordinates = null) }
+            viewModelScope.launch { firstRunThemeSettler.settle() }
             return
         }
         resolveDeviceLocation()
@@ -498,7 +498,7 @@ class WeatherViewModel @Inject constructor(
         deviceLocationJob?.cancel()
         deviceLocationJob = viewModelScope.launch {
             val coords = deviceLocationProvider.getLastKnownLocation()
-            firstRunThemeSettler.settle(coords)
+            firstRunThemeSettler.settle()
             if (coords == null) return@launch
             if (currentConnectivityStatus != ConnectivityStatus.Available) return@launch
 
