@@ -7,16 +7,20 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -29,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -45,12 +50,9 @@ import com.example.weatherrecommender.ui.util.asUiText
 private const val DAY_SWITCH_MS = 220
 
 /**
- * Detail body inside the map bottom sheet. The sheet is locked at 60% and this column
- * fills that height — there is no [androidx.compose.foundation.verticalScroll]. The 16:9
- * hero takes its aspect-ratio height; day chips stay [DetailLayout.DayRowHeight]; ranked
- * activity rows share the remaining space via [Modifier.weight] so every row stays on
- * screen. Tapping a day only swaps the activity list via [WeatherViewModel.onDaySelected].
- * Pull-to-refresh is home-only.
+ * Detail body inside the map bottom sheet. The sheet stays locked at 60%. The 16:9 hero
+ * shrinks when leftover space cannot hold day chips plus four minimum activity rows; that
+ * lower column then scrolls so rows cannot clip on a short device or large font.
  */
 @Composable
 internal fun DetailContent(
@@ -62,66 +64,95 @@ internal fun DetailContent(
     val imageUrl = uiState.selectedLocation?.imageUrl ?: uiState.forecast?.location?.imageUrl
     val showLoadingShimmer = uiState.isLoadingForecast && uiState.forecast == null
     val forecast = uiState.forecast
+    val density = LocalDensity.current
 
-    Column(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .testTag("detail_sheet_body")
     ) {
-        CityHeroOverlay(
-            imageUrl = imageUrl,
-            showShimmer = showLoadingShimmer && imageUrl == null,
-            header = header,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(DetailLayout.HeroAspectRatio)
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(
-                    start = DetailLayout.SheetHorizontalPadding,
-                    end = DetailLayout.SheetHorizontalPadding,
-                    top = DetailLayout.BlockSpacing,
-                    bottom = DetailLayout.SheetBottomPadding
-                ),
-            verticalArrangement = Arrangement.spacedBy(DetailLayout.AfterDayRowSpacing)
-        ) {
-            uiState.error?.let { error ->
-                Text(
-                    text = stringResource(R.string.error_prefix, error.asString()),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            uiState.syncError?.let { syncError ->
-                SyncErrorBanner(syncError.asString())
-            }
-
-            if (showLoadingShimmer) {
-                PremiumShimmerLoadingState(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                )
-            } else if (forecast != null) {
-                DetailForecastBody(
-                    forecast = forecast,
-                    selectedDayIndex = uiState.selectedDayIndex,
-                    rankedActivities = uiState.rankedActivities,
-                    onDaySelected = onDaySelected
-                )
-            }
+        val heroHeight = with(density) {
+            detailHeroHeightPx(
+                sheetWidthPx = constraints.maxWidth.toFloat(),
+                sheetHeightPx = constraints.maxHeight.toFloat(),
+                minBodyPx = DetailLayout.MinScrollBodyHeight.toPx()
+            ).toDp()
+        }
+        Column(Modifier.fillMaxSize()) {
+            CityHeroOverlay(
+                imageUrl = imageUrl,
+                showShimmer = showLoadingShimmer && imageUrl == null,
+                header = header,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(heroHeight)
+            )
+            DetailBodyColumn(
+                uiState = uiState,
+                forecast = forecast,
+                showLoadingShimmer = showLoadingShimmer,
+                onDaySelected = onDaySelected
+            )
         }
     }
 }
 
-/** Day chips plus a weighted column of ranked activities for the selected day. */
+/** Padded chips + activities (or shimmer) under the hero, including this lane's error. */
+@Composable
+private fun ColumnScope.DetailBodyColumn(
+    uiState: WeatherUiState,
+    forecast: WeatherForecast?,
+    showLoadingShimmer: Boolean,
+    onDaySelected: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f)
+            .padding(
+                start = DetailLayout.SheetHorizontalPadding,
+                end = DetailLayout.SheetHorizontalPadding,
+                top = DetailLayout.BlockSpacing,
+                bottom = DetailLayout.SheetBottomPadding
+            ),
+        verticalArrangement = Arrangement.spacedBy(DetailLayout.AfterDayRowSpacing)
+    ) {
+        DetailForecastLaneError(uiState)
+        if (showLoadingShimmer) {
+            PremiumShimmerLoadingState(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+        } else if (forecast != null) {
+            DetailForecastBody(
+                forecast = forecast,
+                selectedDayIndex = uiState.selectedDayIndex,
+                rankedActivities = uiState.rankedActivities,
+                onDaySelected = onDaySelected
+            )
+        }
+    }
+}
+
+/** Forecast-lane failure: blocking copy with no cache, sync banner when days are on screen. */
+@Composable
+private fun DetailForecastLaneError(uiState: WeatherUiState) {
+    val error = uiState.forecastFetch.errorOrNull() ?: return
+    if (uiState.forecast == null) {
+        Text(
+            text = stringResource(R.string.error_prefix, error.asString()),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    } else {
+        SyncErrorBanner(error.asString())
+    }
+}
+
+/** Day chips plus ranked activities; scrolls when leftover height is below the minimum body. */
 @Composable
 private fun ColumnScope.DetailForecastBody(
     forecast: WeatherForecast,
@@ -129,29 +160,68 @@ private fun ColumnScope.DetailForecastBody(
     rankedActivities: List<RankedActivity>,
     onDaySelected: (Int) -> Unit
 ) {
-    WeekSummarySection(
-        forecast = forecast,
-        selectedDayIndex = selectedDayIndex,
-        onDaySelected = onDaySelected,
-        modifier = Modifier.fillMaxWidth()
-    )
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f)
+    ) {
+        val overflow = maxHeight < DetailLayout.MinScrollBodyHeight
+        Column(
+            modifier = if (overflow) {
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .testTag("detail_sheet_scroll")
+            } else {
+                Modifier.fillMaxSize()
+            },
+            verticalArrangement = Arrangement.spacedBy(DetailLayout.AfterDayRowSpacing)
+        ) {
+            WeekSummarySection(
+                forecast = forecast,
+                selectedDayIndex = selectedDayIndex,
+                onDaySelected = onDaySelected,
+                modifier = Modifier.fillMaxWidth()
+            )
+            DayActivityList(
+                selectedDayIndex = selectedDayIndex,
+                rankedActivities = rankedActivities,
+                fillRemaining = !overflow
+            )
+        }
+    }
+}
+
+/** Crossfades the selected day's ranked rows; weighted when filling, min-height when scrolling. */
+@Composable
+private fun ColumnScope.DayActivityList(
+    selectedDayIndex: Int,
+    rankedActivities: List<RankedActivity>,
+    fillRemaining: Boolean
+) {
     Crossfade(
         targetState = selectedDayIndex to rankedActivities,
         animationSpec = tween(DAY_SWITCH_MS),
         modifier = Modifier
             .fillMaxWidth()
-            .weight(1f)
+            .then(if (fillRemaining) Modifier.weight(1f) else Modifier)
             .testTag("detail_activity_list"),
         label = "day_activities"
     ) { (_, activities) ->
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = if (fillRemaining) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
             activities.forEachIndexed { index, ranked ->
                 ActivityItem(
                     rankedActivity = ranked,
                     isTopPick = index == 0,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .then(
+                            if (fillRemaining) {
+                                Modifier.weight(1f)
+                            } else {
+                                Modifier.heightIn(min = DetailLayout.MinActivityRowHeight)
+                            }
+                        )
                 )
             }
         }
@@ -160,8 +230,8 @@ private fun ColumnScope.DetailForecastBody(
 
 /**
  * Edge-to-edge photo (or placeholder/shimmer) flush to the sheet’s top. The sheet Surface
- * clips this to the rounded top corners — no inner card inset. Height comes from a 16:9
- * [aspectRatio] (placeholder uses the same box so layout does not jump). [header] sits on a
+ * clips this to the rounded top corners — no inner card inset. Height is chosen by
+ * [detailHeroHeightPx] (16:9 when the body fits, otherwise a shorter cap). [header] sits on a
  * short top scrim so chrome stays readable while the photo still meets the sheet edge.
  */
 @Composable

@@ -1,19 +1,16 @@
 package com.example.weatherrecommender.data.preferences
 
-import com.example.weatherrecommender.domain.location.GeoCoordinates
-import com.example.weatherrecommender.domain.util.SolarNight
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Writes the first-launch [ThemeMode] from day/night at the device location.
- * No-ops once any preference (Light / Dark / System) has been stored, so a later GPS
- * fix or clock change cannot override the user — or the first decision.
+ * Persists [ThemeMode.CYCLE] once on first launch so cold start is not unset.
+ *
+ * Solar/clock only affect rendered light/dark while the stored mode is Cycle.
+ * A clock-provisional Light/Dark from an older build is migrated to Cycle;
+ * GPS and user Light/Dark locks stay sticky.
  */
 @Singleton
 class FirstRunThemeSettler @Inject constructor(
@@ -21,29 +18,48 @@ class FirstRunThemeSettler @Inject constructor(
 ) {
     private val mutex = Mutex()
 
-    /** Persists Light/Dark once from solar night (or clock) when DataStore has no theme key. */
-    suspend fun settle(
-        coordinates: GeoCoordinates?,
-        now: Instant = Clock.systemUTC().instant(),
-        zone: ZoneId = ZoneId.systemDefault()
-    ) {
+    /** Writes Cycle when first-run is still open; no-ops once Cycle or a lock is stored. */
+    suspend fun settle() {
         mutex.withLock {
-            val existing = themePreferences.currentMode()
-            val night = if (coordinates != null) {
-                SolarNight.isNightAt(coordinates.latitude, coordinates.longitude, now)
-            } else {
-                SolarNight.isNightByLocalClock(now.atZone(zone))
-            }
-            val next = firstRunThemeMode(existing, night) ?: return
-            themePreferences.setThemeMode(next)
+            val write = firstRunThemeWrite(
+                existingMode = themePreferences.currentMode(),
+                existingSource = themePreferences.currentSource()
+            ) ?: return
+            themePreferences.setThemeMode(write.mode, write.source)
         }
     }
 }
 
+/** Mode + provenance to persist on first run (or clock→Cycle migration). */
+internal data class FirstRunThemeWrite(
+    val mode: ThemeMode,
+    val source: ThemeSource
+)
+
 /**
- * @return Light/Dark to persist on first run, or null when [existing] is already set.
+ * @return Cycle plus CLOCK, or null when first-run is closed (already Cycle, a user/GPS
+ * Light/Dark lock, or a second automatic settle).
  */
-internal fun firstRunThemeMode(existing: ThemeMode?, isNight: Boolean): ThemeMode? {
-    if (existing != null) return null
-    return if (isNight) ThemeMode.DARK else ThemeMode.LIGHT
+internal fun firstRunThemeWrite(
+    existingMode: ThemeMode?,
+    existingSource: ThemeSource?
+): FirstRunThemeWrite? {
+    val closed = existingMode == ThemeMode.CYCLE ||
+        isStickyLightOrDarkLock(existingMode, existingSource)
+    if (closed) return null
+    return FirstRunThemeWrite(ThemeMode.CYCLE, ThemeSource.CLOCK)
+}
+
+/**
+ * True when a stored Light/Dark must not be replaced by Cycle: user choice, legacy GPS
+ * settle, or a mode row with no source (treated as user). Clock-provisional Light/Dark
+ * from older builds is not sticky.
+ */
+internal fun isStickyLightOrDarkLock(
+    existingMode: ThemeMode?,
+    existingSource: ThemeSource?
+): Boolean {
+    val isLockMode = existingMode == ThemeMode.LIGHT || existingMode == ThemeMode.DARK
+    val source = existingSource ?: ThemeSource.USER
+    return isLockMode && source != ThemeSource.CLOCK
 }

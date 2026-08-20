@@ -23,7 +23,9 @@
     <string name="home_history_title">Recently viewed</string>
     <string name="home_history_item_cd">Open %1$s again</string>
     <string name="theme_switch_to_dark">Switch to dark mode</string>
+    <string name="theme_switch_to_cycle">Switch to cycle mode</string>
     <string name="theme_switch_to_light">Switch to light mode</string>
+    <string name="theme_cycle_label">CYCLE</string>
     <string name="home_current_location">Current location · %1$s</string>
     <string name="home_current_location_cd">Check weather for your current location, %1$s</string>
 

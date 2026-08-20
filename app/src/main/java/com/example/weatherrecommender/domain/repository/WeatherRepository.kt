@@ -21,7 +21,8 @@ interface WeatherRepository {
     /**
      * Resolves a map tap (lat/lng) to a named [Location] via reverse geocoding.
      *
-     * Open-Meteo Geocoding is forward-only; reverse uses Nominatim (OSM).
+     * Open-Meteo Geocoding is forward-only; reverse uses Nominatim (OSM), then the
+     * result is stabilized to a Room or Open-Meteo GeoNames id when a nearby match exists.
      */
     suspend fun reverseGeocode(latitude: Double, longitude: Double): AppResult<Location>
 

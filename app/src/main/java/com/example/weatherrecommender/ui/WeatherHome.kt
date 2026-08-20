@@ -121,7 +121,7 @@ internal fun HomeContent(
             )
 
 
-            uiState.error?.let { error ->
+            uiState.homeLaneErrors().forEach { error ->
                 Spacer(Modifier.height(12.dp))
                 Text(
                     text = stringResource(R.string.error_prefix, error.asString()),

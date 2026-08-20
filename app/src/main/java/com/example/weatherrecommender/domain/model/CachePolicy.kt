@@ -17,6 +17,15 @@ object CachePolicy {
     /** Skip Wikipedia / name re-fetch when a thumbnail is already stored. */
     const val PLACE_METADATA_TTL_MS = 30L * 24L * 60L * 60L * 1000L
 
+    /**
+     * True when a stored thumbnail may be reused.
+     * [metadataAt] `0` means never confirmed (Room v8 default) — not forever-fresh.
+     */
+    fun isPlaceMetadataFresh(cachedUrl: String?, metadataAt: Long, now: Long): Boolean {
+        if (cachedUrl.isNullOrBlank() || metadataAt <= 0L) return false
+        return now - metadataAt < PLACE_METADATA_TTL_MS
+    }
+
     const val NEARBY_MIN_KM = 25.0
     const val NEARBY_RADIUS_KM = 280.0
     const val NEARBY_LIMIT = 4
