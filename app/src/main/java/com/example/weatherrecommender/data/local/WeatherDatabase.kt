@@ -104,6 +104,7 @@ abstract class WeatherDatabase : RoomDatabase() {
         /**
          * v8 adds [LocationEntity.placeMetadataUpdatedAt] so Wikipedia thumbnails and names
          * can be reused for 30 days independently of forecast [LocationEntity.lastUpdated].
+         * Default `0` means never confirmed; callers must not treat it as fresh.
          */
         val MIGRATION_7_8 = object : Migration(7, 8) {
             /** Adds place-metadata timestamp so Wikipedia reuse is independent of forecast TTL. */

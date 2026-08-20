@@ -28,15 +28,65 @@ class ThemeModeTest {
     }
 
     @Test
-    fun firstRun_nightWritesDark_dayWritesLight() {
-        assertEquals(ThemeMode.DARK, firstRunThemeMode(existing = null, isNight = true))
-        assertEquals(ThemeMode.LIGHT, firstRunThemeMode(existing = null, isNight = false))
+    fun firstRun_nightWritesDarkFromClock_dayWritesLight() {
+        val night = firstRunThemeWrite(null, null, hasCoordinates = false, isNight = true)
+        assertEquals(ThemeMode.DARK, night?.mode)
+        assertEquals(ThemeSource.CLOCK, night?.source)
+
+        val day = firstRunThemeWrite(null, null, hasCoordinates = false, isNight = false)
+        assertEquals(ThemeMode.LIGHT, day?.mode)
+        assertEquals(ThemeSource.CLOCK, day?.source)
     }
 
     @Test
-    fun firstRun_doesNotOverwriteStoredPreference() {
-        assertNull(firstRunThemeMode(existing = ThemeMode.LIGHT, isNight = true))
-        assertNull(firstRunThemeMode(existing = ThemeMode.DARK, isNight = false))
-        assertNull(firstRunThemeMode(existing = ThemeMode.SYSTEM, isNight = true))
+    fun firstRun_gpsWritesSolarAndIsSticky() {
+        val gps = firstRunThemeWrite(null, null, hasCoordinates = true, isNight = false)
+        assertEquals(ThemeMode.LIGHT, gps?.mode)
+        assertEquals(ThemeSource.GPS, gps?.source)
+        assertNull(
+            firstRunThemeWrite(
+                existingMode = ThemeMode.LIGHT,
+                existingSource = ThemeSource.GPS,
+                hasCoordinates = false,
+                isNight = true
+            )
+        )
+    }
+
+    @Test
+    fun firstRun_clockMayBeReplacedByGpsOnce() {
+        val override = firstRunThemeWrite(
+            existingMode = ThemeMode.DARK,
+            existingSource = ThemeSource.CLOCK,
+            hasCoordinates = true,
+            isNight = false
+        )
+        assertEquals(ThemeMode.LIGHT, override?.mode)
+        assertEquals(ThemeSource.GPS, override?.source)
+    }
+
+    @Test
+    fun firstRun_secondClockSettleIsIgnored() {
+        assertNull(
+            firstRunThemeWrite(
+                existingMode = ThemeMode.DARK,
+                existingSource = ThemeSource.CLOCK,
+                hasCoordinates = false,
+                isNight = false
+            )
+        )
+    }
+
+    @Test
+    fun firstRun_doesNotOverwriteUserOrLegacyPreference() {
+        assertNull(
+            firstRunThemeWrite(ThemeMode.LIGHT, ThemeSource.USER, hasCoordinates = true, isNight = true)
+        )
+        assertNull(
+            firstRunThemeWrite(ThemeMode.DARK, null, hasCoordinates = true, isNight = false)
+        )
+        assertNull(
+            firstRunThemeWrite(ThemeMode.SYSTEM, ThemeSource.USER, hasCoordinates = true, isNight = true)
+        )
     }
 }

@@ -67,20 +67,46 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
 /**
  * Weight/size metrics shared by [DetailContent] and [PremiumShimmerLoadingState] so loading
  * never flashes a different geometry (16:9 overlay hero + 7-day chips + compact activity rows).
- * The locked 60% sheet does not scroll: the hero keeps its 16:9 height, day chips stay
- * [DayRowHeight], and ranked activity rows share the leftover space equally.
+ *
+ * The locked 60% sheet keeps the hero on screen. When leftover height cannot fit the day row
+ * plus [ActivitySlots] minimum activity rows, the chips+list column scrolls.
  */
 internal object DetailLayout {
     const val ForecastDays = 7
     const val ActivitySlots = 4
     const val HeroAspectRatio = 16f / 9f
+    const val MinHeroFraction = 0.28f
     val DayRowHeight = 128.dp
+    val MinActivityRowHeight = 44.dp
     val BlockSpacing = 8.dp
     val AfterDayRowSpacing = 8.dp
     val DayButtonSpacing = 4.dp
     val DayButtonCorner = 12.dp
     val SheetHorizontalPadding = 8.dp
     val SheetBottomPadding = 8.dp
+    val MinScrollBodyHeight = DayRowHeight + AfterDayRowSpacing +
+        MinActivityRowHeight * ActivitySlots
+}
+
+/**
+ * Hero height for a locked detail sheet. Uses 16:9 when leftover space can hold chips +
+ * minimum activity rows; otherwise shrinks the hero so the body can scroll instead of clip.
+ */
+internal fun detailHeroHeightPx(
+    sheetWidthPx: Float,
+    sheetHeightPx: Float,
+    minBodyPx: Float,
+    heroAspect: Float = DetailLayout.HeroAspectRatio,
+    minHeroFraction: Float = DetailLayout.MinHeroFraction
+): Float {
+    if (sheetWidthPx <= 0f || sheetHeightPx <= 0f) return 0f
+    val aspectHeight = sheetWidthPx / heroAspect
+    val leftoverFits = sheetHeightPx - aspectHeight >= minBodyPx
+    return if (leftoverFits) {
+        aspectHeight
+    } else {
+        (sheetHeightPx - minBodyPx).coerceAtLeast(sheetHeightPx * minHeroFraction)
+    }
 }
 
 /**

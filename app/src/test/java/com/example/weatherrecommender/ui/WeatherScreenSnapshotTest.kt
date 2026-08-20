@@ -109,15 +109,6 @@ class WeatherScreenSnapshotTest {
             RankedActivity(RecommendedActivity.OUTDOOR_SIGHTSEEING, 80, ReasonKey.OUTDOOR_MILD, listOf(23)),
             RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 45, ReasonKey.INDOOR_BAD_WEATHER),
             RankedActivity(RecommendedActivity.SKIING, 12, ReasonKey.SKI_IDEAL, listOf(27, 0))
-        ),
-        weekTopActivities = listOf(
-            RankedActivity(RecommendedActivity.SURFING, 88, ReasonKey.SURF_IDEAL, listOf(100, 10)),
-            RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 85, ReasonKey.INDOOR_BAD_WEATHER),
-            RankedActivity(RecommendedActivity.OUTDOOR_SIGHTSEEING, 80, ReasonKey.OUTDOOR_MILD, listOf(23)),
-            RankedActivity(RecommendedActivity.SKIING, 70, ReasonKey.SKI_IDEAL, listOf(-3, 5)),
-            RankedActivity(RecommendedActivity.INDOOR_SIGHTSEEING, 90, ReasonKey.INDOOR_BAD_WEATHER),
-            RankedActivity(RecommendedActivity.SURFING, 82, ReasonKey.SURF_IDEAL, listOf(90, 9)),
-            RankedActivity(RecommendedActivity.OUTDOOR_SIGHTSEEING, 78, ReasonKey.OUTDOOR_MILD, listOf(22))
         )
     )
 

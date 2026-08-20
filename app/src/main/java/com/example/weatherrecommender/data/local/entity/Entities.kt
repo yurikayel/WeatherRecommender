@@ -25,8 +25,8 @@ data class LocationEntity(
     /** URL to a background image for this city, usually fetched from Wikipedia. */
     val imageUrl: String? = null,
     /**
-     * When [imageUrl] (and stable name) were last confirmed. 0 = unknown (treat existing
-     * thumbnail as still valid until the next successful persist).
+     * When [imageUrl] (and stable name) were last confirmed.
+     * `0` means never confirmed (v8 migration default) — not a valid TTL start.
      */
     val placeMetadataUpdatedAt: Long = 0L
 )

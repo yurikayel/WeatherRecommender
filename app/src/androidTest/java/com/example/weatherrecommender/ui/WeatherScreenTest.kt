@@ -261,7 +261,11 @@ class WeatherScreenTest {
 
     @Test
     fun home_error_isDisplayed() {
-        setContent(WeatherUiState(error = UiText.DynamicString("City not found")))
+        setContent(
+            WeatherUiState(
+                search = SearchUiState.Failed(UiText.DynamicString("City not found"))
+            )
+        )
 
         composeTestRule.onNodeWithText("Error: City not found").performScrollTo().assertIsDisplayed()
     }
@@ -302,8 +306,7 @@ class WeatherScreenTest {
                 destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 selectedDayIndex = 0,
-                rankedActivities = listOf(outdoorActivity),
-                weekTopActivities = listOf(outdoorActivity, outdoorActivity)
+                rankedActivities = listOf(outdoorActivity)
             )
         )
 
@@ -428,7 +431,9 @@ class WeatherScreenTest {
                 destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 rankedActivities = listOf(outdoorActivity),
-                syncError = UiText.DynamicString("No internet connection. Showing offline data.")
+                forecastFetch = FetchStatus.Failed(
+                    UiText.DynamicString("No internet connection. Showing offline data.")
+                )
             )
         )
 
@@ -445,7 +450,7 @@ class WeatherScreenTest {
         setContent(
             WeatherUiState(
                 destination = WeatherDestination.Detail(london),
-                error = UiText.DynamicString("Server error")
+                forecastFetch = FetchStatus.Failed(UiText.DynamicString("Server error"))
             )
         )
 

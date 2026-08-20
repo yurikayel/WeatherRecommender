@@ -17,6 +17,9 @@ private val Context.themeDataStore: DataStore<Preferences> by preferencesDataSto
     name = "theme_preferences"
 )
 
+private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
+private val KEY_THEME_SOURCE = stringPreferencesKey("theme_source")
+
 /**
  * Persisted light/dark preference.
  *
@@ -29,6 +32,16 @@ enum class ThemeMode {
     SYSTEM,
     LIGHT,
     DARK
+}
+
+/**
+ * Who last wrote [ThemeMode]. Clock-provisional first-run may be replaced by GPS once;
+ * GPS and explicit user/system choices are sticky.
+ */
+enum class ThemeSource {
+    CLOCK,
+    GPS,
+    USER
 }
 
 /** Resolves whether Compose should use the dark color scheme for a stored preference. */
@@ -55,25 +68,29 @@ class ThemePreferences @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
     val themeMode: Flow<ThemeMode?> = context.themeDataStore.data.map { prefs ->
-        when (prefs[KEY_THEME_MODE]) {
-            VALUE_LIGHT -> ThemeMode.LIGHT
-            VALUE_DARK -> ThemeMode.DARK
-            VALUE_SYSTEM -> ThemeMode.SYSTEM
-            else -> null
-        }
+        prefs.storedThemeMode()
     }
 
     /** Current stored mode, or null on first launch. */
     suspend fun currentMode(): ThemeMode? = themeMode.first()
 
-    /** Writes Light, Dark, or System so the next cold start does not re-run first-launch logic. */
-    suspend fun setThemeMode(mode: ThemeMode) {
+    /**
+     * Who wrote the stored mode. Missing source with an existing mode is [ThemeSource.USER]
+     * so upgrades do not re-open first-run GPS override.
+     */
+    suspend fun currentSource(): ThemeSource? {
+        val prefs = context.themeDataStore.data.first()
+        return prefs.storedThemeSource()
+    }
+
+    /**
+     * Writes Light, Dark, or System. [source] defaults to [ThemeSource.USER] so the sun/moon
+     * toggle and an explicit System choice cannot be overwritten by a later GPS fix.
+     */
+    suspend fun setThemeMode(mode: ThemeMode, source: ThemeSource = ThemeSource.USER) {
         context.themeDataStore.edit { prefs ->
-            prefs[KEY_THEME_MODE] = when (mode) {
-                ThemeMode.SYSTEM -> VALUE_SYSTEM
-                ThemeMode.LIGHT -> VALUE_LIGHT
-                ThemeMode.DARK -> VALUE_DARK
-            }
+            prefs[KEY_THEME_MODE] = mode.storageValue()
+            prefs[KEY_THEME_SOURCE] = source.storageValue()
         }
     }
 
@@ -84,11 +101,41 @@ class ThemePreferences @Inject constructor(
     suspend fun toggle(currentlyDark: Boolean) {
         setThemeMode(if (currentlyDark) ThemeMode.LIGHT else ThemeMode.DARK)
     }
+}
 
-    private companion object {
-        val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
-        const val VALUE_LIGHT = "light"
-        const val VALUE_DARK = "dark"
-        const val VALUE_SYSTEM = "system"
+/** Storage token for a [ThemeMode]. */
+private fun ThemeMode.storageValue(): String = when (this) {
+    ThemeMode.SYSTEM -> "system"
+    ThemeMode.LIGHT -> "light"
+    ThemeMode.DARK -> "dark"
+}
+
+/** Storage token for a [ThemeSource]. */
+private fun ThemeSource.storageValue(): String = when (this) {
+    ThemeSource.CLOCK -> "clock"
+    ThemeSource.GPS -> "gps"
+    ThemeSource.USER -> "user"
+}
+
+/** Reads the stored theme enum, or null when the key has never been written. */
+private fun Preferences.storedThemeMode(): ThemeMode? = when (this[KEY_THEME_MODE]) {
+    "light" -> ThemeMode.LIGHT
+    "dark" -> ThemeMode.DARK
+    "system" -> ThemeMode.SYSTEM
+    else -> null
+}
+
+/**
+ * Reads who wrote the theme. A legacy row with a mode but no source is treated as user-set
+ * so a later GPS fix cannot flip an already-chosen appearance.
+ */
+private fun Preferences.storedThemeSource(): ThemeSource? {
+    val source = when (this[KEY_THEME_SOURCE]) {
+        "clock" -> ThemeSource.CLOCK
+        "gps" -> ThemeSource.GPS
+        "user" -> ThemeSource.USER
+        else -> null
     }
+    if (source != null) return source
+    return if (storedThemeMode() != null) ThemeSource.USER else null
 }

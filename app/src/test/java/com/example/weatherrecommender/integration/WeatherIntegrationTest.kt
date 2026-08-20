@@ -171,8 +171,6 @@ class WeatherIntegrationTest {
             assertNotNull(loaded.forecast)
             assertTrue(loaded.destination is WeatherDestination.Detail)
             assertTrue(loaded.rankedActivities.isNotEmpty())
-            assertEquals(7, loaded.weekTopActivities.size)
-            assertTrue(loaded.weekTopActivities.all { it != null })
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -225,7 +223,6 @@ class WeatherIntegrationTest {
 
         val loaded = viewModel.uiState.value
         assertEquals(7, loaded.forecast?.dailyForecasts?.size)
-        assertEquals(7, loaded.weekTopActivities.size)
         assertTrue(loaded.destination is WeatherDestination.Detail)
     }
 
@@ -249,7 +246,6 @@ class WeatherIntegrationTest {
             val state = expectMostRecentItem()
             assertEquals(0, state.selectedDayIndex)
             assertTrue(state.rankedActivities.isEmpty())
-            assertTrue(state.weekTopActivities.isEmpty())
             cancelAndIgnoreRemainingEvents()
         }
     }

@@ -52,19 +52,16 @@ import kotlin.time.Duration.Companion.milliseconds
  * @property destination Explicit home vs detail navigation target.
  * @property selectedLocation The location shown in detail, derived from [destination].
  * @property forecast The 7-day forecast for the selected location.
- * @property forecastFetch Loading vs idle for the detail forecast (independent of [search]).
+ * @property forecastFetch Loading, idle, or failed for the detail forecast (independent of [search]).
  * @property selectedDayIndex Index of the day whose activities are currently shown.
  * @property rankedActivities Applicable activities for [selectedDayIndex], sorted by score.
- * @property weekTopActivities Top-ranked activity per forecast day (#1 each day); stable until forecast changes.
  * @property topPicks Population-weighted featured suggestions shown on the home screen.
- * @property topPicksFetch Idle, initial skeleton, or pull-to-refresh over existing [topPicks].
+ * @property topPicksFetch Idle, initial skeleton, pull-to-refresh, or a Top Picks lane failure.
  * @property recentHistory The 10 most recently viewed cities, newest first (empty when none).
  * @property mapCamera Camera target for the in-screen map.
  * @property mapPin Marker shown on the map (selected city or search preview).
- * @property mapTapFetch Loading while reverse-geocoding a map tap.
+ * @property mapTapFetch Loading or failed while reverse-geocoding a map tap.
  * @property deviceLocation Reverse-geocoded city for the device GPS fix; null hides the home chip.
- * @property error The main UI error, usually blocking or prominent.
- * @property syncError A background sync error for offline scenarios.
  */
 data class WeatherUiState(
     val query: String = "",
@@ -74,16 +71,13 @@ data class WeatherUiState(
     val forecastFetch: FetchStatus = FetchStatus.Idle,
     val selectedDayIndex: Int = 0,
     val rankedActivities: List<RankedActivity> = emptyList(),
-    val weekTopActivities: List<RankedActivity?> = emptyList(),
     val topPicks: List<TopPick> = emptyList(),
     val topPicksFetch: FetchStatus = FetchStatus.Idle,
     val recentHistory: List<Location> = emptyList(),
     val mapCamera: MapCameraPosition = MapCameraPosition.DEFAULT,
     val mapPin: Location? = null,
     val mapTapFetch: FetchStatus = FetchStatus.Idle,
-    val deviceLocation: Location? = null,
-    val error: UiText? = null,
-    val syncError: UiText? = null
+    val deviceLocation: Location? = null
 ) {
     /** Convenience accessor for detail mode; null on [WeatherDestination.Home]. */
     val selectedLocation: Location?
@@ -96,15 +90,26 @@ data class WeatherUiState(
             SearchUiState.Idle -> emptyList()
             is SearchUiState.Loading -> current.previousResults
             is SearchUiState.Results -> current.locations
+            is SearchUiState.Failed -> current.previousResults
         }
 
-    val isLoadingForecast: Boolean get() = forecastFetch == FetchStatus.Loading
+    val searchError: UiText?
+        get() = (search as? SearchUiState.Failed)?.error
 
-    val isLoadingTopPicks: Boolean get() = topPicksFetch == FetchStatus.Loading
+    val isLoadingForecast: Boolean get() = forecastFetch.isLoading()
 
-    val isRefreshingTopPicks: Boolean get() = topPicksFetch == FetchStatus.Refreshing
+    val isLoadingTopPicks: Boolean get() = topPicksFetch.isLoading()
 
-    val isResolvingMapTap: Boolean get() = mapTapFetch == FetchStatus.Loading
+    val isRefreshingTopPicks: Boolean get() = topPicksFetch.isRefreshing()
+
+    val isResolvingMapTap: Boolean get() = mapTapFetch.isLoading()
+
+    /** Home-visible failures from search, map-tap, and Top Picks — never the forecast lane. */
+    fun homeLaneErrors(): List<UiText> = listOfNotNull(
+        searchError,
+        mapTapFetch.errorOrNull(),
+        topPicksFetch.errorOrNull()
+    )
 }
 
 /**
@@ -179,7 +184,7 @@ class WeatherViewModel @Inject constructor(
     /** Shows the search lane as loading while keeping previous hits visible. */
     private fun markSearchLoading() {
         _uiState.update { state ->
-            state.copy(search = SearchUiState.Loading(state.searchResults), error = null)
+            state.copy(search = SearchUiState.Loading(state.searchResults))
         }
     }
 
@@ -228,8 +233,7 @@ class WeatherViewModel @Inject constructor(
     fun loadTopPicks(forceRefresh: Boolean = false) {
         _uiState.update { state ->
             state.copy(
-                topPicksFetch = if (forceRefresh) FetchStatus.Refreshing else FetchStatus.Loading,
-                error = if (forceRefresh) null else state.error
+                topPicksFetch = if (forceRefresh) FetchStatus.Refreshing else FetchStatus.Loading
             )
         }
         viewModelScope.launch {
@@ -256,7 +260,7 @@ class WeatherViewModel @Inject constructor(
      * Debounces the query and triggers geocoding searches automatically.
      */
     fun onQueryChanged(query: String) {
-        _uiState.update { it.copy(query = query, error = null) }
+        _uiState.update { it.copy(query = query) }
         searchQueryFlow.value = query
 
         if (query.length <= 2) {
@@ -286,8 +290,6 @@ class WeatherViewModel @Inject constructor(
             it.copy(
                 search = SearchUiState.Idle,
                 query = "",
-                error = null,
-                syncError = null,
                 mapTapFetch = FetchStatus.Idle,
                 mapPin = location
             )
@@ -332,16 +334,10 @@ class WeatherViewModel @Inject constructor(
         repository.prefetchNearbyCities(location)
     }
 
-    /** Routes a refresh failure to [WeatherUiState.error], [syncError], or the hop buffer. */
+    /** Routes a refresh failure onto the forecast lane or the hop buffer. */
     private fun applyRefreshError(location: Location, mappedError: UiText) {
         if (_uiState.value.selectedLocation?.id == location.id) {
-            _uiState.update { state ->
-                if (state.forecast == null) {
-                    state.copy(error = mappedError, forecastFetch = FetchStatus.Idle)
-                } else {
-                    state.copy(syncError = mappedError, forecastFetch = FetchStatus.Idle)
-                }
-            }
+            _uiState.update { it.copy(forecastFetch = FetchStatus.Failed(mappedError)) }
             return
         }
         if (pendingDetailLocation?.id == location.id) {
@@ -376,11 +372,8 @@ class WeatherViewModel @Inject constructor(
                 destination = WeatherDestination.Detail(location),
                 forecast = ready,
                 rankedActivities = ready?.let { getRankedActivities(it, 0) } ?: emptyList(),
-                weekTopActivities = ready?.let { computeWeekTopActivities(it) } ?: emptyList(),
                 selectedDayIndex = 0,
-                forecastFetch = if (ready == null && pendingError == null) FetchStatus.Loading else FetchStatus.Idle,
-                error = if (ready == null) pendingError else null,
-                syncError = if (ready != null) pendingError else null
+                forecastFetch = revealedForecastFetch(ready, pendingError)
             )
         }
         ready?.let { applyForecastToUi(it) }
@@ -395,9 +388,8 @@ class WeatherViewModel @Inject constructor(
                 destination = WeatherDestination.Detail(forecast.location),
                 forecast = forecast,
                 rankedActivities = getRankedActivities(forecast, dayIndex),
-                weekTopActivities = computeWeekTopActivities(forecast),
                 selectedDayIndex = dayIndex,
-                forecastFetch = FetchStatus.Idle
+                forecastFetch = state.forecastFetch.completeIfInFlight()
             )
         }
     }
@@ -412,7 +404,9 @@ class WeatherViewModel @Inject constructor(
      */
     fun onMapTapped(latitude: Double, longitude: Double) {
         if (currentConnectivityStatus != ConnectivityStatus.Available) {
-            _uiState.update { it.copy(error = AppError.NetworkError.NoConnectivity.asUiText()) }
+            _uiState.update {
+                it.copy(mapTapFetch = FetchStatus.Failed(AppError.NetworkError.NoConnectivity.asUiText()))
+            }
             return
         }
         startMapTap(latitude, longitude)
@@ -424,7 +418,6 @@ class WeatherViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 mapTapFetch = FetchStatus.Loading,
-                error = null,
                 mapCamera = MapCameraPosition(
                     latitude = latitude,
                     longitude = longitude,
@@ -441,7 +434,7 @@ class WeatherViewModel @Inject constructor(
             onSuccess = { location -> onLocationSelected(location) },
             onError = { err ->
                 _uiState.update {
-                    it.copy(mapTapFetch = FetchStatus.Idle, error = err.asUiText())
+                    it.copy(mapTapFetch = FetchStatus.Failed(err.asUiText()))
                 }
             }
         )
@@ -550,7 +543,9 @@ class WeatherViewModel @Inject constructor(
     /** Pull-to-refresh on home: force-reloads featured cities when online. */
     private fun refreshHome() {
         if (currentConnectivityStatus != ConnectivityStatus.Available) {
-            _uiState.update { it.copy(error = AppError.NetworkError.NoConnectivity.asUiText()) }
+            _uiState.update {
+                it.copy(topPicksFetch = FetchStatus.Failed(AppError.NetworkError.NoConnectivity.asUiText()))
+            }
             return
         }
         loadTopPicks(forceRefresh = true)
@@ -559,22 +554,18 @@ class WeatherViewModel @Inject constructor(
     /** Force-refreshes the selected city's forecast into Room for callers/tests. */
     private fun refreshSelectedForecast(location: Location) {
         if (currentConnectivityStatus != ConnectivityStatus.Available) {
-            _uiState.update { it.copy(syncError = AppError.NetworkError.NoConnectivity.asUiText()) }
+            _uiState.update {
+                it.copy(forecastFetch = FetchStatus.Failed(AppError.NetworkError.NoConnectivity.asUiText()))
+            }
             return
         }
         viewModelScope.launch {
             repository.refreshForecast(location, force = true).fold(
-                onSuccess = { _uiState.update { it.copy(syncError = null, error = null) } },
-                onError = { err -> _uiState.update { it.copy(syncError = err.asUiText()) } }
+                onSuccess = { _uiState.update { it.copy(forecastFetch = FetchStatus.Idle) } },
+                onError = { err -> _uiState.update { it.copy(forecastFetch = FetchStatus.Failed(err.asUiText())) } }
             )
         }
     }
-
-    /** Top-ranked activity for each forecast day; kept for tests even though chips no longer show it. */
-    private fun computeWeekTopActivities(forecast: WeatherForecast): List<RankedActivity?> =
-        forecast.dailyForecasts.indices.map { dayIndex ->
-            getRankedActivities(forecast, dayIndex).firstOrNull()
-        }
 }
 
 /** Clears detail fields and recenters the camera on the device city or the London default. */
@@ -582,13 +573,10 @@ private fun WeatherUiState.toHome(): WeatherUiState = copy(
     destination = WeatherDestination.Home,
     forecast = null,
     rankedActivities = emptyList(),
-    weekTopActivities = emptyList(),
     selectedDayIndex = 0,
     query = "",
     search = SearchUiState.Idle,
     forecastFetch = FetchStatus.Idle,
-    error = null,
-    syncError = null,
     mapCamera = deviceLocation?.toMapCamera(
         MapCameraPosition.HOME_DEFAULT_ZOOM,
         MapHopProfile.CACHED
@@ -597,15 +585,15 @@ private fun WeatherUiState.toHome(): WeatherUiState = copy(
     mapTapFetch = FetchStatus.Idle
 )
 
-/** Restores previous search hits (or Idle) and attaches [error] to the search lane. */
+/** Attaches [error] to the search lane while keeping any previous hits visible. */
 private fun WeatherUiState.withSearchSettled(error: UiText): WeatherUiState {
-    val settled = when (val current = search) {
-        is SearchUiState.Loading ->
-            if (current.previousResults.isEmpty()) SearchUiState.Idle
-            else SearchUiState.Results(current.previousResults)
-        else -> current
-    }
-    return copy(search = settled, error = error)
+    return copy(search = SearchUiState.Failed(error, searchResults))
+}
+
+/** Forecast lane status at sheet reveal: failed, first-load, or already painted. */
+private fun revealedForecastFetch(ready: WeatherForecast?, pendingError: UiText?): FetchStatus {
+    if (pendingError != null) return FetchStatus.Failed(pendingError)
+    return if (ready == null) FetchStatus.Loading else FetchStatus.Idle
 }
 
 /** Builds a camera target at this city's coordinates with the given zoom and hop profile. */
