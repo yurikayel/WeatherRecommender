@@ -153,13 +153,19 @@ class WeatherScreenTest {
     }
 
     @Test
-    fun themeToggle_contentDescriptionIsUniquePerMode() {
+    fun themeToggle_lightMode_showsSwitchToDarkDescription() {
         setContent(WeatherUiState(), themeMode = ThemeMode.LIGHT)
         composeTestRule.onNodeWithContentDescription("Switch to dark mode").assertIsDisplayed()
+    }
 
+    @Test
+    fun themeToggle_darkMode_showsSwitchToCycleDescription() {
         setContent(WeatherUiState(), darkTheme = true, themeMode = ThemeMode.DARK)
         composeTestRule.onNodeWithContentDescription("Switch to cycle mode").assertIsDisplayed()
+    }
 
+    @Test
+    fun themeToggle_cycleMode_showsSwitchToLightDescriptionAndLabel() {
         setContent(WeatherUiState(), themeMode = ThemeMode.CYCLE)
         composeTestRule.onNodeWithContentDescription("Switch to light mode").assertIsDisplayed()
         composeTestRule.onNodeWithText("CYCLE").assertIsDisplayed()
