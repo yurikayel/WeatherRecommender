@@ -16,4 +16,16 @@ class LocationPlaceKeyTest {
         val unnamed = Location(2, "Lisbon", 38.7, -9.1, null, null)
         assertEquals("lisbon|", unnamed.placeKey)
     }
+
+    @Test
+    fun displayName_joins_present_parts() {
+        val paris = Location(1, "Paris", 48.8, 2.3, "France", "Île-de-France")
+        assertEquals("Paris, Île-de-France, France", paris.displayName)
+    }
+
+    @Test
+    fun displayName_omits_null_admin() {
+        val lisbon = Location(2, "Lisbon", 38.7, -9.1, "Portugal", null)
+        assertEquals("Lisbon, Portugal", lisbon.displayName)
+    }
 }
