@@ -26,12 +26,16 @@ import com.example.weatherrecommender.domain.usecase.CountryCityCatalog
 import com.example.weatherrecommender.domain.usecase.HubCities
 import com.example.weatherrecommender.domain.usecase.NearbyCities
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import retrofit2.HttpException
@@ -143,11 +147,28 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
-    /** Room SSOT: emits null until daily rows exist for the canonical [location] id. */
+    /** Room SSOT: emits null until daily rows exist. Re-resolves the id when that Room row is deleted. */
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun getForecastFlow(location: Location): Flow<WeatherForecast?> {
-        return flow {
-            val canonical = resolveCanonicalLocation(location)
-            emitAll(forecastFlowForId(canonical))
+        return canonicalLocationFlow(location).flatMapLatest { canonical ->
+            forecastFlowForId(canonical)
+        }
+    }
+
+    /**
+     * Emits the Room id to observe, then re-resolves when that row disappears
+     * (Nominatim stub upgraded to a GeoNames id).
+     */
+    private fun canonicalLocationFlow(location: Location): Flow<Location> = flow {
+        var current = resolveCanonicalLocation(location)
+        while (true) {
+            emit(current)
+            weatherDao.getLocationFlow(current.id).first { it == null }
+            val next = resolveCanonicalLocation(location)
+            if (next.id == current.id) {
+                awaitCancellation()
+            }
+            current = next
         }
     }
 

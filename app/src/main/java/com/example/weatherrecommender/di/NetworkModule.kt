@@ -39,11 +39,24 @@ object NetworkModule {
         coerceInputValues = true
     }
 
-    /** Shared OkHttp client with identifying User-Agent, Open-Meteo in-flight cap, 429 retries, and debug body logs. */
+    /** Shared OkHttp client with identifying User-Agent, Open-Meteo and Nominatim in-flight caps, 429 retries, and debug body logs. */
     @Provides
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
-        val builder = OkHttpClient.Builder()
+        val builder = sharedOkHttpBuilder()
+        if (BuildConfig.DEBUG) {
+            builder.addInterceptor(
+                HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BODY
+                }
+            )
+        }
+        return builder.build()
+    }
+
+    /** Timeouts, User-Agent, host gates, and 429 retry — shared by debug and release. */
+    private fun sharedOkHttpBuilder(): OkHttpClient.Builder =
+        OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .addInterceptor { chain ->
@@ -61,18 +74,13 @@ object NetworkModule {
                     HostConcurrencyLimiter.OPEN_METEO_HOST_SUFFIX
                 )
             )
-            .addInterceptor(RateLimitRetryInterceptor())
-
-        if (BuildConfig.DEBUG) {
-            builder.addInterceptor(
-                HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.BODY
-                }
+            .addInterceptor(
+                HostConcurrencyLimiter(
+                    HostConcurrencyLimiter.NOMINATIM_MAX_IN_FLIGHT,
+                    HostConcurrencyLimiter.NOMINATIM_HOST_SUFFIX
+                )
             )
-        }
-
-        return builder.build()
-    }
+            .addInterceptor(RateLimitRetryInterceptor())
 
     /** Retrofit for Open-Meteo geocoding. */
     @Provides

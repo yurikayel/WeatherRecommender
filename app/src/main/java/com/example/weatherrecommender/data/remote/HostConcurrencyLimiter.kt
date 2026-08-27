@@ -10,8 +10,8 @@ import java.util.concurrent.Semaphore
  *
  * Forecast, geocoding, and marine all live under `open-meteo.com`. Top picks, nearby
  * prefetch, country-warm, and WorkManager are separate Kotlin lanes — without a shared
- * gate they can still stack past Open-Meteo's courtesy limit. Wikipedia and Nominatim
- * are other hosts and are not gated here.
+ * gate they can still stack past Open-Meteo's courtesy limit. Wikipedia is another host
+ * and is not gated here. Nominatim uses a second limiter (1 in-flight) on the same client.
  *
  * Placed outside [RateLimitRetryInterceptor] so a 429 backoff keeps occupying a slot
  * instead of letting another lane fire during the sleep.
@@ -38,7 +38,7 @@ class HostConcurrencyLimiter(
             gate.acquire()
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
-            throw IOException("Interrupted waiting for an Open-Meteo slot", e)
+            throw IOException("Interrupted waiting for a $hostSuffix slot", e)
         }
         try {
             return chain.proceed(request)
@@ -53,5 +53,11 @@ class HostConcurrencyLimiter(
 
         /** Matches [com.example.weatherrecommender.data.worker.LocationSyncer] chunk size. */
         const val OPEN_METEO_MAX_IN_FLIGHT = 3
+
+        /** Nominatim lives under this OSM suffix (`nominatim.openstreetmap.org`). */
+        const val NOMINATIM_HOST_SUFFIX = "openstreetmap.org"
+
+        /** Nominatim usage policy is ~1 request per second; one in-flight is the hard cap. */
+        const val NOMINATIM_MAX_IN_FLIGHT = 1
     }
 }

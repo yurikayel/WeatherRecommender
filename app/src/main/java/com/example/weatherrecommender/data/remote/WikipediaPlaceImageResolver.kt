@@ -15,6 +15,8 @@ import javax.inject.Singleton
  * 3. `list=search` then `pageimages` on the top hit
  *
  * Missing pages and pages without a thumbnail/original are skipped.
+ * When redirects return several pages, the thumbnail-bearing target is preferred
+ * over a disambiguation original (map iteration order is undefined).
  */
 @Singleton
 class WikipediaPlaceImageResolver @Inject constructor(
@@ -59,9 +61,12 @@ class WikipediaPlaceImageResolver @Inject constructor(
         return extractImageUrl(wikipediaApi.getPageImage(titles = title))
     }
 
-    /** First usable thumbnail/original from a pageimages response, or null. */
+    /** Thumbnail/original URL from a pageimages response, or null. */
     private fun extractImageUrl(response: WikipediaResponse): String? {
-        val page = response.query?.pages?.values?.firstOrNull(::isUsablePage) ?: return null
+        val page = response.query?.pages?.values
+            ?.filter(::isUsablePage)
+            ?.maxWithOrNull(pagePreference)
+            ?: return null
         return page.thumbnail?.source ?: page.original?.source
     }
 
@@ -69,5 +74,19 @@ class WikipediaPlaceImageResolver @Inject constructor(
     private fun isUsablePage(page: WikipediaPage): Boolean {
         val missingOrInvalidId = page.missing != null || (page.pageid != null && page.pageid < 0L)
         return !missingOrInvalidId && (page.thumbnail != null || page.original != null)
+    }
+
+    private companion object {
+        /**
+         * Redirect payloads can include several pages; map iteration order is undefined.
+         * Prefer a thumbnail, then original, then the highest MediaWiki page id (the target).
+         */
+        val pagePreference: Comparator<WikipediaPage> = compareBy<WikipediaPage> { page ->
+            when {
+                page.thumbnail != null -> 2
+                page.original != null -> 1
+                else -> 0
+            }
+        }.thenBy { it.pageid ?: Long.MIN_VALUE }
     }
 }
