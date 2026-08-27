@@ -206,6 +206,22 @@ interface WeatherDao {
     }
 
     /**
+     * Moves a cached city onto a new primary key without dropping daily rows.
+     *
+     * Used when a Nominatim stub (`-(1_000_000 + placeId)`) is replaced by a
+     * stable GeoNames / Open-Meteo id. Copies forecasts first, then deletes [oldId].
+     */
+    @Transaction
+    suspend fun rekeyLocation(oldId: Long, newLocation: LocationEntity) {
+        val days = getDailyForecasts(oldId)
+        insertLocation(newLocation)
+        if (days.isNotEmpty()) {
+            insertDailyForecasts(days.map { it.copy(locationId = newLocation.id) })
+        }
+        deleteLocationWithForecasts(oldId)
+    }
+
+    /**
      * Atomically inserts a location and its associated daily forecasts, clearing out
      * any existing forecasts for that location to avoid stale overlaps.
      */

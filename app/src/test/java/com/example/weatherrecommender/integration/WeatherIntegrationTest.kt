@@ -56,6 +56,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -261,6 +262,37 @@ class WeatherIntegrationTest {
             assertTrue(state.rankedActivities.isEmpty())
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `markLocationViewed rekeys Nominatim stub and keeps daily forecasts`() = runTest {
+        val nominatimId = -1_000_042L
+        val geoNamesId = 2643743L
+        val days = (16..22).map { day ->
+            DailyForecast("2026-07-$day", 0, 22.0, 12.0, 0.0, 0.0, 10.0)
+        }
+        weatherDao.insertLocationWithForecast(
+            location = london.copy(id = nominatimId).toEntity(
+                lastUpdated = 50L,
+                lastViewedAt = 10L
+            ).copy(
+                imageUrl = "https://example.com/london.jpg",
+                placeMetadataUpdatedAt = 40L,
+                countryCode = "GB"
+            ),
+            forecasts = days.map { it.toEntity(nominatimId) }
+        )
+
+        repository.markLocationViewed(london.copy(id = geoNamesId))
+
+        assertNull(weatherDao.getLocation(nominatimId))
+        val moved = weatherDao.getLocation(geoNamesId)
+        assertEquals("London", moved?.name)
+        assertEquals("https://example.com/london.jpg", moved?.imageUrl)
+        assertEquals("GB", moved?.countryCode)
+        assertEquals(50L, moved?.lastUpdated)
+        assertEquals(7, weatherDao.getDailyForecasts(geoNamesId).size)
+        assertTrue(weatherDao.getDailyForecasts(geoNamesId).all { it.locationId == geoNamesId })
     }
 
     private fun DailyForecast.toEntity(locationId: Long) = com.example.weatherrecommender.data.local.entity.DailyForecastEntity(

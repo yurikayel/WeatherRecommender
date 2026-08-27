@@ -147,6 +147,7 @@ class WeatherViewModel @Inject constructor(
     private var mapTapJob: Job? = null
     private var deviceLocationJob: Job? = null
     private var countryWarmJob: Job? = null
+    private var topPicksJob: Job? = null
     private var countryWarmCode: String? = null
     private val countryWarmBudget = AtomicInteger(0)
     private var pendingDetailLocation: Location? = null
@@ -236,6 +237,8 @@ class WeatherViewModel @Inject constructor(
     /**
      * Loads the population-weighted featured suggestions for the home screen.
      * Pass [forceRefresh] = true (e.g. pull-to-refresh) to bypass the in-memory TTL cache.
+     * Cancels an in-flight load so init and PTR cannot finish out of order; a throw
+     * settles [WeatherUiState.topPicksFetch] to [FetchStatus.Failed] instead of leaving Loading.
      */
     fun loadTopPicks(forceRefresh: Boolean = false) {
         _uiState.update { state ->
@@ -243,16 +246,25 @@ class WeatherViewModel @Inject constructor(
                 topPicksFetch = if (forceRefresh) FetchStatus.Refreshing else FetchStatus.Loading
             )
         }
-        viewModelScope.launch {
-            if (!forceRefresh) {
-                delay(TOP_PICKS_LOAD_DEFER_MS.milliseconds)
-            }
-            val picks = getTopPicks(forceRefresh = forceRefresh)
-            _uiState.update {
-                it.copy(
-                    topPicks = picks,
-                    topPicksFetch = FetchStatus.Idle
-                )
+        topPicksJob?.cancel()
+        topPicksJob = viewModelScope.launch {
+            try {
+                if (!forceRefresh) {
+                    delay(TOP_PICKS_LOAD_DEFER_MS.milliseconds)
+                }
+                val picks = getTopPicks(forceRefresh = forceRefresh)
+                _uiState.update {
+                    it.copy(
+                        topPicks = picks,
+                        topPicksFetch = FetchStatus.Idle
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(topPicksFetch = FetchStatus.Failed(AppError.Unknown(e).asUiText()))
+                }
             }
         }
     }
