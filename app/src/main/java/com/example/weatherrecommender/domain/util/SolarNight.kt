@@ -1,6 +1,7 @@
 package com.example.weatherrecommender.domain.util
 
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlin.math.asin
 import kotlin.math.atan2
@@ -8,11 +9,11 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Day/night helpers for first-run theme defaulting.
+ * Day/night helpers for Cycle theme resolution.
  *
  * Location-aware [isNightAt] uses solar elevation at lat/lng (below the horizon = night),
  * so it follows the place's local sunrise/sunset rather than the device time zone.
- * [isNightByLocalClock] is the fallback when GPS is not yet available (19:00–06:00).
+ * [isNightByLocalClock] is the fallback when GPS is not available (19:00–06:00).
  */
 object SolarNight {
 
@@ -28,6 +29,21 @@ object SolarNight {
     /** Night when the sun is below the horizon at [latitude]/[longitude] for [instant]. */
     fun isNightAt(latitude: Double, longitude: Double, instant: Instant): Boolean =
         solarElevationDegrees(latitude, longitude, instant) < 0.0
+
+    /**
+     * Solar night when both coordinates are present; otherwise local-clock 19:00–06:00.
+     */
+    fun isNightNow(
+        latitude: Double?,
+        longitude: Double?,
+        now: Instant,
+        zone: ZoneId
+    ): Boolean {
+        if (latitude == null || longitude == null) {
+            return isNightByLocalClock(now.atZone(zone))
+        }
+        return isNightAt(latitude, longitude, now)
+    }
 }
 
 /**

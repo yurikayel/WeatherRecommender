@@ -118,11 +118,12 @@ class WeatherViewModelTest {
             advanceUntilIdle()
 
             val finalState = expectMostRecentItem()
-            assertTrue(finalState.error is com.example.weatherrecommender.ui.util.UiText.StringResource)
+            assertTrue(finalState.searchError is com.example.weatherrecommender.ui.util.UiText.StringResource)
             assertEquals(
                 com.example.weatherrecommender.R.string.error_network_offline,
-                (finalState.error as com.example.weatherrecommender.ui.util.UiText.StringResource).resId
+                (finalState.searchError as com.example.weatherrecommender.ui.util.UiText.StringResource).resId
             )
+            assertTrue(finalState.search is SearchUiState.Failed)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -161,9 +162,6 @@ class WeatherViewModelTest {
         assertNotNull(state.forecast)
         assertEquals(0, state.selectedDayIndex)
         assertEquals(day0Activities, state.rankedActivities)
-        assertEquals(2, state.weekTopActivities.size)
-        assertEquals(day0Activities.first(), state.weekTopActivities[0])
-        assertEquals(day1Activities.first(), state.weekTopActivities[1])
     }
 
     @Test
@@ -206,7 +204,7 @@ class WeatherViewModelTest {
     }
 
     @Test
-    fun `refresh failure with cached data sets syncError not blocking error`() = runTest {
+    fun `refresh failure with cached data fails the forecast lane not search`() = runTest {
         every { repository.getForecastFlow(location) } returns flowOf(forecast)
         coEvery { repository.refreshForecast(location) } returns Result.Error(AppError.NetworkError.NoConnectivity)
         every { getRankedActivitiesUseCase.invoke(forecast, 0) } returns day0Activities
@@ -218,12 +216,12 @@ class WeatherViewModelTest {
 
         val state = viewModel.uiState.value
         assertNotNull(state.forecast)
-        assertNull(state.error)
-        assertNotNull(state.syncError)
+        assertNull(state.searchError)
+        assertTrue(state.forecastFetch is FetchStatus.Failed)
     }
 
     @Test
-    fun `refresh when offline sets syncError`() = runTest {
+    fun `refresh when offline fails the forecast lane`() = runTest {
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Unavailable)
         every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
         coEvery { repository.markLocationViewed(any()) } returns Unit
@@ -241,7 +239,7 @@ class WeatherViewModelTest {
         viewModel.refresh()
         advanceUntilIdle()
 
-        assertNotNull(viewModel.uiState.value.syncError)
+        assertTrue(viewModel.uiState.value.forecastFetch is FetchStatus.Failed)
     }
 
     @Test
@@ -576,5 +574,34 @@ class WeatherViewModelTest {
         assertNull(state.deviceLocation)
         assertNull(state.selectedLocation)
         assertEquals(MapCameraPosition.DEFAULT, state.mapCamera)
+    }
+
+    @Test
+    fun `map tap failure stays on the map tap lane`() = runTest {
+        coEvery { repository.reverseGeocode(any(), any()) } returns Result.Error(AppError.ApiError.NotFound)
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onMapTapped(51.5, -0.1)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.mapTapFetch is FetchStatus.Failed)
+        assertNull(state.searchError)
+        assertTrue(state.forecastFetch !is FetchStatus.Failed)
+    }
+
+    @Test
+    fun `home refresh when offline fails the top picks lane`() = runTest {
+        every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Unavailable)
+        every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
+        viewModel = createViewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.topPicksFetch is FetchStatus.Failed)
+        assertNull(viewModel.uiState.value.searchError)
     }
 }

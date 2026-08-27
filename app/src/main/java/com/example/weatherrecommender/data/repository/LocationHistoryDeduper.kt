@@ -33,6 +33,26 @@ internal object LocationHistoryDeduper {
             sameNormalizedNameCountry(a, b)
     }
 
+    /**
+     * Closest [candidates] within [PROXIMITY_DEGREES] of [latitude]/[longitude], or null.
+     * Used to replace a Nominatim synthetic id with an Open-Meteo / GeoNames search id.
+     */
+    fun <T> nearestWithinProximity(
+        latitude: Double,
+        longitude: Double,
+        candidates: List<T>,
+        latOf: (T) -> Double,
+        lngOf: (T) -> Double
+    ): T? {
+        return candidates
+            .filter { withinProximity(latitude, longitude, latOf(it), lngOf(it)) }
+            .minByOrNull { candidate ->
+                val dLat = abs(latitude - latOf(candidate))
+                val dLng = abs(longitude - lngOf(candidate))
+                dLat + dLng
+            }
+    }
+
     /** True when both points sit within [delta] degrees on both axes. */
     fun withinProximity(
         lat1: Double,

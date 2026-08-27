@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +40,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -50,10 +52,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.weatherrecommender.R
+import com.example.weatherrecommender.data.preferences.ThemeMode
 import com.example.weatherrecommender.domain.model.RecommendedActivity
 
 /** Maps an activity to its representative Material icon. Shared across home and detail. */
@@ -67,20 +72,46 @@ internal fun activityIcon(activity: RecommendedActivity): ImageVector = when (ac
 /**
  * Weight/size metrics shared by [DetailContent] and [PremiumShimmerLoadingState] so loading
  * never flashes a different geometry (16:9 overlay hero + 7-day chips + compact activity rows).
- * The locked 60% sheet does not scroll: the hero keeps its 16:9 height, day chips stay
- * [DayRowHeight], and ranked activity rows share the leftover space equally.
+ *
+ * The locked 60% sheet keeps the hero on screen. When leftover height cannot fit the day row
+ * plus [ActivitySlots] minimum activity rows, the chips+list column scrolls.
  */
 internal object DetailLayout {
     const val ForecastDays = 7
     const val ActivitySlots = 4
     const val HeroAspectRatio = 16f / 9f
+    const val MinHeroFraction = 0.28f
     val DayRowHeight = 128.dp
+    val MinActivityRowHeight = 44.dp
     val BlockSpacing = 8.dp
     val AfterDayRowSpacing = 8.dp
     val DayButtonSpacing = 4.dp
     val DayButtonCorner = 12.dp
     val SheetHorizontalPadding = 8.dp
     val SheetBottomPadding = 8.dp
+    val MinScrollBodyHeight = DayRowHeight + AfterDayRowSpacing +
+        MinActivityRowHeight * ActivitySlots
+}
+
+/**
+ * Hero height for a locked detail sheet. Uses 16:9 when leftover space can hold chips +
+ * minimum activity rows; otherwise shrinks the hero so the body can scroll instead of clip.
+ */
+internal fun detailHeroHeightPx(
+    sheetWidthPx: Float,
+    sheetHeightPx: Float,
+    minBodyPx: Float,
+    heroAspect: Float = DetailLayout.HeroAspectRatio,
+    minHeroFraction: Float = DetailLayout.MinHeroFraction
+): Float {
+    if (sheetWidthPx <= 0f || sheetHeightPx <= 0f) return 0f
+    val aspectHeight = sheetWidthPx / heroAspect
+    val leftoverFits = sheetHeightPx - aspectHeight >= minBodyPx
+    return if (leftoverFits) {
+        aspectHeight
+    } else {
+        (sheetHeightPx - minBodyPx).coerceAtLeast(sheetHeightPx * minHeroFraction)
+    }
 }
 
 /**
@@ -211,7 +242,6 @@ internal fun WeatherSheetHeader(
     inDetail: Boolean,
     canShare: Boolean,
     shareInProgress: Boolean,
-    isDarkTheme: Boolean,
     sheetFullyExpanded: Boolean,
     onToggleTheme: () -> Unit,
     onBack: () -> Unit,
@@ -284,28 +314,54 @@ internal fun WeatherSheetHeader(
                         )
                     }
                 }
-                ThemeToggleIcon(isDarkTheme = isDarkTheme, onToggleTheme = onToggleTheme)
+                ThemeToggleControl(
+                    themeMode = LocalThemeMode.current,
+                    onToggleTheme = onToggleTheme
+                )
             }
         }
     }
 }
 
-/** Sun/moon control that toggles [ThemePreferences] Light vs Dark. */
+/** Header control that advances Light → Dark → Cycle. Cycle shows a labeled pill. */
 @Composable
-private fun ThemeToggleIcon(
-    isDarkTheme: Boolean,
+private fun ThemeToggleControl(
+    themeMode: ThemeMode,
     onToggleTheme: () -> Unit
 ) {
+    if (themeMode == ThemeMode.CYCLE) {
+        CycleThemePill(onClick = onToggleTheme)
+        return
+    }
+    val isDark = themeMode == ThemeMode.DARK
+    val icon = if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode
+    val descriptionRes = if (isDark) {
+        R.string.theme_switch_to_cycle
+    } else {
+        R.string.theme_switch_to_dark
+    }
     IconButton(onClick = onToggleTheme) {
-        Icon(
-            imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-            contentDescription = stringResource(
-                if (isDarkTheme) {
-                    R.string.theme_switch_to_light
-                } else {
-                    R.string.theme_switch_to_dark
-                }
-            )
+        Icon(imageVector = icon, contentDescription = stringResource(descriptionRes))
+    }
+}
+
+/** Rounded CYCLE chip using Material 3 selected/on-surface colors and a primary outline. */
+@Composable
+private fun CycleThemePill(onClick: () -> Unit) {
+    val description = stringResource(R.string.theme_switch_to_light)
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(percent = 50),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+        modifier = Modifier.semantics { contentDescription = description }
+    ) {
+        Text(
+            text = stringResource(R.string.theme_cycle_label),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold
         )
     }
 }

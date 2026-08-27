@@ -164,6 +164,7 @@ class WeatherRepositoryImplTest {
                 country = "United Kingdom"
             )
         )
+        coEvery { geocodingApi.searchCity("London") } returns GeocodingResponse(results = null)
 
         val result = repository.reverseGeocode(51.5, -0.1)
 
@@ -175,6 +176,31 @@ class WeatherRepositoryImplTest {
         assertEquals(51.5074, mapped.latitude, 0.0001)
         assertEquals(-0.1278, mapped.longitude, 0.0001)
         assertTrue(mapped.id < -1_000_000L)
+    }
+
+    @Test
+    fun `reverseGeocode reuses a nearby Open-Meteo GeoNames id`() = runTest {
+        coEvery { nominatimApi.reverseGeocode(51.5, -0.1) } returns NominatimResponse(
+            placeId = 42,
+            lat = "51.5074",
+            lon = "-0.1278",
+            displayName = "London, England, UK",
+            name = "London",
+            address = NominatimAddress(city = "London", state = "England", country = "United Kingdom")
+        )
+        coEvery { geocodingApi.searchCity("London") } returns GeocodingResponse(
+            results = listOf(
+                GeocodingLocationDto(
+                    id = 2643743, name = "London", latitude = 51.508, longitude = -0.128,
+                    country = "United Kingdom", admin1 = "England"
+                )
+            )
+        )
+
+        val result = repository.reverseGeocode(51.5, -0.1)
+
+        assertTrue(result is Result.Success)
+        assertEquals(2643743L, (result as Result.Success).data.id)
     }
 
     @Test
@@ -312,6 +338,46 @@ class WeatherRepositoryImplTest {
 
         assertTrue(result is Result.Success)
         coVerify(exactly = 0) { wikipediaApi.getPageImage(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `refreshForecast fetches Wikipedia when placeMetadataUpdatedAt is 0`() = runTest {
+        val migrated = location.copy(imageUrl = "https://example.com/london.jpg").toEntity(
+            lastUpdated = System.currentTimeMillis() - CachePolicy.WEATHER_TTL_MS - 1,
+            lastViewedAt = 1L,
+            placeMetadataUpdatedAt = 0L
+        )
+        coEvery { weatherDao.getLocation(location.id) } returns migrated
+        coEvery { weatherDao.getDailyForecasts(location.id) } returns emptyList()
+        coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
+
+        val result = repository.refreshForecast(location.copy(imageUrl = "https://example.com/london.jpg"))
+
+        assertTrue(result is Result.Success)
+        coVerify(exactly = 1) { wikipediaApi.getPageImage(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `refreshForecast writes under an existing GeoNames id for a Nominatim tap`() = runTest {
+        val nominatim = Location(-1_000_042, "London", 51.52, -0.12, "UK", "England")
+        val geoNames = location.toEntity(lastViewedAt = 10L)
+        coEvery { weatherDao.getLocation(nominatim.id) } returns null
+        coEvery { weatherDao.getLocation(location.id) } returns geoNames
+        coEvery {
+            weatherDao.findLocationsNear(nominatim.latitude, nominatim.longitude, 0.05)
+        } returns listOf(geoNames)
+        coEvery { weatherDao.getDailyForecasts(location.id) } returns emptyList()
+        coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
+
+        val result = repository.refreshForecast(nominatim)
+
+        assertTrue(result is Result.Success)
+        coVerify {
+            weatherDao.insertLocationWithForecast(
+                match { it.id == location.id },
+                match { days -> days.all { it.locationId == location.id } }
+            )
+        }
     }
 
     @Test

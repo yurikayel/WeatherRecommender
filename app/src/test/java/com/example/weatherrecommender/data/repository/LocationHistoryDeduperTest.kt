@@ -64,6 +64,23 @@ class LocationHistoryDeduperTest {
     }
 
     @Test
+    fun `nearestWithinProximity picks the closest candidate inside the window`() {
+        val near = entity(id = 1, lat = 51.51, lng = -0.11)
+        val nearer = entity(id = 2, lat = 51.501, lng = -0.101)
+        val far = entity(id = 3, lat = 52.0, lng = 0.0)
+
+        val result = LocationHistoryDeduper.nearestWithinProximity(
+            latitude = 51.5,
+            longitude = -0.1,
+            candidates = listOf(near, nearer, far),
+            latOf = { it.latitude },
+            lngOf = { it.longitude }
+        )
+
+        assertEquals(2L, result?.id)
+    }
+
+    @Test
     fun `sameNormalizedNameCountry is case insensitive`() {
         val a = entity(id = 1, name = " London ", country = "uk")
         val b = entity(id = 2, name = "london", country = "UK", lat = 0.0, lng = 0.0)

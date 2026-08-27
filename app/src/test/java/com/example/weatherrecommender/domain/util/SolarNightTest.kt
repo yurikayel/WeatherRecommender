@@ -45,6 +45,36 @@ class SolarNightTest {
         assertFalse(SolarNight.isNightAt(-33.87, 151.21, afternoon))
     }
 
+    @Test
+    fun `isNightNow falls back to clock when coordinates are missing`() {
+        val night = Instant.parse("2026-01-15T23:00:00Z")
+        val day = Instant.parse("2026-01-15T12:00:00Z")
+        assertTrue(SolarNight.isNightNow(null, null, night, ZoneOffset.UTC))
+        assertFalse(SolarNight.isNightNow(null, -0.1, day, ZoneOffset.UTC))
+        assertFalse(SolarNight.isNightNow(londonLat, londonLng, Instant.parse("2024-06-21T12:00:00Z"), ZoneOffset.UTC))
+    }
+
+    @Test
+    fun isNightNow_usesSolarWhenCoordinatesPresent() {
+        val noon = Instant.parse("2024-06-21T12:00:00Z")
+        assertFalse(
+            SolarNight.isNightNow(londonLat, londonLng, noon, ZoneOffset.UTC)
+        )
+        val midnight = Instant.parse("2024-06-21T00:00:00Z")
+        assertTrue(
+            SolarNight.isNightNow(londonLat, londonLng, midnight, ZoneOffset.UTC)
+        )
+    }
+
+    @Test
+    fun isNightNow_fallsBackToClockWhenCoordinatesMissing() {
+        val evening = Instant.parse("2026-08-19T20:00:00Z")
+        assertTrue(SolarNight.isNightNow(null, null, evening, ZoneOffset.UTC))
+        assertTrue(SolarNight.isNightNow(londonLat, null, evening, ZoneOffset.UTC))
+        val midday = Instant.parse("2026-08-19T12:00:00Z")
+        assertFalse(SolarNight.isNightNow(null, londonLng, midday, ZoneOffset.UTC))
+    }
+
     private fun atHour(hour: Int): ZonedDateTime =
         ZonedDateTime.of(LocalDateTime.of(2026, 8, 19, hour, 0), ZoneOffset.UTC)
 }

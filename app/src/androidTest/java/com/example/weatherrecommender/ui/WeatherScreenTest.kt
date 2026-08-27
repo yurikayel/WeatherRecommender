@@ -22,6 +22,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import com.example.weatherrecommender.data.preferences.ThemeMode
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
@@ -85,6 +86,7 @@ class WeatherScreenTest {
     private fun setContent(
         state: WeatherUiState,
         darkTheme: Boolean = false,
+        themeMode: ThemeMode = ThemeMode.CYCLE,
         onQueryChanged: (String) -> Unit = {},
         onLocationSelected: (Location) -> Unit = {},
         onDaySelected: (Int) -> Unit = {},
@@ -93,7 +95,10 @@ class WeatherScreenTest {
     ) {
         openedUri = null
         composeTestRule.setContent {
-            CompositionLocalProvider(LocalUriHandler provides capturingUriHandler) {
+            CompositionLocalProvider(
+                LocalUriHandler provides capturingUriHandler,
+                LocalThemeMode provides themeMode
+            ) {
                 WeatherRecommenderTheme(darkTheme = darkTheme) {
                     WeatherScreenContent(
                         uiState = state,
@@ -140,10 +145,30 @@ class WeatherScreenTest {
         setContent(WeatherUiState())
 
         composeTestRule.onAllNodesWithText("Plan your day").assertCountEquals(0)
-        composeTestRule.onNodeWithContentDescription("Switch to dark mode").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Switch to light mode").assertIsDisplayed()
+        composeTestRule.onNodeWithText("CYCLE").assertIsDisplayed()
         // Search lives in the fixed sheet header — not inside the scrollable body.
         composeTestRule.onNodeWithText("Search a city…").assertIsDisplayed()
         composeTestRule.onNodeWithText("Top Picks").assertIsDisplayed()
+    }
+
+    @Test
+    fun themeToggle_lightMode_showsSwitchToDarkDescription() {
+        setContent(WeatherUiState(), themeMode = ThemeMode.LIGHT)
+        composeTestRule.onNodeWithContentDescription("Switch to dark mode").assertIsDisplayed()
+    }
+
+    @Test
+    fun themeToggle_darkMode_showsSwitchToCycleDescription() {
+        setContent(WeatherUiState(), darkTheme = true, themeMode = ThemeMode.DARK)
+        composeTestRule.onNodeWithContentDescription("Switch to cycle mode").assertIsDisplayed()
+    }
+
+    @Test
+    fun themeToggle_cycleMode_showsSwitchToLightDescriptionAndLabel() {
+        setContent(WeatherUiState(), themeMode = ThemeMode.CYCLE)
+        composeTestRule.onNodeWithContentDescription("Switch to light mode").assertIsDisplayed()
+        composeTestRule.onNodeWithText("CYCLE").assertIsDisplayed()
     }
 
     @Test
@@ -261,7 +286,11 @@ class WeatherScreenTest {
 
     @Test
     fun home_error_isDisplayed() {
-        setContent(WeatherUiState(error = UiText.DynamicString("City not found")))
+        setContent(
+            WeatherUiState(
+                search = SearchUiState.Failed(UiText.DynamicString("City not found"))
+            )
+        )
 
         composeTestRule.onNodeWithText("Error: City not found").performScrollTo().assertIsDisplayed()
     }
@@ -302,8 +331,7 @@ class WeatherScreenTest {
                 destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 selectedDayIndex = 0,
-                rankedActivities = listOf(outdoorActivity),
-                weekTopActivities = listOf(outdoorActivity, outdoorActivity)
+                rankedActivities = listOf(outdoorActivity)
             )
         )
 
@@ -428,7 +456,9 @@ class WeatherScreenTest {
                 destination = WeatherDestination.Detail(london),
                 forecast = twoDayForecast,
                 rankedActivities = listOf(outdoorActivity),
-                syncError = UiText.DynamicString("No internet connection. Showing offline data.")
+                forecastFetch = FetchStatus.Failed(
+                    UiText.DynamicString("No internet connection. Showing offline data.")
+                )
             )
         )
 
@@ -445,7 +475,7 @@ class WeatherScreenTest {
         setContent(
             WeatherUiState(
                 destination = WeatherDestination.Detail(london),
-                error = UiText.DynamicString("Server error")
+                forecastFetch = FetchStatus.Failed(UiText.DynamicString("Server error"))
             )
         )
 

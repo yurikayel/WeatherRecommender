@@ -25,6 +25,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import retrofit2.HttpException
 import java.io.IOException
@@ -74,18 +76,69 @@ class WeatherRepositoryImpl @Inject constructor(
         }
     }
 
-    /** Reverse-geocodes a map tap through Nominatim into a synthetic-id [Location]. */
+    /** Reverse-geocodes a map tap, then prefers a Room or Open-Meteo GeoNames id. */
     override suspend fun reverseGeocode(latitude: Double, longitude: Double): AppResult<Location> {
         return try {
-            val response = nominatimApi.reverseGeocode(latitude, longitude)
-            Result.Success(response.toLocation(fallbackLat = latitude, fallbackLng = longitude))
+            val nominatim = nominatimApi.reverseGeocode(latitude, longitude)
+                .toLocation(fallbackLat = latitude, fallbackLng = longitude)
+            Result.Success(stabilizeReverseGeocode(nominatim))
         } catch (e: Exception) {
             Result.Error(e.toAppError())
         }
     }
 
-    /** Room SSOT: emits null until daily rows exist for [location]. */
+    /**
+     * Reuses a cached city under another id, else the nearest Open-Meteo search hit,
+     * else the Nominatim synthetic id.
+     */
+    private suspend fun stabilizeReverseGeocode(nominatim: Location): Location {
+        val cached = resolveCanonicalLocation(nominatim)
+        if (cached.id != nominatim.id) return cached
+        return matchForwardGeocode(nominatim) ?: nominatim
+    }
+
+    /** Nearest Open-Meteo hit within [LocationHistoryDeduper.PROXIMITY_DEGREES], or null. */
+    private suspend fun matchForwardGeocode(nominatim: Location): Location? {
+        val hits = when (val result = searchCity(nominatim.name)) {
+            is Result.Success -> result.data
+            is Result.Error -> return null
+        }
+        return LocationHistoryDeduper.nearestWithinProximity(
+            latitude = nominatim.latitude,
+            longitude = nominatim.longitude,
+            candidates = hits,
+            latOf = { it.latitude },
+            lngOf = { it.longitude }
+        )
+    }
+
+    /**
+     * Room row for [location] or a proximity/name duplicate. Prefers a stable positive
+     * (GeoNames) id over a synthetic Nominatim negative.
+     */
+    private suspend fun resolveCanonicalLocation(location: Location): Location {
+        val duplicate = if (weatherDao.getLocation(location.id) != null) {
+            null
+        } else {
+            findDuplicateLocation(location)
+        }
+        val preferIncoming = duplicate != null && location.id > 0L && duplicate.id < 0L
+        return when {
+            duplicate == null || preferIncoming -> location
+            else -> location.copy(id = duplicate.id)
+        }
+    }
+
+    /** Room SSOT: emits null until daily rows exist for the canonical [location] id. */
     override fun getForecastFlow(location: Location): Flow<WeatherForecast?> {
+        return flow {
+            val canonical = resolveCanonicalLocation(location)
+            emitAll(forecastFlowForId(canonical))
+        }
+    }
+
+    /** Combines location + daily rows for a resolved Room id. */
+    private fun forecastFlowForId(location: Location): Flow<WeatherForecast?> {
         return combine(
             weatherDao.getLocationFlow(location.id),
             weatherDao.getDailyForecastsFlow(location.id)
@@ -93,8 +146,6 @@ class WeatherRepositoryImpl @Inject constructor(
             if (forecastEntities.isEmpty()) {
                 null
             } else {
-                // Prefer the persisted location (it carries geography / sea-access);
-                // fall back to the caller-supplied location before the first successful refresh.
                 val resolvedLocation = locationEntity?.toDomain() ?: location
                 WeatherForecast(resolvedLocation, forecastEntities.map { it.toDomain() })
             }
@@ -103,38 +154,48 @@ class WeatherRepositoryImpl @Inject constructor(
 
     /** True when Room already has days and [CachePolicy.WEATHER_TTL_MS] has not elapsed. */
     override suspend fun hasFreshForecast(location: Location): Boolean {
-        val existing = weatherDao.getLocation(location.id)
-        val existingDays = weatherDao.getDailyForecasts(location.id)
+        val canonical = resolveCanonicalLocation(location)
+        val existing = weatherDao.getLocation(canonical.id)
+        val existingDays = weatherDao.getDailyForecasts(canonical.id)
         return isWeatherFresh(existing, existingDays, System.currentTimeMillis())
     }
 
     /** Skips Open-Meteo when fresh unless [force]; otherwise fetches, persists, and evicts overflow. */
     override suspend fun refreshForecast(location: Location, force: Boolean): AppResult<Unit> {
         return try {
-            val existing = weatherDao.getLocation(location.id)
-            val existingDays = weatherDao.getDailyForecasts(location.id)
+            val canonical = resolveCanonicalLocation(location)
+            val existing = weatherDao.getLocation(canonical.id)
+            val existingDays = weatherDao.getDailyForecasts(canonical.id)
             val now = System.currentTimeMillis()
             if (!force && isWeatherFresh(existing, existingDays, now)) {
                 return Result.Success(Unit)
             }
 
-            val forecast = fetchRemoteForecast(location, existing, now)
-            val existingViewedAt = existing?.lastViewedAt ?: 0L
-            weatherDao.insertLocationWithForecast(
-                location = forecast.location.toEntity(
-                    lastViewedAt = existingViewedAt,
-                    placeMetadataUpdatedAt = forecast.location.let { loc ->
-                        existing?.placeMetadataUpdatedAt.takeIf { existing?.imageUrl == loc.imageUrl && it != 0L }
-                            ?: now
-                    }
-                ),
-                forecasts = forecast.dailyForecasts.map { it.toEntity(location.id) }
-            )
+            val forecast = fetchRemoteForecast(canonical, existing, now)
+            persistRefreshedForecast(forecast, existing, now)
             evictStaleLocationsIfNeeded()
             Result.Success(Unit)
         } catch (e: Exception) {
             Result.Error(e.toAppError())
         }
+    }
+
+    /** Writes the refreshed location + days, keeping [LocationEntity.lastViewedAt] when present. */
+    private suspend fun persistRefreshedForecast(
+        forecast: WeatherForecast,
+        existing: LocationEntity?,
+        now: Long
+    ) {
+        val reusedMetadata = existing
+            ?.takeIf { it.imageUrl == forecast.location.imageUrl && it.placeMetadataUpdatedAt != 0L }
+            ?.placeMetadataUpdatedAt
+        weatherDao.insertLocationWithForecast(
+            location = forecast.location.toEntity(
+                lastViewedAt = existing?.lastViewedAt ?: 0L,
+                placeMetadataUpdatedAt = reusedMetadata ?: now
+            ),
+            forecasts = forecast.dailyForecasts.map { it.toEntity(forecast.location.id) }
+        )
     }
 
     /** Best-effort TTL refresh of nearby hubs, staggered to stay under Open-Meteo rate limits. */
@@ -307,7 +368,7 @@ class WeatherRepositoryImpl @Inject constructor(
 
     /**
      * City pictures and names change rarely. Reuse a stored Wikipedia URL for
-     * [CachePolicy.PLACE_METADATA_TTL_MS] (and treat a missing timestamp as still valid).
+     * [CachePolicy.PLACE_METADATA_TTL_MS]. A missing timestamp (`0`) is stale.
      */
     private suspend fun resolveImageUrl(
         location: Location,
@@ -316,10 +377,7 @@ class WeatherRepositoryImpl @Inject constructor(
     ): String? {
         val cachedUrl = location.imageUrl ?: existing?.imageUrl
         val metadataAt = existing?.placeMetadataUpdatedAt ?: 0L
-        val metadataFresh = cachedUrl != null && (
-            metadataAt == 0L || now - metadataAt < CachePolicy.PLACE_METADATA_TTL_MS
-        )
-        if (metadataFresh) return cachedUrl
+        if (CachePolicy.isPlaceMetadataFresh(cachedUrl, metadataAt, now)) return cachedUrl
         return fetchWikipediaImageUrl(location.name) ?: cachedUrl
     }
 
