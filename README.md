@@ -45,6 +45,7 @@ Key experience details:
 | Wikipedia place image | `WikipediaPlaceImageResolver` (redirects → `"name, country"` → search) + Coil `PlaceImagePrefetcher` |
 | Country-warm catalog | `CountryCityCatalog` + `CatalogModule` / `CountryCityCatalogLoader` (assets `country_cities.json`) |
 | Country-warm drain | `WeatherViewModel` `addCountryWarmBudget` / `drainCountryWarm` (GPS +8, selection +2, unused slots restored) |
+| Open-Meteo in-flight cap | `HostConcurrencyLimiter` (max 3 across forecast / geocoding / marine) |
 | Room v9 | `LocationEntity.countryCode` + `MIGRATION_8_9` |
 | Map-first hop | `MapHopProfile` + `WeatherViewModel.onLocationSelected` |
 | Bottom sheet peek | `WeatherScreen.kt` → `SHEET_HOME_PEEK_FRACTION` (0.40) / `SHEET_DETAIL_PEEK_FRACTION` (0.60, locked) |
@@ -115,7 +116,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 
 **Testing Strategy**:
 - **Domain Layer**: Activity scorers and `GetRankedActivitiesUseCase` are pure Kotlin, unit-tested with JUnit.
-- **Data Layer**: `WeatherRepositoryImpl` tested with MockK for APIs and DAO (including weather TTL skip, Wikipedia 30-day reuse / 30-minute miss, country-warm skip/limit, `countryCode` merge, and ISO backfill on TTL skip); `LocationSyncer` (viewed + 16 unviewed cap), `NearbyCities`, `CountryCityCatalog`, `WikipediaPlaceImageResolver`, and rate-limit retry interceptor covered.
+- **Data Layer**: `WeatherRepositoryImpl` tested with MockK for APIs and DAO (including weather TTL skip, Wikipedia 30-day reuse / 30-minute miss, country-warm skip/limit, `countryCode` merge, and ISO backfill on TTL skip); `LocationSyncer` (viewed + 16 unviewed cap), `NearbyCities`, `CountryCityCatalog`, `WikipediaPlaceImageResolver`, `HostConcurrencyLimiter`, and rate-limit retry interceptor covered.
 - **UI Layer**: `WeatherViewModel` tested with Turbine; Robolectric `WeatherIntegrationTest` exercises VM + real Room + mocked APIs; Compose UI has **substantial coverage of key flows** (instrumented tests: home, search, detail day-button selection, errors, dark theme, current-location chip; location permission pre-granted via `GrantPermissionRule`) — not claimed as exhaustive full-UI coverage.
 - **Integration**: `RoomDaoIntegrationTest` (instrumented) covers insert/retrieve, `lastViewedAt` preservation, eviction, and forecast flow emissions. `WeatherDatabaseMigrationTest` covers v8→v9 `countryCode`.
 - **Snapshots**: Paparazzi goldens committed and verified in CI with `-Ppaparazzi`.
@@ -211,13 +212,13 @@ Honest scope note: a **strict 3–4 hour** take would likely stop at search → 
 **Concrete trade-offs**
 - **FeaturedCities synthetic IDs**: seeds use negative IDs (−1…−14) to avoid colliding with positive GeoNames / Open-Meteo IDs. They are never written as if they were API IDs; search results always use real positive IDs.
 - **History id dedupe**: Nominatim reverse ids differ from GeoNames search ids; reverse geocode is stabilized to a nearby Open-Meteo hit (or cached Room row) at write time, then history still collapses leftovers by ~0.05° proximity or name+country, preferring stable positive ids.
-- **LocationSyncer rate limiting**: an earlier all-parallel `refreshForecast` fan-out risked HTTP 429 when many cities were cached. Sync now refreshes **viewed cities plus at most 16 oldest unviewed prefetch rows**, in **chunks of 3** with a short delay between batches, so a 100-city country-warm cache cannot hammer Open-Meteo every 6 hours.
+- **LocationSyncer rate limiting**: an earlier all-parallel `refreshForecast` fan-out risked HTTP 429 when many cities were cached. Sync now refreshes **viewed cities plus at most 16 oldest unviewed prefetch rows**, in **chunks of 3** with a short delay between batches, so a 100-city country-warm cache cannot hammer Open-Meteo every 6 hours. A process-wide `HostConcurrencyLimiter` (max 3 in-flight to `*.open-meteo.com`) also serializes top picks, nearby, country-warm, and the worker so those lanes cannot stack on top of each other.
 - **Top-picks 45-minute TTL**: `TopPicksCache` avoids repeating a cold-start forecast burst on every home visit. Pull-to-refresh on home calls `getTopPicks(forceRefresh=true)` to bypass the TTL when the user asks for fresh data; offline pull shows a connectivity error and keeps the last feed.
 - **WorkManager Sync**: Background sync runs every 6 hours when any network is available — the same window as Open-Meteo’s typical global model update and `CachePolicy.WEATHER_TTL_MS`. Interactive `refreshForecast` skips the network inside that window (`force=true` still hits the API). Stricter constraints (unmetered + charging) were removed to improve refresh reliability on mobile.
 - **Nearby prefetch**: Open-Meteo Geocoding has no “cities around me” endpoint, so `MajorCities` + haversine (`NearbyCities`) warms a handful of regional hubs after each selection. Prefetch rows keep `lastViewedAt = 0` and are evicted before real history. Country-scale warming (`CountryCityCatalog`) is a separate queue after GPS, not a replacement for this neighborhood hop.
 - **Share → Downloads**: MediaStore on API 29+ (no permission); pre-Q may request legacy write. A Downloads failure never blocks the share sheet.
 - **Crash reporting**: A `CrashReporter` abstraction logs locally; swap for Firebase Crashlytics when a Firebase project is configured.
-- **Rate limiting (HTTP)**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present). Timeouts (`SocketTimeoutException`, HTTP 408) map to `AppError.NetworkError.Timeout`; generic `IOException` maps to `NoConnectivity`; TLS failures are not treated as offline.
+- **Rate limiting (HTTP)**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present). Concurrent Open-Meteo calls (forecast + geocoding + marine) are capped at **3 in-flight** by `HostConcurrencyLimiter`; Wikipedia and Nominatim are other hosts and are not gated. Timeouts (`SocketTimeoutException`, HTTP 408) map to `AppError.NetworkError.Timeout`; generic `IOException` maps to `NoConnectivity`; TLS failures are not treated as offline.
 
 **Deliberately omitted**
 - Continuous GPS tracking / background location (home uses last-known fix + optional current-location chip when permission is granted).

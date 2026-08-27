@@ -3,10 +3,11 @@ package com.example.weatherrecommender.di
 import com.example.weatherrecommender.BuildConfig
 import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
+import com.example.weatherrecommender.data.remote.HostConcurrencyLimiter
 import com.example.weatherrecommender.data.remote.MarineApi
 import com.example.weatherrecommender.data.remote.NominatimApi
-import com.example.weatherrecommender.data.remote.WikipediaApi
 import com.example.weatherrecommender.data.remote.RateLimitRetryInterceptor
+import com.example.weatherrecommender.data.remote.WikipediaApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -38,7 +39,7 @@ object NetworkModule {
         coerceInputValues = true
     }
 
-    /** Shared OkHttp client with identifying User-Agent, 429 retries, and debug body logs. */
+    /** Shared OkHttp client with identifying User-Agent, Open-Meteo in-flight cap, 429 retries, and debug body logs. */
     @Provides
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
@@ -54,6 +55,12 @@ object NetworkModule {
                     .build()
                 chain.proceed(request)
             }
+            .addInterceptor(
+                HostConcurrencyLimiter(
+                    HostConcurrencyLimiter.OPEN_METEO_MAX_IN_FLIGHT,
+                    HostConcurrencyLimiter.OPEN_METEO_HOST_SUFFIX
+                )
+            )
             .addInterceptor(RateLimitRetryInterceptor())
 
         if (BuildConfig.DEBUG) {
