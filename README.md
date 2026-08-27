@@ -62,7 +62,7 @@ Key experience details:
 
 **Run manually**: `./gradlew installDebug` → search in header → detail (sheet locked at 60%) → confirm hero, tall day chips, and compact activity rows (scroll on a short emulator) → Wikipedia **W** opens the article → tap day chips → toggle dark mode (map tiles follow) → share. Grant location and confirm the chip; search La Habana and wait for the hero photo. Back to home: peek ~40% sheet / 60% map, drag to full screen and watch the map shrink.
 
-**Pull requests**: [PR #1](https://github.com/yurikayel/WeatherRecommender/pull/1) (original delivery) · [PR #2](https://github.com/yurikayel/WeatherRecommender/pull/2) `feat/review-feedback` · [PR #4](https://github.com/yurikayel/WeatherRecommender/pull/4) `feat/per-lane-state-and-scorer-di` · [PR #5](https://github.com/yurikayel/WeatherRecommender/pull/5) leftover sheet/id/theme/lane fixes · [PR #6](https://github.com/yurikayel/WeatherRecommender/pull/6) country-warm prefetch and Wikipedia city photos.
+**Pull requests**: [PR #1](https://github.com/yurikayel/WeatherRecommender/pull/1) (original delivery) · [PR #2](https://github.com/yurikayel/WeatherRecommender/pull/2) `feat/review-feedback` · [PR #4](https://github.com/yurikayel/WeatherRecommender/pull/4) `feat/per-lane-state-and-scorer-di` · [PR #5](https://github.com/yurikayel/WeatherRecommender/pull/5) leftover sheet/id/theme/lane fixes · [PR #6](https://github.com/yurikayel/WeatherRecommender/pull/6) country-warm prefetch and Wikipedia city photos · [PR #7](https://github.com/yurikayel/WeatherRecommender/pull/7) Open-Meteo in-flight cap.
 
 **Review feedback mapping (3.8 → this PR)**
 
