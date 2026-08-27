@@ -37,6 +37,13 @@ data class Location(
      */
     val displayName: String
         get() = listOfNotNull(name, admin1, country).joinToString(", ")
+
+    /**
+     * Normalized name+country so Featured, Major, and catalog seeds can share one Room row
+     * even when their synthetic ids differ.
+     */
+    val placeKey: String
+        get() = "${name.trim().lowercase()}|${country.orEmpty().trim().lowercase()}"
 }
 
 /**

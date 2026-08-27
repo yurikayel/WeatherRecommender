@@ -27,7 +27,6 @@ import kotlinx.coroutines.flow.first
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
 import com.example.weatherrecommender.domain.usecase.CountryCityCatalog
-import com.example.weatherrecommender.domain.usecase.FeaturedCities
 import com.example.weatherrecommender.domain.usecase.GetRankedActivitiesUseCase
 import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
 import com.example.weatherrecommender.domain.usecase.scorer.IndoorSightseeingScorer
@@ -128,7 +127,6 @@ class WeatherIntegrationTest {
             placeImageResolver,
             placeImagePrefetcher,
             weatherDao,
-            FeaturedCities(),
             CountryCityCatalog(emptyList())
         )
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Available)

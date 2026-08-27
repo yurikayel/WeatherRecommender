@@ -35,7 +35,7 @@ object NearbyCities {
                     .thenBy { it.second }
             )
             .map { it.first }
-            .distinctBy { it.id }
+            .distinctBy { it.placeKey }
             .take(limit)
             .toList()
     }

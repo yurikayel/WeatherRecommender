@@ -20,6 +20,38 @@ class NearbyCitiesTest {
     }
 
     @Test
+    fun `select keeps one row when the same place has two synthetic ids`() {
+        val curitiba = MajorCities.all.first { it.name == "Curitiba" }
+        val joinville = MajorCities.all.first { it.name == "Joinville" }
+        val duplicate = joinville.copy(id = -999)
+        val nearby = NearbyCities.select(curitiba, listOf(joinville, duplicate))
+
+        assertEquals(1, nearby.count { it.placeKey == joinville.placeKey })
+    }
+
+    @Test
+    fun `select keeps same-name city in another country`() {
+        val lisbon = MajorCities.all.first { it.name == "Lisbon" }
+        val other = lisbon.copy(
+            id = -2000L,
+            country = "United States",
+            latitude = lisbon.latitude + 0.4,
+            population = 120_000L
+        )
+        val nearby = NearbyCities.select(lisbon, listOf(other))
+        assertEquals(listOf(other.id), nearby.map { it.id })
+    }
+
+    @Test
+    fun `select drops neighbors below the population floor`() {
+        val curitiba = MajorCities.all.first { it.name == "Curitiba" }
+        val joinville = MajorCities.all.first { it.name == "Joinville" }
+        val tiny = joinville.copy(id = -2001L, population = null)
+        val nearby = NearbyCities.select(curitiba, listOf(tiny))
+        assertTrue(nearby.isEmpty())
+    }
+
+    @Test
     fun `haversine is symmetric and zero for the same point`() {
         val a = Location(1, "A", -25.4, -49.3, "Brazil", "Paraná")
         val b = Location(2, "B", -26.3, -48.8, "Brazil", "Santa Catarina")

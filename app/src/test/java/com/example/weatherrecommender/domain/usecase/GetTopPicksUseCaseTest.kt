@@ -15,6 +15,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
 
@@ -112,6 +113,12 @@ class GetTopPicksUseCaseTest {
     @Test
     fun `featured seed ids are negative to avoid GeoNames collisions`() {
         val featured = FeaturedCities()
-        assertEquals((-1L downTo -14L).toList(), featured.all.map { it.id })
+        assertEquals(14, featured.all.size)
+        assertTrue(featured.all.all { it.id < 0L })
+        assertEquals(featured.all.size, featured.all.distinctBy { it.placeKey }.size)
+        assertEquals(
+            HubCities.all.first { it.name == "Lisbon" }.id,
+            featured.all.first { it.name == "Lisbon" }.id
+        )
     }
 }
