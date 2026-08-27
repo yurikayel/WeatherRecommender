@@ -24,7 +24,6 @@ import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.Result
 import com.example.weatherrecommender.domain.usecase.CountryCityCatalog
 import com.example.weatherrecommender.domain.usecase.CountryCityEntry
-import com.example.weatherrecommender.domain.usecase.FeaturedCities
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -53,7 +52,6 @@ class WeatherRepositoryImplTest {
     private val placeImageResolver: WikipediaPlaceImageResolver = mockk()
     private val placeImagePrefetcher: PlaceImagePrefetcher = mockk(relaxed = true)
     private val weatherDao: WeatherDao = mockk(relaxed = true)
-    private val featuredCities = FeaturedCities()
 
     private lateinit var repository: WeatherRepositoryImpl
 
@@ -84,7 +82,6 @@ class WeatherRepositoryImplTest {
             placeImageResolver,
             placeImagePrefetcher,
             weatherDao,
-            featuredCities,
             CountryCityCatalog(emptyList())
         )
         // Default: inland (no marine data) unless a test overrides it.
@@ -723,7 +720,6 @@ class WeatherRepositoryImplTest {
             placeImageResolver,
             placeImagePrefetcher,
             weatherDao,
-            featuredCities,
             catalog
         )
         val havanaId = -200_000L
@@ -776,7 +772,6 @@ class WeatherRepositoryImplTest {
             placeImageResolver,
             placeImagePrefetcher,
             weatherDao,
-            featuredCities,
             catalog
         )
         val havanaId = -200_000L

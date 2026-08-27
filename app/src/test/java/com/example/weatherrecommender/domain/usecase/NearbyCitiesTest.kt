@@ -20,6 +20,16 @@ class NearbyCitiesTest {
     }
 
     @Test
+    fun `select keeps one row when the same place has two synthetic ids`() {
+        val curitiba = MajorCities.all.first { it.name == "Curitiba" }
+        val joinville = MajorCities.all.first { it.name == "Joinville" }
+        val duplicate = joinville.copy(id = -999)
+        val nearby = NearbyCities.select(curitiba, listOf(joinville, duplicate))
+
+        assertEquals(1, nearby.count { it.placeKey == joinville.placeKey })
+    }
+
+    @Test
     fun `haversine is symmetric and zero for the same point`() {
         val a = Location(1, "A", -25.4, -49.3, "Brazil", "Paraná")
         val b = Location(2, "B", -26.3, -48.8, "Brazil", "Santa Catarina")

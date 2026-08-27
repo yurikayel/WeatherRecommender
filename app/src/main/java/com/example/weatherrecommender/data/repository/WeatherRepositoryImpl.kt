@@ -23,8 +23,7 @@ import com.example.weatherrecommender.domain.model.Result
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
 import com.example.weatherrecommender.domain.usecase.CountryCityCatalog
-import com.example.weatherrecommender.domain.usecase.FeaturedCities
-import com.example.weatherrecommender.domain.usecase.MajorCities
+import com.example.weatherrecommender.domain.usecase.HubCities
 import com.example.weatherrecommender.domain.usecase.NearbyCities
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -61,7 +60,6 @@ class WeatherRepositoryImpl @Inject constructor(
     private val placeImageResolver: WikipediaPlaceImageResolver,
     private val placeImagePrefetcher: PlaceImagePrefetcher,
     private val weatherDao: WeatherDao,
-    private val featuredCities: FeaturedCities,
     private val countryCityCatalog: CountryCityCatalog
 ) : WeatherRepository {
 
@@ -250,9 +248,7 @@ class WeatherRepositoryImpl @Inject constructor(
 
     /** Best-effort TTL refresh of nearby hubs, staggered to stay under Open-Meteo rate limits. */
     override suspend fun prefetchNearbyCities(origin: Location) {
-        val hubs = (MajorCities.all + featuredCities.all)
-            .distinctBy { "${it.name.trim().lowercase()}|${it.country.orEmpty().trim().lowercase()}" }
-        val neighbors = NearbyCities.select(origin, hubs)
+        val neighbors = NearbyCities.select(origin, HubCities.all)
         neighbors.forEachIndexed { index, nearby ->
             if (index > 0) delay(PREFETCH_STAGGER_MS)
             try {
@@ -555,7 +551,7 @@ class WeatherRepositoryImpl @Inject constructor(
     /**
      * Maps Nominatim reverse results into our [Location] model.
      * Uses a negative synthetic id derived from place_id so it cannot collide with
-     * Open-Meteo / GeoNames positive IDs (same convention as FeaturedCities).
+     * Open-Meteo / GeoNames positive IDs (same convention as [HubCities]).
      */
     private fun NominatimResponse.toLocation(fallbackLat: Double, fallbackLng: Double): Location {
         val address = address
