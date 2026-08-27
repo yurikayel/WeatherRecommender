@@ -341,9 +341,8 @@ class WeatherViewModel @Inject constructor(
             onError = { err -> applyRefreshError(location, err.asUiText()) }
         )
         repository.prefetchNearbyCities(location)
-        val code = _uiState.value.deviceLocation?.countryCode
-            ?: location.countryCode
-            ?: countryCityCatalog.isoForCountryName(location.country)
+        val code = _uiState.value.deviceLocation?.let { countryIsoFor(it) }
+            ?: countryIsoFor(location)
         code?.let { addCountryWarmBudget(it, SELECTION_COUNTRY_WARM_BUDGET) }
     }
 
@@ -531,7 +530,7 @@ class WeatherViewModel @Inject constructor(
                             }
                         )
                     }
-                    location.countryCode?.let { addCountryWarmBudget(it, GPS_COUNTRY_WARM_BUDGET) }
+                    countryIsoFor(location)?.let { addCountryWarmBudget(it, GPS_COUNTRY_WARM_BUDGET) }
                 },
                 onError = {
                     // Keep the static default framing; chip stays hidden without a resolved city.
@@ -569,7 +568,8 @@ class WeatherViewModel @Inject constructor(
     }
 
     /**
-     * Runs one prefetch slice. Returns true when leftover budget should be drained immediately.
+     * Runs one prefetch slice. Returns true when a concurrent selection nudge should drain now.
+     * Unused slots from a partial pass are restored but not retried immediately (avoids 429 spin).
      */
     private suspend fun drainCountryWarmSlice(code: String): Boolean {
         val limit = countryWarmBudget.getAndSet(0)
@@ -581,11 +581,20 @@ class WeatherViewModel @Inject constructor(
             throw e
         }
         val catalogDone = result.remaining <= 0
-        val failedPass = result.warmed == 0
-        if (failedPass && !catalogDone) {
-            countryWarmBudget.addAndGet(limit)
+        val concurrent = countryWarmBudget.get()
+        if (!catalogDone) {
+            val unused = (limit - result.warmed).coerceAtLeast(0)
+            if (unused > 0) countryWarmBudget.addAndGet(unused)
         }
-        return !catalogDone && !failedPass
+        return !catalogDone && result.warmed > 0 && concurrent > 0
+    }
+
+    /**
+     * ISO alpha-2 for [location]: stored code, else the catalog's country-name map (UK→GB).
+     */
+    private fun countryIsoFor(location: Location): String? {
+        val stored = location.countryCode?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
+        return stored ?: countryCityCatalog.isoForCountryName(location.country)
     }
 
     /**

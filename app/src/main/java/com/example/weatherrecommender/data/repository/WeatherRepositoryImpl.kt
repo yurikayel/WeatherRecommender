@@ -191,6 +191,8 @@ class WeatherRepositoryImpl @Inject constructor(
                 persistRefreshedForecast(forecast, existing, now)
                 evictStaleLocationsIfNeeded()
                 existing = weatherDao.getLocation(canonical.id)
+            } else {
+                backfillCountryCode(canonical.id, canonical.countryCode, existing?.countryCode)
             }
             refreshPlaceImageIfNeeded(canonical, existing, System.currentTimeMillis())
             Result.Success(Unit)
@@ -387,6 +389,7 @@ class WeatherRepositoryImpl @Inject constructor(
         val existingById = weatherDao.getLocation(location.id)
         if (existingById != null) {
             weatherDao.updateLastViewedAt(location.id, now)
+            backfillCountryCode(location.id, location.countryCode, existingById.countryCode)
             return
         }
 
@@ -442,7 +445,22 @@ class WeatherRepositoryImpl @Inject constructor(
             )
         } else {
             weatherDao.updateLastViewedAt(existing.id, now)
+            backfillCountryCode(existing.id, incoming.countryCode, existing.countryCode)
         }
+    }
+
+    /**
+     * Stores [incoming] ISO on [locationId] when Room still has none.
+     * Nearby/Featured seeds omit countryCode; a later search or GPS hit should not wait for a 6h persist.
+     */
+    private suspend fun backfillCountryCode(
+        locationId: Long,
+        incoming: String?,
+        existing: String?
+    ) {
+        if (!existing.isNullOrBlank()) return
+        val code = incoming?.trim()?.uppercase()?.takeIf { it.isNotEmpty() } ?: return
+        weatherDao.updateCountryCode(locationId, code)
     }
 
     /**

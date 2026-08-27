@@ -40,7 +40,8 @@ class CountryCityCatalog(private val entries: List<CountryCityEntry>) {
         val name = country?.trim().orEmpty()
         if (name.isEmpty()) return null
         val upper = name.uppercase()
-        return COUNTRY_NAMES[upper]
+        val fromIso = upper.takeIf { it.length == 2 && COUNTRY_NAMES.containsKey(it) }
+        return fromIso
             ?: COUNTRY_ALIASES[upper]
             ?: COUNTRY_NAMES.entries
                 .firstOrNull { it.value.equals(name, ignoreCase = true) }

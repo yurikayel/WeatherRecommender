@@ -334,6 +334,34 @@ class WeatherRepositoryImplTest {
         assertTrue(result is Result.Success)
         coVerify(exactly = 0) { forecastApi.getForecast(any(), any()) }
         coVerify(exactly = 0) { weatherDao.insertLocationWithForecast(any(), any()) }
+        coVerify(exactly = 0) { weatherDao.updateCountryCode(any(), any()) }
+    }
+
+    @Test
+    fun `refreshForecast backfills countryCode when weather TTL skips persist`() = runTest {
+        val fresh = location.toEntity(
+            lastUpdated = System.currentTimeMillis(),
+            lastViewedAt = 1L
+        ).copy(countryCode = null)
+        coEvery { weatherDao.getLocation(location.id) } returns fresh
+        coEvery { weatherDao.getDailyForecasts(location.id) } returns listOf(
+            DailyForecastEntity(
+                locationId = 1,
+                date = "2026-07-16",
+                maxTemp = 22.0,
+                minTemp = 12.0,
+                weatherCode = 0,
+                precipitationSum = 0.0,
+                maxWindSpeed = 10.0,
+                snowfallSum = 0.0
+            )
+        )
+
+        val result = repository.refreshForecast(location.copy(countryCode = "gb"))
+
+        assertTrue(result is Result.Success)
+        coVerify(exactly = 0) { weatherDao.insertLocationWithForecast(any(), any()) }
+        coVerify { weatherDao.updateCountryCode(location.id, "GB") }
     }
 
     @Test
@@ -560,6 +588,18 @@ class WeatherRepositoryImplTest {
 
         coVerify { weatherDao.updateLastViewedAt(location.id, any()) }
         coVerify(exactly = 0) { weatherDao.insertLocation(any()) }
+        coVerify(exactly = 0) { weatherDao.updateCountryCode(any(), any()) }
+    }
+
+    @Test
+    fun `markLocationViewed backfills countryCode on an existing row`() = runTest {
+        coEvery { weatherDao.getLocation(location.id) } returns
+            location.toEntity(lastViewedAt = 1L).copy(countryCode = null)
+
+        repository.markLocationViewed(location.copy(countryCode = "gb"))
+
+        coVerify { weatherDao.updateLastViewedAt(location.id, any()) }
+        coVerify { weatherDao.updateCountryCode(location.id, "GB") }
     }
 
     @Test

@@ -37,6 +37,7 @@ class CountryCityCatalogTest {
     @Test
     fun isoForCountryName_matchesDisplayName() {
         assertEquals("PT", catalog.isoForCountryName("Portugal"))
+        assertEquals("PT", catalog.isoForCountryName("PT"))
         assertEquals("GB", catalog.isoForCountryName("united kingdom"))
         assertEquals("GB", catalog.isoForCountryName("UK"))
         assertEquals("US", catalog.isoForCountryName("USA"))

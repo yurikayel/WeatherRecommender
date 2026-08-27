@@ -143,6 +143,13 @@ interface WeatherDao {
     suspend fun updateLastViewedAt(locationId: Long, timestamp: Long)
 
     /**
+     * Patches ISO [countryCode] without rewriting weather. Used when a TTL skip would otherwise
+     * leave a nearby/catalog row with a null country after Open-Meteo later supplied the code.
+     */
+    @Query("UPDATE location_entity SET countryCode = :countryCode WHERE id = :locationId")
+    suspend fun updateCountryCode(locationId: Long, countryCode: String)
+
+    /**
      * Patches the Wikipedia postcard URL (or a confirmed miss) without rewriting daily forecasts.
      * Emits on [getLocationFlow] so the detail hero can fill in after weather already painted.
      */

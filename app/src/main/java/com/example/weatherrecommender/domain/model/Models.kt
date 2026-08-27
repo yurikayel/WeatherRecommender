@@ -8,7 +8,7 @@ package com.example.weatherrecommender.domain.model
  * @property latitude Geographic coordinate.
  * @property longitude Geographic coordinate.
  * @property country Country name where the location resides.
- * @property countryCode ISO 3166-1 alpha-2 country code when known (e.g. from Nominatim).
+ * @property countryCode ISO 3166-1 alpha-2 when known (Open-Meteo, Nominatim, or catalog).
  * @property admin1 Primary administrative division (e.g., state or region).
  * @property elevation Ground elevation in meters (used to gate mountain activities like skiing).
  * @property population Number of inhabitants, when known (used to weight "top pick" suggestions).
@@ -29,7 +29,7 @@ data class Location(
     val hasSeaAccess: Boolean = false,
     /** URL to a background image for this city, usually fetched from Wikipedia. */
     val imageUrl: String? = null,
-    /** Uppercase ISO 3166-1 alpha-2 when known; null for Open-Meteo search hits. */
+    /** Uppercase ISO 3166-1 alpha-2 when known (Open-Meteo, Nominatim, or catalog); null otherwise. */
     val countryCode: String? = null
 ) {
     /**
