@@ -1,5 +1,6 @@
 package com.example.weatherrecommender.data.repository
 
+import com.example.weatherrecommender.data.image.PlaceImagePrefetcher
 import com.example.weatherrecommender.data.local.dao.WeatherDao
 import com.example.weatherrecommender.data.local.entity.DailyForecastEntity
 import com.example.weatherrecommender.data.mapper.toEntity
@@ -8,7 +9,7 @@ import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
 import com.example.weatherrecommender.data.remote.NominatimApi
-import com.example.weatherrecommender.data.remote.WikipediaApi
+import com.example.weatherrecommender.data.remote.WikipediaPlaceImageResolver
 import com.example.weatherrecommender.data.remote.dto.DailyForecastDto
 import com.example.weatherrecommender.data.remote.dto.ForecastResponse
 import com.example.weatherrecommender.data.remote.dto.GeocodingLocationDto
@@ -18,12 +19,17 @@ import com.example.weatherrecommender.data.remote.dto.MarineResponse
 import com.example.weatherrecommender.data.remote.dto.NominatimAddress
 import com.example.weatherrecommender.data.remote.dto.NominatimResponse
 import com.example.weatherrecommender.domain.model.AppError
+import com.example.weatherrecommender.domain.model.CountryPrefetchResult
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.Result
+import com.example.weatherrecommender.domain.usecase.CountryCityCatalog
+import com.example.weatherrecommender.domain.usecase.CountryCityEntry
+import com.example.weatherrecommender.domain.usecase.FeaturedCities
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -37,14 +43,17 @@ import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
 
+@Suppress("LargeClass")
 class WeatherRepositoryImplTest {
 
     private val geocodingApi: GeocodingApi = mockk()
     private val forecastApi: ForecastApi = mockk()
     private val marineApi: MarineApi = mockk()
     private val nominatimApi: NominatimApi = mockk()
-    private val wikipediaApi: WikipediaApi = mockk()
+    private val placeImageResolver: WikipediaPlaceImageResolver = mockk()
+    private val placeImagePrefetcher: PlaceImagePrefetcher = mockk(relaxed = true)
     private val weatherDao: WeatherDao = mockk(relaxed = true)
+    private val featuredCities = FeaturedCities()
 
     private lateinit var repository: WeatherRepositoryImpl
 
@@ -68,11 +77,19 @@ class WeatherRepositoryImplTest {
     @Before
     fun setup() {
         repository = WeatherRepositoryImpl(
-            geocodingApi, forecastApi, marineApi, nominatimApi, wikipediaApi, weatherDao
+            geocodingApi,
+            forecastApi,
+            marineApi,
+            nominatimApi,
+            placeImageResolver,
+            placeImagePrefetcher,
+            weatherDao,
+            featuredCities,
+            CountryCityCatalog(emptyList())
         )
         // Default: inland (no marine data) unless a test overrides it.
         coEvery { marineApi.getMarine(any(), any()) } returns MarineResponse(51.5, -0.1, null)
-        coEvery { wikipediaApi.getPageImage(any(), any(), any(), any(), any()) } returns com.example.weatherrecommender.data.remote.dto.WikipediaResponse(null)
+        coEvery { placeImageResolver.resolve(any(), any()) } returns null
     }
 
     @Test
@@ -81,7 +98,8 @@ class WeatherRepositoryImplTest {
             results = listOf(
                 GeocodingLocationDto(
                     id = 1, name = "London", latitude = 51.5, longitude = -0.1,
-                    country = "UK", admin1 = "England", elevation = 25.0, population = 8_961_989
+                    country = "UK", admin1 = "England", elevation = 25.0, population = 8_961_989,
+                    countryCode = "gb"
                 )
             )
         )
@@ -94,6 +112,7 @@ class WeatherRepositoryImplTest {
         assertEquals("London", locations.first().name)
         assertEquals(8_961_989L, locations.first().population)
         assertEquals(25.0, locations.first().elevation!!, 0.0)
+        assertEquals("GB", locations.first().countryCode)
     }
 
     @Test
@@ -161,7 +180,8 @@ class WeatherRepositoryImplTest {
             address = NominatimAddress(
                 city = "London",
                 state = "England",
-                country = "United Kingdom"
+                country = "United Kingdom",
+                countryCode = "gb"
             )
         )
         coEvery { geocodingApi.searchCity("London") } returns GeocodingResponse(results = null)
@@ -173,6 +193,7 @@ class WeatherRepositoryImplTest {
         assertEquals("London", mapped.name)
         assertEquals("England", mapped.admin1)
         assertEquals("United Kingdom", mapped.country)
+        assertEquals("GB", mapped.countryCode)
         assertEquals(51.5074, mapped.latitude, 0.0001)
         assertEquals(-0.1278, mapped.longitude, 0.0001)
         assertTrue(mapped.id < -1_000_000L)
@@ -186,7 +207,12 @@ class WeatherRepositoryImplTest {
             lon = "-0.1278",
             displayName = "London, England, UK",
             name = "London",
-            address = NominatimAddress(city = "London", state = "England", country = "United Kingdom")
+            address = NominatimAddress(
+                city = "London",
+                state = "England",
+                country = "United Kingdom",
+                countryCode = "gb"
+            )
         )
         coEvery { geocodingApi.searchCity("London") } returns GeocodingResponse(
             results = listOf(
@@ -200,7 +226,9 @@ class WeatherRepositoryImplTest {
         val result = repository.reverseGeocode(51.5, -0.1)
 
         assertTrue(result is Result.Success)
-        assertEquals(2643743L, (result as Result.Success).data.id)
+        val mapped = (result as Result.Success).data
+        assertEquals(2643743L, mapped.id)
+        assertEquals("GB", mapped.countryCode)
     }
 
     @Test
@@ -241,13 +269,44 @@ class WeatherRepositoryImplTest {
     @Test
     fun `refreshForecast evicts oldest locations when cache exceeds cap`() = runTest {
         coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
-        coEvery { weatherDao.getLocationCount() } returnsMany listOf(37, 36)
+        coEvery { weatherDao.getLocationCount() } returnsMany listOf(101, 100)
         coEvery { weatherDao.getUnviewedOldestIds(1) } returns listOf(99L)
 
         val result = repository.refreshForecast(location)
 
         assertTrue(result is Result.Success)
         coVerify { weatherDao.deleteLocationWithForecasts(99L) }
+    }
+
+    @Test
+    fun `refreshForecast keeps existing countryCode when incoming location has none`() = runTest {
+        val cached = location.toEntity(lastUpdated = 1L, lastViewedAt = 5L).copy(countryCode = "GB")
+        coEvery { weatherDao.getLocation(location.id) } returns cached
+        coEvery { weatherDao.getDailyForecasts(location.id) } returns emptyList()
+        coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
+
+        val result = repository.refreshForecast(location)
+
+        assertTrue(result is Result.Success)
+        coVerify {
+            weatherDao.insertLocationWithForecast(
+                match { it.id == location.id && it.countryCode == "GB" && it.lastViewedAt == 5L },
+                any()
+            )
+        }
+    }
+
+    @Test
+    fun `refreshForecast evicts least recently viewed history after unviewed rows are gone`() = runTest {
+        coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
+        coEvery { weatherDao.getLocationCount() } returnsMany listOf(101, 101)
+        coEvery { weatherDao.getUnviewedOldestIds(1) } returns emptyList()
+        coEvery { weatherDao.getLeastRecentlyViewedIds(1) } returns listOf(42L)
+
+        val result = repository.refreshForecast(location)
+
+        assertTrue(result is Result.Success)
+        coVerify { weatherDao.deleteLocationWithForecasts(42L) }
     }
 
     @Test
@@ -337,7 +396,8 @@ class WeatherRepositoryImplTest {
         val result = repository.refreshForecast(location.copy(imageUrl = "https://example.com/london.jpg"))
 
         assertTrue(result is Result.Success)
-        coVerify(exactly = 0) { wikipediaApi.getPageImage(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { placeImageResolver.resolve(any(), any()) }
+        verify { placeImagePrefetcher.prefetch("https://example.com/london.jpg") }
     }
 
     @Test
@@ -350,11 +410,79 @@ class WeatherRepositoryImplTest {
         coEvery { weatherDao.getLocation(location.id) } returns migrated
         coEvery { weatherDao.getDailyForecasts(location.id) } returns emptyList()
         coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
+        coEvery { placeImageResolver.resolve("London", "UK") } returns "https://example.com/london-new.jpg"
 
         val result = repository.refreshForecast(location.copy(imageUrl = "https://example.com/london.jpg"))
 
         assertTrue(result is Result.Success)
-        coVerify(exactly = 1) { wikipediaApi.getPageImage(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { placeImageResolver.resolve("London", "UK") }
+        coVerify {
+            weatherDao.updatePlaceImage(
+                location.id,
+                "https://example.com/london-new.jpg",
+                any()
+            )
+        }
+    }
+
+    @Test
+    fun `refreshForecast retries Wikipedia when weather is fresh but image is missing`() = runTest {
+        val freshNoImage = location.toEntity(
+            lastUpdated = System.currentTimeMillis(),
+            lastViewedAt = 1L,
+            placeMetadataUpdatedAt = 0L
+        )
+        coEvery { weatherDao.getLocation(location.id) } returns freshNoImage
+        coEvery { weatherDao.getDailyForecasts(location.id) } returns listOf(
+            DailyForecastEntity(
+                locationId = 1,
+                date = "2026-07-16",
+                maxTemp = 22.0,
+                minTemp = 12.0,
+                weatherCode = 0,
+                precipitationSum = 0.0,
+                maxWindSpeed = 10.0,
+                snowfallSum = 0.0
+            )
+        )
+        coEvery { placeImageResolver.resolve("London", "UK") } returns "https://example.com/london.jpg"
+
+        val result = repository.refreshForecast(location)
+
+        assertTrue(result is Result.Success)
+        coVerify(exactly = 0) { forecastApi.getForecast(any(), any()) }
+        coVerify(exactly = 1) { placeImageResolver.resolve("London", "UK") }
+        coVerify {
+            weatherDao.updatePlaceImage(location.id, "https://example.com/london.jpg", any())
+        }
+    }
+
+    @Test
+    fun `refreshForecast skips Wikipedia during miss TTL`() = runTest {
+        val recentMiss = location.toEntity(
+            lastUpdated = System.currentTimeMillis(),
+            lastViewedAt = 1L,
+            placeMetadataUpdatedAt = System.currentTimeMillis()
+        )
+        coEvery { weatherDao.getLocation(location.id) } returns recentMiss
+        coEvery { weatherDao.getDailyForecasts(location.id) } returns listOf(
+            DailyForecastEntity(
+                locationId = 1,
+                date = "2026-07-16",
+                maxTemp = 22.0,
+                minTemp = 12.0,
+                weatherCode = 0,
+                precipitationSum = 0.0,
+                maxWindSpeed = 10.0,
+                snowfallSum = 0.0
+            )
+        )
+
+        val result = repository.refreshForecast(location)
+
+        assertTrue(result is Result.Success)
+        coVerify(exactly = 0) { placeImageResolver.resolve(any(), any()) }
+        coVerify(exactly = 0) { forecastApi.getForecast(any(), any()) }
     }
 
     @Test
@@ -536,5 +664,105 @@ class WeatherRepositoryImplTest {
 
         assertTrue(result is Result.Error)
         assertEquals(AppError.ApiError.NotFound, (result as Result.Error).error)
+    }
+
+    @Test
+    fun `prefetchCountryCities respects limit and skips already cached cities`() = runTest {
+        val catalog = CountryCityCatalog(
+            listOf(
+                CountryCityEntry("CU", "Havana", "Havana", 23.13, -82.38, 2_000_000, isCapital = true),
+                CountryCityEntry("CU", "Camagüey", "Camagüey", 21.38, -77.92, 300_000, isCapital = true),
+                CountryCityEntry("CU", "Holguín", "Holguín", 20.89, -76.26, 250_000, isCapital = true)
+            )
+        )
+        repository = WeatherRepositoryImpl(
+            geocodingApi,
+            forecastApi,
+            marineApi,
+            nominatimApi,
+            placeImageResolver,
+            placeImagePrefetcher,
+            weatherDao,
+            featuredCities,
+            catalog
+        )
+        val havanaId = -200_000L
+        val havanaCached = location.copy(
+            id = havanaId,
+            name = "Havana",
+            imageUrl = "https://example.com/havana.jpg"
+        ).toEntity(lastUpdated = System.currentTimeMillis())
+        val havanaDay = DailyForecastEntity(
+            locationId = havanaId,
+            date = "2026-07-16",
+            maxTemp = 30.0,
+            minTemp = 22.0,
+            weatherCode = 0,
+            precipitationSum = 0.0,
+            maxWindSpeed = 10.0,
+            snowfallSum = 0.0
+        )
+        coEvery { weatherDao.getLocation(any()) } answers {
+            if (invocation.args[0] as Long == havanaId) havanaCached else null
+        }
+        coEvery { weatherDao.findLocationsNear(any(), any(), any()) } returns emptyList()
+        coEvery { weatherDao.findLocationsByNameAndCountry(any(), any()) } returns emptyList()
+        coEvery { weatherDao.getDailyForecasts(any()) } answers {
+            if (invocation.args[0] as Long == havanaId) listOf(havanaDay) else emptyList()
+        }
+        coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
+
+        val result = repository.prefetchCountryCities("cu", limit = 2)
+
+        assertEquals(2, result.warmed)
+        assertEquals(0, result.remaining)
+        coVerify(exactly = 0) { forecastApi.getForecast(23.13, -82.38) }
+        coVerify(exactly = 1) { forecastApi.getForecast(21.38, -77.92) }
+        coVerify(exactly = 1) { forecastApi.getForecast(20.89, -76.26) }
+    }
+
+    @Test
+    fun `prefetchCountryCities does not skip image-only rows without fresh weather`() = runTest {
+        val catalog = CountryCityCatalog(
+            listOf(
+                CountryCityEntry("CU", "Havana", "Havana", 23.13, -82.38, 2_000_000, isCapital = true)
+            )
+        )
+        repository = WeatherRepositoryImpl(
+            geocodingApi,
+            forecastApi,
+            marineApi,
+            nominatimApi,
+            placeImageResolver,
+            placeImagePrefetcher,
+            weatherDao,
+            featuredCities,
+            catalog
+        )
+        val havanaId = -200_000L
+        val imageOnly = location.copy(
+            id = havanaId,
+            name = "Havana",
+            imageUrl = "https://example.com/havana.jpg"
+        ).toEntity(lastUpdated = 1L)
+        coEvery { weatherDao.getLocation(any()) } answers {
+            if (invocation.args[0] as Long == havanaId) imageOnly else null
+        }
+        coEvery { weatherDao.findLocationsNear(any(), any(), any()) } returns emptyList()
+        coEvery { weatherDao.findLocationsByNameAndCountry(any(), any()) } returns emptyList()
+        coEvery { weatherDao.getDailyForecasts(any()) } returns emptyList()
+        coEvery { forecastApi.getForecast(any(), any()) } returns forecastResponse()
+
+        val result = repository.prefetchCountryCities("CU", limit = 1)
+
+        assertEquals(1, result.warmed)
+        coVerify(exactly = 1) { forecastApi.getForecast(23.13, -82.38) }
+    }
+
+    @Test
+    fun `prefetchCountryCities returns 0 for blank code or empty catalog`() = runTest {
+        assertEquals(CountryPrefetchResult(0, 0), repository.prefetchCountryCities("  ", 8))
+        assertEquals(CountryPrefetchResult(0, 0), repository.prefetchCountryCities("CU", 3))
+        coVerify(exactly = 0) { forecastApi.getForecast(any(), any()) }
     }
 }

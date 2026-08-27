@@ -50,6 +50,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -57,6 +59,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
+import coil.request.ImageRequest
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.data.preferences.ThemeMode
 import com.example.weatherrecommender.domain.model.RecommendedActivity
@@ -171,6 +177,85 @@ internal fun Modifier.shimmerEffect(): Modifier {
         label = "alpha"
     )
     return this.background(MaterialTheme.colorScheme.primary.copy(alpha = alpha))
+}
+
+/**
+ * City photo fill with Coil load/error states so a missing Wikimedia URL never looks like a blank bug.
+ * Shows shimmer while decoding, crops on success, and a tonal surface (+ optional initial) on miss/error.
+ */
+@Composable
+internal fun PlacePhotoBackdrop(
+    imageUrl: String?,
+    modifier: Modifier = Modifier,
+    cityInitial: String? = null,
+    showShimmerWhenNull: Boolean = false
+) {
+    when {
+        imageUrl != null -> {
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(imageUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = modifier.fillMaxSize()
+            ) {
+                when (painter.state) {
+                    is AsyncImagePainter.State.Loading,
+                    is AsyncImagePainter.State.Empty -> {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .shimmerEffect()
+                        )
+                    }
+                    is AsyncImagePainter.State.Error -> {
+                        PlacePhotoFallback(cityInitial = cityInitial, modifier = Modifier.fillMaxSize())
+                    }
+                    is AsyncImagePainter.State.Success -> {
+                        SubcomposeAsyncImageContent()
+                    }
+                }
+            }
+        }
+        showShimmerWhenNull -> {
+            Box(
+                modifier
+                    .fillMaxSize()
+                    .shimmerEffect()
+            )
+        }
+        else -> {
+            PlacePhotoFallback(cityInitial = cityInitial, modifier = modifier.fillMaxSize())
+        }
+    }
+}
+
+/** Tonal placeholder when Wikipedia/Coil cannot supply a city photo. */
+@Composable
+internal fun PlacePhotoFallback(
+    cityInitial: String?,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        contentAlignment = Alignment.Center
+    ) {
+        val initial = cityInitial
+            ?.trim()
+            ?.firstOrNull()
+            ?.uppercaseChar()
+            ?.toString()
+        if (initial != null) {
+            Text(
+                text = initial,
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+            )
+        }
+    }
 }
 
 /** Rounded search field used on the home screen. */

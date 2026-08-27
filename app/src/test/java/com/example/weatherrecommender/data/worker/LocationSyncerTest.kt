@@ -77,6 +77,20 @@ class LocationSyncerTest {
     }
 
     @Test
+    fun `syncAllLocations caps unviewed prefetch rows per run`() = runTest {
+        val viewed = londonEntity.copy(id = 1, lastViewedAt = 10L)
+        val unviewed = (2L..21L).map { id ->
+            londonEntity.copy(id = id, name = "Warm$id", lastUpdated = id, lastViewedAt = 0L)
+        }
+        coEvery { weatherDao.getAllLocations() } returns listOf(viewed) + unviewed
+        coEvery { repository.refreshForecast(any(), any()) } returns Result.Success(Unit)
+
+        assertTrue(syncer.syncAllLocations())
+
+        coVerify(exactly = 17) { repository.refreshForecast(any(), any()) }
+    }
+
+    @Test
     fun `syncAllLocations returns true when cache is empty`() = runTest {
         coEvery { weatherDao.getAllLocations() } returns emptyList()
 

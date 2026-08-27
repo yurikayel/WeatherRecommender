@@ -31,8 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -40,8 +38,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.example.weatherrecommender.R
 import com.example.weatherrecommender.domain.model.RankedActivity
 import com.example.weatherrecommender.domain.model.WeatherForecast
@@ -62,6 +58,7 @@ internal fun DetailContent(
     modifier: Modifier = Modifier
 ) {
     val imageUrl = uiState.selectedLocation?.imageUrl ?: uiState.forecast?.location?.imageUrl
+    val cityName = uiState.selectedLocation?.name ?: uiState.forecast?.location?.name
     val showLoadingShimmer = uiState.isLoadingForecast && uiState.forecast == null
     val forecast = uiState.forecast
     val density = LocalDensity.current
@@ -81,6 +78,7 @@ internal fun DetailContent(
         Column(Modifier.fillMaxSize()) {
             CityHeroOverlay(
                 imageUrl = imageUrl,
+                cityName = cityName,
                 showShimmer = showLoadingShimmer && imageUrl == null,
                 header = header,
                 modifier = Modifier
@@ -237,38 +235,18 @@ private fun ColumnScope.DayActivityList(
 @Composable
 private fun CityHeroOverlay(
     imageUrl: String?,
+    cityName: String?,
     showShimmer: Boolean,
     header: @Composable () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.testTag("detail_hero")) {
-        when {
-            imageUrl != null -> {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(imageUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            showShimmer -> {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .shimmerEffect()
-                )
-            }
-            else -> {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                )
-            }
-        }
+        PlacePhotoBackdrop(
+            imageUrl = imageUrl,
+            cityInitial = cityName,
+            showShimmerWhenNull = showShimmer,
+            modifier = Modifier.fillMaxSize()
+        )
         Box(
             Modifier
                 .fillMaxSize()

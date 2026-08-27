@@ -28,7 +28,9 @@ data class LocationEntity(
      * When [imageUrl] (and stable name) were last confirmed.
      * `0` means never confirmed (v8 migration default) — not a valid TTL start.
      */
-    val placeMetadataUpdatedAt: Long = 0L
+    val placeMetadataUpdatedAt: Long = 0L,
+    /** Uppercase ISO 3166-1 alpha-2 when known (v9); null for older or search-sourced rows. */
+    val countryCode: String? = null
 )
 
 /**

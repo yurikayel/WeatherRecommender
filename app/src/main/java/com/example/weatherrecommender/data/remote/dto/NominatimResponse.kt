@@ -35,6 +35,7 @@ data class NominatimResponse(
  * @property county Name of the county or district (if applicable).
  * @property state Name of the state, province, or region.
  * @property country Name of the country.
+ * @property countryCode ISO 3166-1 alpha-2 country code (often lowercase from Nominatim).
  */
 @Serializable
 data class NominatimAddress(
@@ -44,5 +45,6 @@ data class NominatimAddress(
     @SerialName("municipality") val municipality: String? = null,
     @SerialName("county") val county: String? = null,
     @SerialName("state") val state: String? = null,
-    @SerialName("country") val country: String? = null
+    @SerialName("country") val country: String? = null,
+    @SerialName("country_code") val countryCode: String? = null
 )

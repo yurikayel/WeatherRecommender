@@ -12,7 +12,7 @@ import com.example.weatherrecommender.data.local.entity.LocationEntity
  * The Room database for the application.
  * Contains tables for locations and daily forecasts.
  */
-@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 8, exportSchema = true)
+@Database(entities = [LocationEntity::class, DailyForecastEntity::class], version = 9, exportSchema = true)
 abstract class WeatherDatabase : RoomDatabase() {
     /**
      * Retrieves the primary [WeatherDao] for executing database transactions.
@@ -112,6 +112,17 @@ abstract class WeatherDatabase : RoomDatabase() {
                 db.execSQL(
                     "ALTER TABLE location_entity ADD COLUMN placeMetadataUpdatedAt INTEGER NOT NULL DEFAULT 0"
                 )
+            }
+        }
+
+        /**
+         * v9 adds [LocationEntity.countryCode] so country-warm prefetch can resume without
+         * another Nominatim reverse just to learn the ISO country.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            /** Adds nullable ISO country code for progressive country catalog warming. */
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE location_entity ADD COLUMN countryCode TEXT")
             }
         }
 

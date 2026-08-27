@@ -11,6 +11,7 @@ import com.example.weatherrecommender.domain.model.Result
 import com.example.weatherrecommender.domain.model.TopPick
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
+import com.example.weatherrecommender.domain.usecase.CountryCityCatalog
 import com.example.weatherrecommender.domain.usecase.GetRankedActivitiesUseCase
 import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
 import com.example.weatherrecommender.domain.util.ConnectivityObserver
@@ -20,6 +21,7 @@ import com.example.weatherrecommender.ui.map.MapHopProfile
 import com.example.weatherrecommender.ui.util.UiText
 import com.example.weatherrecommender.ui.util.asUiText
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -126,7 +129,8 @@ class WeatherViewModel @Inject constructor(
     private val getTopPicks: GetTopPicksUseCase,
     private val connectivityObserver: ConnectivityObserver,
     private val deviceLocationProvider: DeviceLocationProvider,
-    private val firstRunThemeSettler: FirstRunThemeSettler
+    private val firstRunThemeSettler: FirstRunThemeSettler,
+    private val countryCityCatalog: CountryCityCatalog
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WeatherUiState())
@@ -142,6 +146,9 @@ class WeatherViewModel @Inject constructor(
     private var contentRevealJob: Job? = null
     private var mapTapJob: Job? = null
     private var deviceLocationJob: Job? = null
+    private var countryWarmJob: Job? = null
+    private var countryWarmCode: String? = null
+    private val countryWarmBudget = AtomicInteger(0)
     private var pendingDetailLocation: Location? = null
     private var bufferedForecast: WeatherForecast? = null
     private var bufferedError: UiText? = null
@@ -253,6 +260,8 @@ class WeatherViewModel @Inject constructor(
     private companion object {
         const val TOP_PICKS_LOAD_DEFER_MS = 400
         const val HISTORY_LIMIT = 10
+        const val GPS_COUNTRY_WARM_BUDGET = 8
+        const val SELECTION_COUNTRY_WARM_BUDGET = 2
     }
 
     /**
@@ -332,6 +341,10 @@ class WeatherViewModel @Inject constructor(
             onError = { err -> applyRefreshError(location, err.asUiText()) }
         )
         repository.prefetchNearbyCities(location)
+        val code = _uiState.value.deviceLocation?.countryCode
+            ?: location.countryCode
+            ?: countryCityCatalog.isoForCountryName(location.country)
+        code?.let { addCountryWarmBudget(it, SELECTION_COUNTRY_WARM_BUDGET) }
     }
 
     /** Routes a refresh failure onto the forecast lane or the hop buffer. */
@@ -518,12 +531,61 @@ class WeatherViewModel @Inject constructor(
                             }
                         )
                     }
+                    location.countryCode?.let { addCountryWarmBudget(it, GPS_COUNTRY_WARM_BUDGET) }
                 },
                 onError = {
                     // Keep the static default framing; chip stays hidden without a resolved city.
                 }
             )
         }
+    }
+
+    /**
+     * Adds [extra] country-warm slots for [countryCode] and starts the sequential warmer if idle.
+     * Changing country resets the budget so a new GPS country does not mix queues.
+     */
+    private fun addCountryWarmBudget(countryCode: String, extra: Int) {
+        val code = countryCode.trim().uppercase()
+        if (code.isEmpty() || extra <= 0) return
+        if (countryWarmCode != code) {
+            countryWarmCode = code
+            countryWarmBudget.set(0)
+            countryWarmJob?.cancel()
+            countryWarmJob = null
+        }
+        countryWarmBudget.addAndGet(extra)
+        if (countryWarmJob?.isActive == true) return
+        countryWarmJob = viewModelScope.launch { drainCountryWarm(code) }
+    }
+
+    /**
+     * Drains [countryWarmBudget] via [WeatherRepository.prefetchCountryCities] until empty
+     * or the catalog has nothing left to warm this session.
+     */
+    private suspend fun drainCountryWarm(code: String) {
+        while (drainCountryWarmSlice(code)) {
+            // Leftover budget from a concurrent selection nudge.
+        }
+    }
+
+    /**
+     * Runs one prefetch slice. Returns true when leftover budget should be drained immediately.
+     */
+    private suspend fun drainCountryWarmSlice(code: String): Boolean {
+        val limit = countryWarmBudget.getAndSet(0)
+        if (limit <= 0) return false
+        val result = try {
+            repository.prefetchCountryCities(code, limit)
+        } catch (e: CancellationException) {
+            countryWarmBudget.addAndGet(limit)
+            throw e
+        }
+        val catalogDone = result.remaining <= 0
+        val failedPass = result.warmed == 0
+        if (failedPass && !catalogDone) {
+            countryWarmBudget.addAndGet(limit)
+        }
+        return !catalogDone && !failedPass
     }
 
     /**

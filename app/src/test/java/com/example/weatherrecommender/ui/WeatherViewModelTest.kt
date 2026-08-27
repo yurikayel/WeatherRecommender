@@ -5,6 +5,7 @@ import com.example.weatherrecommender.data.preferences.FirstRunThemeSettler
 import com.example.weatherrecommender.domain.location.DeviceLocationProvider
 import com.example.weatherrecommender.domain.location.GeoCoordinates
 import com.example.weatherrecommender.domain.model.AppError
+import com.example.weatherrecommender.domain.model.CountryPrefetchResult
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.RankedActivity
@@ -13,6 +14,7 @@ import com.example.weatherrecommender.domain.model.RecommendedActivity
 import com.example.weatherrecommender.domain.model.Result
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
+import com.example.weatherrecommender.domain.usecase.CountryCityCatalog
 import com.example.weatherrecommender.domain.usecase.GetRankedActivitiesUseCase
 import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
 import com.example.weatherrecommender.domain.util.ConnectivityObserver
@@ -78,6 +80,7 @@ class WeatherViewModelTest {
         every { repository.observeRecentLocations(any()) } returns flowOf(emptyList())
         coEvery { repository.markLocationViewed(any()) } returns Unit
         coEvery { repository.prefetchNearbyCities(any()) } returns Unit
+        coEvery { repository.prefetchCountryCities(any(), any()) } returns CountryPrefetchResult(0, 0)
         coEvery { repository.hasFreshForecast(any()) } returns false
         coEvery { getTopPicksUseCase(any(), any()) } returns emptyList()
         every { deviceLocationProvider.hasLocationPermission() } returns false
@@ -103,7 +106,8 @@ class WeatherViewModelTest {
         getTopPicksUseCase,
         connectivityObserver,
         deviceLocationProvider,
-        firstRunThemeSettler
+        firstRunThemeSettler,
+        CountryCityCatalog(emptyList())
     )
 
     @Test
@@ -529,6 +533,111 @@ class WeatherViewModelTest {
         assertEquals(deviceCity.longitude, state.mapCamera.longitude, 0.0)
         assertEquals(MapCameraPosition.HOME_DEFAULT_ZOOM, state.mapCamera.zoom, 0.0)
         io.mockk.coVerify(exactly = 0) { repository.refreshForecast(any()) }
+        io.mockk.coVerify(exactly = 0) { repository.prefetchCountryCities(any(), any()) }
+    }
+
+    @Test
+    fun `granted location with country code starts country warm with budget 8`() = runTest {
+        val deviceCity = Location(
+            id = -1_000_001,
+            name = "Lisbon",
+            latitude = 38.7,
+            longitude = -9.1,
+            country = "Portugal",
+            admin1 = "Lisbon",
+            countryCode = "pt"
+        )
+        every { deviceLocationProvider.hasLocationPermission() } returns true
+        coEvery { deviceLocationProvider.getLastKnownLocation() } returns GeoCoordinates(38.7, -9.1)
+        coEvery { repository.reverseGeocode(38.7, -9.1) } returns Result.Success(deviceCity)
+        coEvery { repository.prefetchCountryCities("PT", 8) } returns CountryPrefetchResult(8, 12)
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationPermissionResult(granted = true)
+        advanceUntilIdle()
+
+        io.mockk.coVerify(exactly = 1) { repository.prefetchCountryCities("PT", 8) }
+        assertEquals(deviceCity, viewModel.uiState.value.deviceLocation)
+        assertNull(viewModel.uiState.value.selectedLocation)
+    }
+
+    @Test
+    fun `selecting a city adds two more country warm slots`() = runTest {
+        val deviceCity = Location(
+            id = -1_000_001,
+            name = "Lisbon",
+            latitude = 38.7,
+            longitude = -9.1,
+            country = "Portugal",
+            admin1 = "Lisbon",
+            countryCode = "PT"
+        )
+        every { deviceLocationProvider.hasLocationPermission() } returns true
+        coEvery { deviceLocationProvider.getLastKnownLocation() } returns GeoCoordinates(38.7, -9.1)
+        coEvery { repository.reverseGeocode(38.7, -9.1) } returns Result.Success(deviceCity)
+        coEvery { repository.prefetchCountryCities("PT", 8) } returns CountryPrefetchResult(8, 12)
+        coEvery { repository.prefetchCountryCities("PT", 2) } returns CountryPrefetchResult(2, 10)
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(any(), 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationPermissionResult(granted = true)
+        advanceUntilIdle()
+        viewModel.onLocationSelected(location)
+        advanceUntilIdle()
+
+        io.mockk.coVerify(exactly = 1) { repository.prefetchCountryCities("PT", 8) }
+        io.mockk.coVerify(exactly = 1) { repository.prefetchCountryCities("PT", 2) }
+    }
+
+    @Test
+    fun `without GPS selecting a city warms that country from name or ISO`() = runTest {
+        val lisbon = location.copy(name = "Lisbon", country = "Portugal", countryCode = null)
+        every { repository.getForecastFlow(lisbon) } returns flowOf(forecast.copy(location = lisbon))
+        coEvery { repository.refreshForecast(lisbon) } returns Result.Success(Unit)
+        coEvery { repository.prefetchCountryCities("PT", 2) } returns CountryPrefetchResult(2, 10)
+        every { getRankedActivitiesUseCase.invoke(any(), 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationSelected(lisbon)
+        advanceUntilIdle()
+
+        io.mockk.coVerify(exactly = 1) { repository.prefetchCountryCities("PT", 2) }
+    }
+
+    @Test
+    fun `country warm restores budget when a pass warms nothing but catalog remains`() = runTest {
+        val deviceCity = Location(
+            id = -1_000_001,
+            name = "Lisbon",
+            latitude = 38.7,
+            longitude = -9.1,
+            country = "Portugal",
+            admin1 = "Lisbon",
+            countryCode = "PT"
+        )
+        every { deviceLocationProvider.hasLocationPermission() } returns true
+        coEvery { deviceLocationProvider.getLastKnownLocation() } returns GeoCoordinates(38.7, -9.1)
+        coEvery { repository.reverseGeocode(38.7, -9.1) } returns Result.Success(deviceCity)
+        coEvery { repository.prefetchCountryCities("PT", 8) } returns CountryPrefetchResult(0, 5)
+        coEvery { repository.prefetchCountryCities("PT", 10) } returns CountryPrefetchResult(2, 3)
+        every { repository.getForecastFlow(location) } returns flowOf(forecast)
+        coEvery { repository.refreshForecast(location) } returns Result.Success(Unit)
+        every { getRankedActivitiesUseCase.invoke(any(), 0) } returns day0Activities
+
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        viewModel.onLocationPermissionResult(granted = true)
+        advanceUntilIdle()
+        viewModel.onLocationSelected(location)
+        advanceUntilIdle()
+
+        io.mockk.coVerify(exactly = 1) { repository.prefetchCountryCities("PT", 8) }
+        io.mockk.coVerify(exactly = 1) { repository.prefetchCountryCities("PT", 10) }
     }
 
     @Test

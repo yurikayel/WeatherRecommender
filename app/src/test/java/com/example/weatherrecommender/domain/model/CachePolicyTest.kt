@@ -51,4 +51,64 @@ class CachePolicyTest {
             )
         )
     }
+
+    @Test
+    fun shouldFetch_neverConfirmed() {
+        assertTrue(CachePolicy.shouldFetchPlaceImage(null, metadataAt = 0L, now = 1_000L))
+        assertTrue(
+            CachePolicy.shouldFetchPlaceImage(
+                cachedUrl = "https://example.com/x.jpg",
+                metadataAt = 0L,
+                now = 1_000L
+            )
+        )
+    }
+
+    @Test
+    fun shouldFetch_skipsFreshHit() {
+        val now = CachePolicy.PLACE_METADATA_TTL_MS
+        assertFalse(
+            CachePolicy.shouldFetchPlaceImage(
+                cachedUrl = "https://example.com/london.jpg",
+                metadataAt = now - 1,
+                now = now
+            )
+        )
+    }
+
+    @Test
+    fun shouldFetch_retriesExpiredHit() {
+        val now = CachePolicy.PLACE_METADATA_TTL_MS + 10
+        assertTrue(
+            CachePolicy.shouldFetchPlaceImage(
+                cachedUrl = "https://example.com/london.jpg",
+                metadataAt = 1L,
+                now = now
+            )
+        )
+    }
+
+    @Test
+    fun shouldFetch_skipsRecentMiss() {
+        val now = CachePolicy.PLACE_METADATA_MISS_TTL_MS
+        assertFalse(
+            CachePolicy.shouldFetchPlaceImage(
+                cachedUrl = null,
+                metadataAt = now - 1,
+                now = now
+            )
+        )
+    }
+
+    @Test
+    fun shouldFetch_retriesExpiredMiss() {
+        val now = CachePolicy.PLACE_METADATA_MISS_TTL_MS + 10
+        assertTrue(
+            CachePolicy.shouldFetchPlaceImage(
+                cachedUrl = null,
+                metadataAt = 1L,
+                now = now
+            )
+        )
+    }
 }

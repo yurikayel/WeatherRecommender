@@ -23,7 +23,8 @@ fun LocationEntity.toDomain(): Location {
         population = this.population,
         featureCode = this.featureCode,
         hasSeaAccess = this.hasSeaAccess,
-        imageUrl = this.imageUrl
+        imageUrl = this.imageUrl,
+        countryCode = this.countryCode
     )
 }
 
@@ -54,7 +55,8 @@ fun Location.toEntity(
         hasSeaAccess = this.hasSeaAccess,
         lastViewedAt = lastViewedAt,
         imageUrl = this.imageUrl,
-        placeMetadataUpdatedAt = placeMetadataUpdatedAt
+        placeMetadataUpdatedAt = placeMetadataUpdatedAt,
+        countryCode = this.countryCode?.uppercase()
     )
 }
 

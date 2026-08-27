@@ -29,3 +29,6 @@ sdk_list.txt
 
 # Local-only generated reference docs (kept out of the repo; README is the source of truth).
 /docs/
+
+# Interview prep (local-only)
+cheatsheet.md

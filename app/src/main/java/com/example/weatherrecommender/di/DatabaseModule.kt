@@ -18,7 +18,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
-    /** Builds the singleton Room database with v1–v8 migrations and no destructive fallback. */
+    /** Builds the singleton Room database with v1–v9 migrations and no destructive fallback. */
     @Provides
     @Singleton
     fun provideWeatherDatabase(@ApplicationContext context: Context): WeatherDatabase {
@@ -34,7 +34,8 @@ object DatabaseModule {
                 WeatherDatabase.MIGRATION_4_5,
                 WeatherDatabase.MIGRATION_5_6,
                 WeatherDatabase.MIGRATION_6_7,
-                WeatherDatabase.MIGRATION_7_8
+                WeatherDatabase.MIGRATION_7_8,
+                WeatherDatabase.MIGRATION_8_9
             )
             .fallbackToDestructiveMigration(false)
             .build()
