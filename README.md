@@ -46,6 +46,7 @@ Key experience details:
 | Country-warm catalog | `CountryCityCatalog` + `CatalogModule` / `CountryCityCatalogLoader` (assets `country_cities.json`) |
 | Country-warm drain | `WeatherViewModel` `addCountryWarmBudget` / `drainCountryWarm` (GPS +8, selection +2, unused slots restored) |
 | Hub city seeds | `HubCities` (Featured ⊂ Major, one `placeKey` / id per city) |
+| Nominatim→GeoNames rekey | `WeatherDao.rekeyLocation` (keeps daily rows + place metadata) |
 | Open-Meteo in-flight cap | `HostConcurrencyLimiter` (max 3 across forecast / geocoding / marine) |
 | Room v9 | `LocationEntity.countryCode` + `MIGRATION_8_9` |
 | Map-first hop | `MapHopProfile` + `WeatherViewModel.onLocationSelected` |
@@ -54,7 +55,7 @@ Key experience details:
 | Overlay city hero | `WeatherDetail.kt` → `CityHeroOverlay` |
 | First-run theme | `FirstRunThemeSettler` + `SolarNight` |
 | Map light/dark tiles | `WeatherMap.kt` → `openFreeMapStyleUri` |
-| Timeouts vs offline | `WeatherRepositoryImpl.toAppError()` (`SocketTimeoutException` → `Timeout`) |
+| Timeouts vs offline | `WeatherRepositoryImpl.toAppError()` (`SocketTimeoutException` → `Timeout`; host/connect → `NoConnectivity`; other `IOException` → `Unknown`) |
 | IO dispatcher | `DispatcherModule` `@IoDispatcher` |
 | Score thresholds | `ScoringThresholds.kt` (domain) + README §g |
 | Detekt complexity | `detekt.yml` — LongMethod 30, CognitiveComplexMethod 15, NestedBlockDepth 4 (ignore `@Composable`/`@Test`) |
@@ -63,7 +64,7 @@ Key experience details:
 
 **Run manually**: `./gradlew installDebug` → search in header → detail (sheet locked at 60%) → confirm hero, tall day chips, and compact activity rows (scroll on a short emulator) → Wikipedia **W** opens the article → tap day chips → toggle dark mode (map tiles follow) → share. Grant location and confirm the chip; search La Habana and wait for the hero photo. Back to home: peek ~40% sheet / 60% map, drag to full screen and watch the map shrink.
 
-**Pull requests**: [PR #1](https://github.com/yurikayel/WeatherRecommender/pull/1) (original delivery) · [PR #2](https://github.com/yurikayel/WeatherRecommender/pull/2) `feat/review-feedback` · [PR #4](https://github.com/yurikayel/WeatherRecommender/pull/4) `feat/per-lane-state-and-scorer-di` · [PR #5](https://github.com/yurikayel/WeatherRecommender/pull/5) leftover sheet/id/theme/lane fixes · [PR #6](https://github.com/yurikayel/WeatherRecommender/pull/6) country-warm prefetch and Wikipedia city photos · [PR #7](https://github.com/yurikayel/WeatherRecommender/pull/7) Open-Meteo in-flight cap · [PR #8](https://github.com/yurikayel/WeatherRecommender/pull/8) one Room id per bundled hub city.
+**Pull requests**: [PR #1](https://github.com/yurikayel/WeatherRecommender/pull/1) (original delivery) · [PR #2](https://github.com/yurikayel/WeatherRecommender/pull/2) `feat/review-feedback` · [PR #4](https://github.com/yurikayel/WeatherRecommender/pull/4) `feat/per-lane-state-and-scorer-di` · [PR #5](https://github.com/yurikayel/WeatherRecommender/pull/5) leftover sheet/id/theme/lane fixes · [PR #6](https://github.com/yurikayel/WeatherRecommender/pull/6) country-warm prefetch and Wikipedia city photos · [PR #7](https://github.com/yurikayel/WeatherRecommender/pull/7) Open-Meteo in-flight cap · [PR #8](https://github.com/yurikayel/WeatherRecommender/pull/8) one Room id per bundled hub city · [PR #9](https://github.com/yurikayel/WeatherRecommender/pull/9) rekey Nominatim→GeoNames, IOException mapping, Top Picks job.
 
 **Review feedback mapping (3.8 → this PR)**
 
@@ -117,9 +118,9 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 
 **Testing Strategy**:
 - **Domain Layer**: Activity scorers and `GetRankedActivitiesUseCase` are pure Kotlin, unit-tested with JUnit.
-- **Data Layer**: `WeatherRepositoryImpl` tested with MockK for APIs and DAO (including weather TTL skip, Wikipedia 30-day reuse / 30-minute miss, country-warm skip/limit, `countryCode` merge, and ISO backfill on TTL skip); `LocationSyncer` (viewed + 16 unviewed cap), `HubCities` / `NearbyCities`, `CountryCityCatalog`, `WikipediaPlaceImageResolver`, `HostConcurrencyLimiter`, and rate-limit retry interceptor covered.
+- **Data Layer**: `WeatherRepositoryImpl` tested with MockK for APIs and DAO (including weather TTL skip, Wikipedia 30-day reuse / 30-minute miss, country-warm skip/limit, `countryCode` merge, ISO backfill on TTL skip, Nominatim→GeoNames `rekeyLocation`, and `UnknownHostException` vs generic `IOException`); `LocationSyncer` (viewed + 16 unviewed cap), `HubCities` / `NearbyCities`, `CountryCityCatalog`, `WikipediaPlaceImageResolver`, `HostConcurrencyLimiter`, and rate-limit retry interceptor covered.
 - **UI Layer**: `WeatherViewModel` tested with Turbine; Robolectric `WeatherIntegrationTest` exercises VM + real Room + mocked APIs; Compose UI has **substantial coverage of key flows** (instrumented tests: home, search, detail day-button selection, errors, dark theme, current-location chip; location permission pre-granted via `GrantPermissionRule`) — not claimed as exhaustive full-UI coverage.
-- **Integration**: `RoomDaoIntegrationTest` (instrumented) covers insert/retrieve, `lastViewedAt` preservation, eviction, and forecast flow emissions. `WeatherDatabaseMigrationTest` covers v8→v9 `countryCode`.
+- **Integration**: `RoomDaoIntegrationTest` (instrumented) covers insert/retrieve, `lastViewedAt` preservation, eviction, forecast flow emissions, and Nominatim→GeoNames `rekeyLocation`. `WeatherDatabaseMigrationTest` covers v8→v9 `countryCode`.
 - **Snapshots**: Paparazzi goldens committed and verified in CI with `-Ppaparazzi`.
 
 ### Bonus features (assignment stretch goals)
@@ -133,7 +134,7 @@ Gradle auto-downloads JDK toolchains when needed (`org.gradle.java.installations
 | Dark mode + theme toggle | Done | Material 3 dark surface tokens (`#1C1B1F` + tonal `surfaceContainer*` layers); sheet-header Light / Dark / **CYCLE** pill toggle; DataStore preference; **Cycle default** follows sunrise/sunset at GPS (clock 19:00–06:00 fallback); OpenFreeMap Liberty vs Dark tiles follow immediately |
 | Splash screen | Done | Android 12+ `core-splashscreen` + original sun/cloud mark (also launcher foreground)
 | Snapshot tests | Done | Paparazzi 2.0.0-alpha05, 9 golden PNGs (home/detail incl. location chip + history + share flyer), verified in CI (`verifyPaparazziDebug -Ppaparazzi`) |
-| Substantial UI test coverage | Done | 26 instrumented Compose tests for key flows (home, header search, top picks, day-button selection, Wikipedia article, back, banners, dark theme, current-location chip); 37 instrumented tests total with Room DAO + migration |
+| Substantial UI test coverage | Done | 26 instrumented Compose tests for key flows (home, header search, top picks, day-button selection, Wikipedia article, back, banners, dark theme, current-location chip); 38 instrumented tests total with Room DAO + migration |
 | Share weather flyer | Done | Detail share → branded 9:16 portrait PNG (`GraphicsLayer` + FileProvider); city-image background when cached; best-effort save to Downloads |
 | In-screen map | Done | MapLibre layout height tracks `requireOffset()` (home peek 40% / map 60%, expandable; detail locked 60% / map 40%); OpenFreeMap Liberty (light) / Dark (dark) tiles; no overlay AppBar; map-first hop; tap → Nominatim reverse; camera/pin in ViewModel |
 | Current-location chip | Done | Runtime permission → LocationManager last-known fix → Nominatim reverse; home header chip (opt-in tap); map centers on fix |
@@ -212,14 +213,14 @@ Honest scope note: a **strict 3–4 hour** take would likely stop at search → 
 
 **Concrete trade-offs**
 - **FeaturedCities synthetic IDs**: hub seeds use negative IDs (`HubCities`) to avoid colliding with positive GeoNames / Open-Meteo IDs. Featured cities that also appear as map hubs **reuse that hub id** so a top-pick tap and nearby prefetch share one Room row. They are never written as if they were API IDs; search results always use real positive IDs.
-- **History id dedupe**: Nominatim reverse ids differ from GeoNames search ids; reverse geocode is stabilized to a nearby Open-Meteo hit (or cached Room row) at write time, then history still collapses leftovers by ~0.05° proximity or name+country, preferring stable positive ids.
+- **History id dedupe**: Nominatim reverse ids differ from GeoNames search ids; reverse geocode is stabilized to a nearby Open-Meteo hit (or cached Room row) at write time. When a later search upgrades a Nominatim stub to a positive id, `rekeyLocation` copies daily forecasts and place metadata onto the new key instead of deleting them. History still collapses leftovers by ~0.05° proximity or name+country, preferring stable positive ids.
 - **LocationSyncer rate limiting**: an earlier all-parallel `refreshForecast` fan-out risked HTTP 429 when many cities were cached. Sync now refreshes **viewed cities plus at most 16 oldest unviewed prefetch rows**, in **chunks of 3** with a short delay between batches, so a 100-city country-warm cache cannot hammer Open-Meteo every 6 hours. A process-wide `HostConcurrencyLimiter` (max 3 in-flight to `*.open-meteo.com`) also serializes top picks, nearby, country-warm, and the worker so those lanes cannot stack on top of each other.
 - **Top-picks 45-minute TTL**: `TopPicksCache` avoids repeating a cold-start forecast burst on every home visit. Pull-to-refresh on home calls `getTopPicks(forceRefresh=true)` to bypass the TTL when the user asks for fresh data; offline pull shows a connectivity error and keeps the last feed.
 - **WorkManager Sync**: Background sync runs every 6 hours when any network is available — the same window as Open-Meteo’s typical global model update and `CachePolicy.WEATHER_TTL_MS`. Interactive `refreshForecast` skips the network inside that window (`force=true` still hits the API). Stricter constraints (unmetered + charging) were removed to improve refresh reliability on mobile.
 - **Nearby prefetch**: Open-Meteo Geocoding has no “cities around me” endpoint, so `HubCities` + haversine (`NearbyCities`) warms a handful of regional hubs after each selection (one `placeKey` per city). Prefetch rows keep `lastViewedAt = 0` and are evicted before real history. Country-scale warming (`CountryCityCatalog`) is a separate queue after GPS, not a replacement for this neighborhood hop.
 - **Share → Downloads**: MediaStore on API 29+ (no permission); pre-Q may request legacy write. A Downloads failure never blocks the share sheet.
 - **Crash reporting**: A `CrashReporter` abstraction logs locally; swap for Firebase Crashlytics when a Firebase project is configured.
-- **Rate limiting (HTTP)**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present). Concurrent Open-Meteo calls (forecast + geocoding + marine) are capped at **3 in-flight** by `HostConcurrencyLimiter`; Wikipedia and Nominatim are other hosts and are not gated. Timeouts (`SocketTimeoutException`, HTTP 408) map to `AppError.NetworkError.Timeout`; generic `IOException` maps to `NoConnectivity`; TLS failures are not treated as offline.
+- **Rate limiting (HTTP)**: GET requests retry on HTTP 429 with exponential backoff (respecting `Retry-After` when present). Concurrent Open-Meteo calls (forecast + geocoding + marine) are capped at **3 in-flight** by `HostConcurrencyLimiter`; Wikipedia and Nominatim are other hosts and are not gated. Timeouts (`SocketTimeoutException`, HTTP 408) map to `AppError.NetworkError.Timeout`; `UnknownHostException` / `ConnectException` / `NoRouteToHostException` map to `NoConnectivity`; other `IOException`s (limiter wait, broken streams) map to `NetworkError.Unknown`; TLS failures are not treated as offline.
 
 **Deliberately omitted**
 - Continuous GPS tracking / background location (home uses last-known fix + optional current-location chip when permission is granted).

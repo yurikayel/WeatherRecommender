@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -109,6 +110,43 @@ class RoomDaoIntegrationTest {
         val updated = weatherDao.getDailyForecastsFlow(3).first()
         assertEquals(2, updated.size)
         assertTrue(updated.any { it.maxTemp == 25.0 })
+    }
+
+    @Test
+    fun rekeyLocationMovesForecastsToNewId() = runTest {
+        val oldId = -1_000_042L
+        val newId = 2643743L
+        weatherDao.insertLocationWithForecast(
+            location = sampleLocation(id = oldId, lastUpdated = 100L, lastViewedAt = 50L).copy(
+                imageUrl = "https://example.com/london.jpg",
+                placeMetadataUpdatedAt = 40L,
+                countryCode = "GB"
+            ),
+            forecasts = listOf(
+                forecastEntity(locationId = oldId, date = "2026-07-16"),
+                forecastEntity(locationId = oldId, date = "2026-07-17")
+            )
+        )
+
+        weatherDao.rekeyLocation(
+            oldId = oldId,
+            newLocation = sampleLocation(id = newId, lastUpdated = 100L, lastViewedAt = 999L).copy(
+                imageUrl = "https://example.com/london.jpg",
+                placeMetadataUpdatedAt = 40L,
+                countryCode = "GB"
+            )
+        )
+
+        assertNull(weatherDao.getLocation(oldId))
+        assertTrue(weatherDao.getDailyForecasts(oldId).isEmpty())
+        val moved = weatherDao.getLocation(newId)
+        assertEquals("London", moved?.name)
+        assertEquals(999L, moved?.lastViewedAt)
+        assertEquals(100L, moved?.lastUpdated)
+        assertEquals("https://example.com/london.jpg", moved?.imageUrl)
+        val days = weatherDao.getDailyForecasts(newId)
+        assertEquals(2, days.size)
+        assertTrue(days.all { it.locationId == newId })
     }
 
     private fun sampleLocation(

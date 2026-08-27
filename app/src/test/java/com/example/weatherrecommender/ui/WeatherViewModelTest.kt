@@ -12,6 +12,7 @@ import com.example.weatherrecommender.domain.model.RankedActivity
 import com.example.weatherrecommender.domain.model.ReasonKey
 import com.example.weatherrecommender.domain.model.RecommendedActivity
 import com.example.weatherrecommender.domain.model.Result
+import com.example.weatherrecommender.domain.model.TopPick
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
 import com.example.weatherrecommender.domain.usecase.CountryCityCatalog
@@ -786,5 +787,40 @@ class WeatherViewModelTest {
 
         assertTrue(viewModel.uiState.value.topPicksFetch is FetchStatus.Failed)
         assertNull(viewModel.uiState.value.searchError)
+    }
+
+    @Test
+    fun `loadTopPicks maps use-case failure to Failed`() = runTest {
+        coEvery { getTopPicksUseCase(any(), any()) } throws RuntimeException("boom")
+        viewModel = createViewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.topPicksFetch is FetchStatus.Failed)
+    }
+
+    @Test
+    fun `overlapping loadTopPicks cancels the in-flight load`() = runTest {
+        val slow = TopPick(location, day0Activities.first(), weatherCode = 0, maxTemp = 11.0)
+        val fast = TopPick(
+            location.copy(name = "Paris"),
+            day0Activities.first(),
+            weatherCode = 0,
+            maxTemp = 22.0
+        )
+        coEvery { getTopPicksUseCase(any(), false) } coAnswers {
+            delay(10_000)
+            listOf(slow)
+        }
+        coEvery { getTopPicksUseCase(any(), true) } returns listOf(fast)
+
+        viewModel = createViewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+        viewModel.loadTopPicks(forceRefresh = true)
+        advanceUntilIdle()
+
+        assertEquals(listOf(fast), viewModel.uiState.value.topPicks)
+        assertTrue(viewModel.uiState.value.topPicksFetch is FetchStatus.Idle)
     }
 }

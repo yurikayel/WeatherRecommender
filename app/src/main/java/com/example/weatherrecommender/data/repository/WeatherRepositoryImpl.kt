@@ -427,6 +427,7 @@ class WeatherRepositoryImpl @Inject constructor(
     /**
      * Upserts history for a city that already exists under another id.
      * Prefers stable positive (GeoNames / Open-Meteo) ids over synthetic Nominatim negatives.
+     * Rekeys the Room row so daily forecasts, image URL, ISO, and weather TTL survive the swap.
      */
     private suspend fun mergeViewedLocation(
         incoming: Location,
@@ -435,9 +436,17 @@ class WeatherRepositoryImpl @Inject constructor(
     ) {
         val preferIncomingId = incoming.id > 0L && existing.id < 0L
         if (preferIncomingId) {
-            weatherDao.deleteLocationWithForecasts(existing.id)
-            weatherDao.insertLocation(
-                incoming.toEntity(lastUpdated = now, lastViewedAt = now)
+            val merged = incoming.copy(
+                imageUrl = incoming.imageUrl ?: existing.imageUrl,
+                countryCode = incoming.countryCode ?: existing.countryCode
+            )
+            weatherDao.rekeyLocation(
+                oldId = existing.id,
+                newLocation = merged.toEntity(
+                    lastUpdated = existing.lastUpdated,
+                    lastViewedAt = now,
+                    placeMetadataUpdatedAt = existing.placeMetadataUpdatedAt
+                )
             )
         } else {
             weatherDao.updateLastViewedAt(existing.id, now)
@@ -582,14 +591,22 @@ class WeatherRepositoryImpl @Inject constructor(
         )
     }
 
-    /** Maps transport failures onto [AppError], rethrowing cancellation so jobs stay cooperative. */
+    /** Maps transport failures onto [AppError], rethrowing cancellation so jobs stay cooperative.
+     *
+     * Host/connect failures are [AppError.NetworkError.NoConnectivity]; other [IOException]s
+     * (limiter interrupts, broken streams) are [AppError.NetworkError.Unknown] so the UI
+     * does not claim the device is offline.
+     */
     private fun Exception.toAppError(): AppError {
         // catch (Exception) would otherwise turn Job cancellation into a UI error.
         if (this is CancellationException) throw this
         return when (this) {
             is java.net.SocketTimeoutException -> AppError.NetworkError.Timeout
             is javax.net.ssl.SSLException -> AppError.NetworkError.Unknown(this)
-            is IOException -> AppError.NetworkError.NoConnectivity
+            is java.net.UnknownHostException,
+            is java.net.ConnectException,
+            is java.net.NoRouteToHostException -> AppError.NetworkError.NoConnectivity
+            is IOException -> AppError.NetworkError.Unknown(this)
             is HttpException -> {
                 when (code()) {
                     404 -> AppError.ApiError.NotFound

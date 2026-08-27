@@ -41,6 +41,7 @@ import org.junit.Test
 import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
+import java.net.UnknownHostException
 
 @Suppress("LargeClass")
 class WeatherRepositoryImplTest {
@@ -123,8 +124,38 @@ class WeatherRepositoryImplTest {
     }
 
     @Test
-    fun `searchCity maps IOException to NoConnectivity`() = runTest {
-        coEvery { geocodingApi.searchCity(any()) } throws IOException("offline")
+    fun `searchCity maps UnknownHostException to NoConnectivity`() = runTest {
+        coEvery { geocodingApi.searchCity(any()) } throws UnknownHostException("offline")
+
+        val result = repository.searchCity("Lon")
+
+        assertTrue(result is Result.Error)
+        assertEquals(AppError.NetworkError.NoConnectivity, (result as Result.Error).error)
+    }
+
+    @Test
+    fun `searchCity maps generic IOException to NetworkError Unknown`() = runTest {
+        coEvery { geocodingApi.searchCity(any()) } throws IOException("broken stream")
+
+        val result = repository.searchCity("Lon")
+
+        assertTrue(result is Result.Error)
+        assertTrue((result as Result.Error).error is AppError.NetworkError.Unknown)
+    }
+
+    @Test
+    fun `searchCity maps ConnectException to NoConnectivity`() = runTest {
+        coEvery { geocodingApi.searchCity(any()) } throws java.net.ConnectException("failed to connect")
+
+        val result = repository.searchCity("Lon")
+
+        assertTrue(result is Result.Error)
+        assertEquals(AppError.NetworkError.NoConnectivity, (result as Result.Error).error)
+    }
+
+    @Test
+    fun `searchCity maps NoRouteToHostException to NoConnectivity`() = runTest {
+        coEvery { geocodingApi.searchCity(any()) } throws java.net.NoRouteToHostException("no route")
 
         val result = repository.searchCity("Lon")
 
@@ -229,8 +260,8 @@ class WeatherRepositoryImplTest {
     }
 
     @Test
-    fun `reverseGeocode maps IOException to NoConnectivity`() = runTest {
-        coEvery { nominatimApi.reverseGeocode(any(), any()) } throws IOException("offline")
+    fun `reverseGeocode maps UnknownHostException to NoConnectivity`() = runTest {
+        coEvery { nominatimApi.reverseGeocode(any(), any()) } throws UnknownHostException("offline")
 
         val result = repository.reverseGeocode(1.0, 2.0)
 
@@ -631,8 +662,12 @@ class WeatherRepositoryImplTest {
     }
 
     @Test
-    fun `markLocationViewed replaces Nominatim stub when GeoNames id arrives`() = runTest {
-        val nominatimStub = location.copy(id = -1_000_042).toEntity(lastViewedAt = 10L)
+    fun `markLocationViewed rekeys Nominatim stub onto GeoNames id`() = runTest {
+        val nominatimStub = location.copy(id = -1_000_042).toEntity(
+            lastUpdated = 50L,
+            lastViewedAt = 10L,
+            placeMetadataUpdatedAt = 20L
+        ).copy(imageUrl = "https://example.com/london.jpg", countryCode = "GB")
         coEvery { weatherDao.getLocation(location.id) } returns null
         coEvery {
             weatherDao.findLocationsNear(location.latitude, location.longitude, 0.05)
@@ -640,12 +675,21 @@ class WeatherRepositoryImplTest {
 
         repository.markLocationViewed(location)
 
-        coVerify { weatherDao.deleteLocationWithForecasts(nominatimStub.id) }
         coVerify {
-            weatherDao.insertLocation(
-                match { it.id == location.id && it.lastViewedAt > 0L }
+            weatherDao.rekeyLocation(
+                nominatimStub.id,
+                match {
+                    it.id == location.id &&
+                        it.lastViewedAt > 0L &&
+                        it.lastUpdated == 50L &&
+                        it.placeMetadataUpdatedAt == 20L &&
+                        it.imageUrl == "https://example.com/london.jpg" &&
+                        it.countryCode == "GB"
+                }
             )
         }
+        coVerify(exactly = 0) { weatherDao.deleteLocationWithForecasts(any()) }
+        coVerify(exactly = 0) { weatherDao.insertLocation(any()) }
     }
 
     @Test
