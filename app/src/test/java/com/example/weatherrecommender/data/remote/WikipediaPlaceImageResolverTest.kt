@@ -114,6 +114,36 @@ class WikipediaPlaceImageResolverTest {
     }
 
     @Test
+    fun `resolve prefers thumbnail target over earlier original-only page`() = runTest {
+        coEvery { wikipediaApi.getPageImage(titles = "La Habana") } returns WikipediaResponse(
+            query = WikipediaQuery(
+                pages = linkedMapOf(
+                    "-1" to WikipediaPage(
+                        pageid = -1,
+                        title = "La Habana",
+                        missing = ""
+                    ),
+                    "2" to WikipediaPage(
+                        pageid = 2,
+                        title = "Havana (disambiguation)",
+                        original = WikipediaImage(source = "https://example.com/disambig.jpg")
+                    ),
+                    "49719" to WikipediaPage(
+                        pageid = 49719,
+                        title = "Havana",
+                        thumbnail = WikipediaImage(source = "https://example.com/havana.jpg")
+                    )
+                )
+            )
+        )
+
+        assertEquals(
+            "https://example.com/havana.jpg",
+            resolver.resolve("La Habana", "Cuba")
+        )
+    }
+
+    @Test
     fun `resolve returns null for blank city name`() = runTest {
         assertNull(resolver.resolve("  ", "Cuba"))
         coVerify(exactly = 0) { wikipediaApi.getPageImage(titles = any()) }

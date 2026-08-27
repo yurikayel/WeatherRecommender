@@ -59,6 +59,12 @@ class HostConcurrencyLimiterTest {
         assertEquals(1, server.requestCount)
     }
 
+    @Test
+    fun `Nominatim policy constants are one in-flight on OSM hosts`() {
+        assertEquals(1, HostConcurrencyLimiter.NOMINATIM_MAX_IN_FLIGHT)
+        assertEquals("openstreetmap.org", HostConcurrencyLimiter.NOMINATIM_HOST_SUFFIX)
+    }
+
     private fun clientFor(maxInFlight: Int, hostSuffix: String): OkHttpClient =
         OkHttpClient.Builder()
             .addInterceptor(HostConcurrencyLimiter(maxInFlight, hostSuffix))

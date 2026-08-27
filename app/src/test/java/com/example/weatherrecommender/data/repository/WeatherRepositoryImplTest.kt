@@ -3,6 +3,7 @@ package com.example.weatherrecommender.data.repository
 import com.example.weatherrecommender.data.image.PlaceImagePrefetcher
 import com.example.weatherrecommender.data.local.dao.WeatherDao
 import com.example.weatherrecommender.data.local.entity.DailyForecastEntity
+import com.example.weatherrecommender.data.local.entity.LocationEntity
 import com.example.weatherrecommender.data.mapper.toEntity
 import com.example.weatherrecommender.domain.model.CachePolicy
 import com.example.weatherrecommender.data.remote.ForecastApi
@@ -22,6 +23,7 @@ import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.CountryPrefetchResult
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.Result
+import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.usecase.CountryCityCatalog
 import com.example.weatherrecommender.domain.usecase.CountryCityEntry
 import io.mockk.coEvery
@@ -29,8 +31,11 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
@@ -246,6 +251,76 @@ class WeatherRepositoryImplTest {
         val forecast = repository.getForecastFlow(location).first()
 
         assertNull(forecast)
+    }
+
+    @Test
+    fun `getForecastFlow follows a rekey onto a new location id`() = runTest {
+        val oldId = -1_000_042L
+        val newId = 2643743L
+        val nominatim = location.copy(id = oldId)
+        val oldLoc = MutableStateFlow<LocationEntity?>(
+            nominatim.toEntity(lastUpdated = 50L, lastViewedAt = 1L)
+        )
+        val newLoc = MutableStateFlow<LocationEntity?>(null)
+        val oldDays = MutableStateFlow(
+            listOf(
+                DailyForecastEntity(
+                    locationId = oldId,
+                    date = "2026-07-16",
+                    maxTemp = 22.0,
+                    minTemp = 12.0,
+                    weatherCode = 0,
+                    precipitationSum = 0.0,
+                    maxWindSpeed = 10.0,
+                    snowfallSum = 0.0
+                )
+            )
+        )
+        val newDays = MutableStateFlow<List<DailyForecastEntity>>(emptyList())
+
+        coEvery { weatherDao.getLocation(any()) } answers {
+            when (invocation.args[0] as Long) {
+                oldId -> oldLoc.value
+                newId -> newLoc.value
+                else -> null
+            }
+        }
+        every { weatherDao.getLocationFlow(any()) } answers {
+            when (invocation.args[0] as Long) {
+                oldId -> oldLoc
+                newId -> newLoc
+                else -> MutableStateFlow(null)
+            }
+        }
+        every { weatherDao.getDailyForecastsFlow(any()) } answers {
+            when (invocation.args[0] as Long) {
+                oldId -> oldDays
+                newId -> newDays
+                else -> MutableStateFlow(emptyList())
+            }
+        }
+        coEvery { weatherDao.findLocationsNear(any(), any(), any()) } answers {
+            listOfNotNull(newLoc.value)
+        }
+
+        val emissions = mutableListOf<WeatherForecast?>()
+        val job = launch {
+            repository.getForecastFlow(nominatim).collect { emissions.add(it) }
+        }
+        runCurrent()
+
+        assertEquals(oldId, emissions.last()?.location?.id)
+
+        val geoEntity = location.copy(id = newId).toEntity(lastUpdated = 50L, lastViewedAt = 2L)
+        newLoc.value = geoEntity
+        newDays.value = oldDays.value.map { it.copy(locationId = newId) }
+        oldDays.value = emptyList()
+        oldLoc.value = null
+        runCurrent()
+
+        assertEquals(newId, emissions.last()?.location?.id)
+        assertEquals(1, emissions.last()?.dailyForecasts?.size)
+        job.cancel()
     }
 
     @Test
