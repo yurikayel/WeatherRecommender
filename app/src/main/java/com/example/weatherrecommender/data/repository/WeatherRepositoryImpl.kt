@@ -1,5 +1,6 @@
 package com.example.weatherrecommender.data.repository
 
+import com.example.weatherrecommender.data.image.PlaceImagePrefetcher
 import com.example.weatherrecommender.data.local.dao.WeatherDao
 import com.example.weatherrecommender.data.local.entity.DailyForecastEntity
 import com.example.weatherrecommender.data.local.entity.LocationEntity
@@ -9,19 +10,25 @@ import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
 import com.example.weatherrecommender.data.remote.NominatimApi
-import com.example.weatherrecommender.data.remote.WikipediaApi
+import com.example.weatherrecommender.data.remote.WikipediaPlaceImageResolver
 import com.example.weatherrecommender.data.remote.dto.NominatimResponse
+import com.example.weatherrecommender.data.remote.dto.DailyForecastDto
 import com.example.weatherrecommender.domain.model.AppError
 import com.example.weatherrecommender.domain.model.AppResult
 import com.example.weatherrecommender.domain.model.CachePolicy
+import com.example.weatherrecommender.domain.model.CountryPrefetchResult
 import com.example.weatherrecommender.domain.model.DailyForecast
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.Result
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
+import com.example.weatherrecommender.domain.usecase.CountryCityCatalog
+import com.example.weatherrecommender.domain.usecase.FeaturedCities
 import com.example.weatherrecommender.domain.usecase.MajorCities
 import com.example.weatherrecommender.domain.usecase.NearbyCities
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -42,6 +49,8 @@ import kotlin.math.abs
  *
  * The Marine API is queried alongside the forecast: its wave data enriches surf scoring and, since
  * it only returns values near open water, doubles as a "has sea access" detector.
+ * Wikipedia place images are resolved after weather persists so chips paint without waiting on
+ * Wikimedia; a follow-up [WeatherDao.updatePlaceImage] fills the hero via the Room flow.
  */
 @Suppress("TooManyFunctions")
 class WeatherRepositoryImpl @Inject constructor(
@@ -49,8 +58,11 @@ class WeatherRepositoryImpl @Inject constructor(
     private val forecastApi: ForecastApi,
     private val marineApi: MarineApi,
     private val nominatimApi: NominatimApi,
-    private val wikipediaApi: WikipediaApi,
-    private val weatherDao: WeatherDao
+    private val placeImageResolver: WikipediaPlaceImageResolver,
+    private val placeImagePrefetcher: PlaceImagePrefetcher,
+    private val weatherDao: WeatherDao,
+    private val featuredCities: FeaturedCities,
+    private val countryCityCatalog: CountryCityCatalog
 ) : WeatherRepository {
 
     /** Geocodes [query] via Open-Meteo; empty results become an empty list, not an error. */
@@ -67,7 +79,8 @@ class WeatherRepositoryImpl @Inject constructor(
                     admin1 = dto.admin1,
                     elevation = dto.elevation,
                     population = dto.population,
-                    featureCode = dto.featureCode
+                    featureCode = dto.featureCode,
+                    countryCode = dto.countryCode?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
                 )
             } ?: emptyList()
             Result.Success(locations)
@@ -93,8 +106,11 @@ class WeatherRepositoryImpl @Inject constructor(
      */
     private suspend fun stabilizeReverseGeocode(nominatim: Location): Location {
         val cached = resolveCanonicalLocation(nominatim)
-        if (cached.id != nominatim.id) return cached
-        return matchForwardGeocode(nominatim) ?: nominatim
+        if (cached.id != nominatim.id) {
+            return cached.copy(countryCode = cached.countryCode ?: nominatim.countryCode)
+        }
+        val matched = matchForwardGeocode(nominatim)
+        return matched?.copy(countryCode = matched.countryCode ?: nominatim.countryCode) ?: nominatim
     }
 
     /** Nearest Open-Meteo hit within [LocationHistoryDeduper.PROXIMITY_DEGREES], or null. */
@@ -160,57 +176,147 @@ class WeatherRepositoryImpl @Inject constructor(
         return isWeatherFresh(existing, existingDays, System.currentTimeMillis())
     }
 
-    /** Skips Open-Meteo when fresh unless [force]; otherwise fetches, persists, and evicts overflow. */
+    /**
+     * Skips Open-Meteo when weather is fresh unless [force]; always retries place images when
+     * [CachePolicy.shouldFetchPlaceImage] says so (so a grey hero is not stuck for 6h).
+     */
     override suspend fun refreshForecast(location: Location, force: Boolean): AppResult<Unit> {
         return try {
             val canonical = resolveCanonicalLocation(location)
-            val existing = weatherDao.getLocation(canonical.id)
+            var existing = weatherDao.getLocation(canonical.id)
             val existingDays = weatherDao.getDailyForecasts(canonical.id)
             val now = System.currentTimeMillis()
-            if (!force && isWeatherFresh(existing, existingDays, now)) {
-                return Result.Success(Unit)
+            if (force || !isWeatherFresh(existing, existingDays, now)) {
+                val forecast = fetchRemoteForecast(canonical, existing)
+                persistRefreshedForecast(forecast, existing, now)
+                evictStaleLocationsIfNeeded()
+                existing = weatherDao.getLocation(canonical.id)
+            } else {
+                backfillCountryCode(canonical.id, canonical.countryCode, existing?.countryCode)
             }
-
-            val forecast = fetchRemoteForecast(canonical, existing, now)
-            persistRefreshedForecast(forecast, existing, now)
-            evictStaleLocationsIfNeeded()
+            refreshPlaceImageIfNeeded(canonical, existing, System.currentTimeMillis())
             Result.Success(Unit)
         } catch (e: Exception) {
             Result.Error(e.toAppError())
         }
     }
 
-    /** Writes the refreshed location + days, keeping [LocationEntity.lastViewedAt] when present. */
+    /** Writes the refreshed location + days, keeping viewed/metadata stamps when present. */
     private suspend fun persistRefreshedForecast(
         forecast: WeatherForecast,
         existing: LocationEntity?,
         now: Long
     ) {
-        val reusedMetadata = existing
-            ?.takeIf { it.imageUrl == forecast.location.imageUrl && it.placeMetadataUpdatedAt != 0L }
-            ?.placeMetadataUpdatedAt
+        // Keep placeMetadataUpdatedAt from Room; Wikipedia confirmation is
+        // [refreshPlaceImageIfNeeded]. Do not stamp [now] here or a miss looks "fresh".
         weatherDao.insertLocationWithForecast(
-            location = forecast.location.toEntity(
+            location = forecast.location.copy(
+                countryCode = forecast.location.countryCode ?: existing?.countryCode,
+                imageUrl = forecast.location.imageUrl ?: existing?.imageUrl
+            ).toEntity(
+                lastUpdated = now,
                 lastViewedAt = existing?.lastViewedAt ?: 0L,
-                placeMetadataUpdatedAt = reusedMetadata ?: now
+                placeMetadataUpdatedAt = existing?.placeMetadataUpdatedAt ?: 0L
             ),
             forecasts = forecast.dailyForecasts.map { it.toEntity(forecast.location.id) }
         )
     }
 
+    /**
+     * Fetches Wikipedia when hit/miss TTL requires it, then patches Room so the hero flow updates.
+     * A miss still stamps [LocationEntity.placeMetadataUpdatedAt] for [CachePolicy.PLACE_METADATA_MISS_TTL_MS].
+     * On fetch failure, keeps any prior URL so a transient error does not wipe a good photo.
+     */
+    private suspend fun refreshPlaceImageIfNeeded(
+        location: Location,
+        existing: LocationEntity?,
+        now: Long
+    ) {
+        val cachedUrl = location.imageUrl ?: existing?.imageUrl
+        val metadataAt = existing?.placeMetadataUpdatedAt ?: 0L
+        if (!CachePolicy.shouldFetchPlaceImage(cachedUrl, metadataAt, now)) {
+            placeImagePrefetcher.prefetch(cachedUrl)
+            return
+        }
+        val resolved = placeImageResolver.resolve(location.name, location.country)
+        val finalUrl = resolved ?: cachedUrl
+        weatherDao.updatePlaceImage(
+            locationId = location.id,
+            imageUrl = finalUrl,
+            timestamp = now
+        )
+        placeImagePrefetcher.prefetch(finalUrl)
+    }
+
     /** Best-effort TTL refresh of nearby hubs, staggered to stay under Open-Meteo rate limits. */
     override suspend fun prefetchNearbyCities(origin: Location) {
-        val neighbors = NearbyCities.select(origin, MajorCities.all)
+        val hubs = (MajorCities.all + featuredCities.all)
+            .distinctBy { "${it.name.trim().lowercase()}|${it.country.orEmpty().trim().lowercase()}" }
+        val neighbors = NearbyCities.select(origin, hubs)
         neighbors.forEachIndexed { index, nearby ->
             if (index > 0) delay(PREFETCH_STAGGER_MS)
             try {
                 refreshForecast(nearby, force = false)
+                val row = weatherDao.getLocation(nearby.id)
+                    ?: weatherDao.findLocationsNear(
+                        nearby.latitude,
+                        nearby.longitude,
+                        LocationHistoryDeduper.PROXIMITY_DEGREES
+                    ).firstOrNull()
+                placeImagePrefetcher.prefetch(row?.imageUrl)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
                 // Best-effort warm of the map neighborhood.
             }
         }
+    }
+
+    /**
+     * Warms up to [limit] not-yet-cached catalog cities for [countryCode], capitals first.
+     * Staggers Open-Meteo calls so country-scale warming stays polite.
+     */
+    override suspend fun prefetchCountryCities(countryCode: String, limit: Int): CountryPrefetchResult {
+        val code = countryCode.trim().uppercase()
+        val pending = if (code.isEmpty() || limit <= 0) {
+            emptyList()
+        } else {
+            countryCityCatalog.citiesFor(code).filter { city -> !isCountryCityWarmed(city) }
+        }
+        if (pending.isEmpty()) return CountryPrefetchResult(0, 0)
+        var warmed = 0
+        pending.take(limit).forEachIndexed { index, city ->
+            if (index > 0) delay(COUNTRY_WARM_STAGGER_MS)
+            if (warmCountryCity(city)) warmed += 1
+        }
+        return CountryPrefetchResult(warmed, (pending.size - warmed).coerceAtLeast(0))
+    }
+
+    /** Best-effort refresh + Coil prefetch for one catalog city. */
+    private suspend fun warmCountryCity(city: Location): Boolean {
+        return try {
+            val ok = refreshForecast(city, force = false) is Result.Success
+            if (ok) {
+                val row = weatherDao.getLocation(city.id) ?: findDuplicateLocation(city)
+                placeImagePrefetcher.prefetch(row?.imageUrl)
+            }
+            ok
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * True when Room already has this catalog city (by seed id or proximity/name) with a
+     * still-fresh forecast. Image-only stubs are not warmed — weather is the refetchable layer.
+     */
+    private suspend fun isCountryCityWarmed(city: Location): Boolean {
+        val existing = weatherDao.getLocation(city.id) ?: findDuplicateLocation(city)
+        if (existing == null) return false
+        val days = weatherDao.getDailyForecasts(existing.id)
+        return isWeatherFresh(existing, days, System.currentTimeMillis())
     }
 
     /** True when a location row exists, has days, and lastUpdated is within the weather TTL. */
@@ -237,15 +343,30 @@ class WeatherRepositoryImpl @Inject constructor(
         }
         val remaining = weatherDao.getLocationCount() - MAX_CACHED_LOCATIONS
         if (remaining <= 0) return
-        weatherDao.getOldestLocationIds(remaining).forEach { locationId ->
+        weatherDao.getLeastRecentlyViewedIds(remaining).forEach { locationId ->
             weatherDao.deleteLocationWithForecasts(locationId)
         }
     }
 
-    /** Fetches forecast+marine without writing Room — used by Top Picks. */
+    /**
+     * Fetches forecast+marine+Wikipedia without writing Room — used by Top Picks.
+     * Weather and image resolve in parallel so postcard cards still get a photo.
+     */
     override suspend fun getForecastRemote(location: Location): AppResult<WeatherForecast> {
         return try {
-            Result.Success(fetchRemoteForecast(location, existing = null, now = System.currentTimeMillis()))
+            coroutineScope {
+                val weatherDeferred = async {
+                    fetchRemoteForecast(location, existing = null)
+                }
+                val imageDeferred = async {
+                    placeImageResolver.resolve(location.name, location.country)
+                }
+                val weather = weatherDeferred.await()
+                val imageUrl = imageDeferred.await()
+                Result.Success(
+                    weather.copy(location = weather.location.copy(imageUrl = imageUrl))
+                )
+            }
         } catch (e: Exception) {
             Result.Error(e.toAppError())
         }
@@ -268,6 +389,7 @@ class WeatherRepositoryImpl @Inject constructor(
         val existingById = weatherDao.getLocation(location.id)
         if (existingById != null) {
             weatherDao.updateLastViewedAt(location.id, now)
+            backfillCountryCode(location.id, location.countryCode, existingById.countryCode)
             return
         }
 
@@ -323,30 +445,58 @@ class WeatherRepositoryImpl @Inject constructor(
             )
         } else {
             weatherDao.updateLastViewedAt(existing.id, now)
+            backfillCountryCode(existing.id, incoming.countryCode, existing.countryCode)
         }
     }
 
     /**
-     * Fetches the forecast (and best-effort marine data) for a location and assembles the domain
-     * model, resolving sea access from wave data. Does not persist anything.
+     * Stores [incoming] ISO on [locationId] when Room still has none.
+     * Nearby/Featured seeds omit countryCode; a later search or GPS hit should not wait for a 6h persist.
+     */
+    private suspend fun backfillCountryCode(
+        locationId: Long,
+        incoming: String?,
+        existing: String?
+    ) {
+        if (!existing.isNullOrBlank()) return
+        val code = incoming?.trim()?.uppercase()?.takeIf { it.isNotEmpty() } ?: return
+        weatherDao.updateCountryCode(locationId, code)
+    }
+
+    /**
+     * Fetches forecast and marine in parallel and assembles the domain model.
+     * Keeps any existing [Location.imageUrl]; Wikipedia is applied later via
+     * [refreshPlaceImageIfNeeded] so weather paint is not blocked.
      */
     private suspend fun fetchRemoteForecast(
         location: Location,
-        existing: LocationEntity?,
-        now: Long
-    ): WeatherForecast {
-        val forecastResponse = forecastApi.getForecast(
-            latitude = location.latitude,
-            longitude = location.longitude
-        )
-        val daily = forecastResponse.daily
-
-        val waveByDate = fetchWaveHeightsByDate(location)
+        existing: LocationEntity?
+    ): WeatherForecast = coroutineScope {
+        val forecastDeferred = async {
+            forecastApi.getForecast(
+                latitude = location.latitude,
+                longitude = location.longitude
+            )
+        }
+        val waveDeferred = async { fetchWaveHeightsByDate(location) }
+        val forecastResponse = forecastDeferred.await()
+        val waveByDate = waveDeferred.await()
         val hasSeaAccess = waveByDate?.values?.any { it != null } ?: location.hasSeaAccess
+        WeatherForecast(
+            location = location.copy(
+                hasSeaAccess = hasSeaAccess,
+                imageUrl = location.imageUrl ?: existing?.imageUrl
+            ),
+            dailyForecasts = mapDailyForecasts(forecastResponse.daily, waveByDate)
+        )
+    }
 
-        val imageUrl = resolveImageUrl(location, existing, now)
-
-        val dailyForecasts = daily.time.indices.map { i ->
+    /** Maps Open-Meteo daily arrays (plus optional marine waves) into domain days. */
+    private fun mapDailyForecasts(
+        daily: DailyForecastDto,
+        waveByDate: Map<String, Double?>?
+    ): List<DailyForecast> {
+        return daily.time.indices.map { i ->
             val date = daily.time.getOrNull(i) ?: ""
             DailyForecast(
                 date = date,
@@ -358,42 +508,6 @@ class WeatherRepositoryImpl @Inject constructor(
                 maxWindSpeed = daily.windSpeed10mMax.getOrNull(i) ?: 0.0,
                 waveHeightMax = waveByDate?.get(date)
             )
-        }
-
-        return WeatherForecast(
-            location = location.copy(hasSeaAccess = hasSeaAccess, imageUrl = imageUrl),
-            dailyForecasts = dailyForecasts
-        )
-    }
-
-    /**
-     * City pictures and names change rarely. Reuse a stored Wikipedia URL for
-     * [CachePolicy.PLACE_METADATA_TTL_MS]. A missing timestamp (`0`) is stale.
-     */
-    private suspend fun resolveImageUrl(
-        location: Location,
-        existing: LocationEntity?,
-        now: Long
-    ): String? {
-        val cachedUrl = location.imageUrl ?: existing?.imageUrl
-        val metadataAt = existing?.placeMetadataUpdatedAt ?: 0L
-        if (CachePolicy.isPlaceMetadataFresh(cachedUrl, metadataAt, now)) return cachedUrl
-        return fetchWikipediaImageUrl(location.name) ?: cachedUrl
-    }
-
-    /** Wikipedia thumbnail URL, or null if the page has no image or the call fails. */
-    private suspend fun fetchWikipediaImageUrl(cityName: String): String? {
-        return try {
-            val response = wikipediaApi.getPageImage(titles = cityName)
-            val pages = response.query?.pages
-            // Prefer the optimized thumbnail size; fallback to original if absent.
-            pages?.values?.firstOrNull()?.let { page ->
-                page.thumbnail?.source ?: page.original?.source
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            null // Best-effort fetching
         }
     }
 
@@ -432,9 +546,10 @@ class WeatherRepositoryImpl @Inject constructor(
     )
 
     private companion object {
-        const val MAX_CACHED_LOCATIONS = 36
+        const val MAX_CACHED_LOCATIONS = 100
         const val DEDUPE_FETCH_MULTIPLIER = 3
         const val PREFETCH_STAGGER_MS = 150L
+        const val COUNTRY_WARM_STAGGER_MS = 2_000L
     }
 
     /**
@@ -466,7 +581,8 @@ class WeatherRepositoryImpl @Inject constructor(
             latitude = lat,
             longitude = lng,
             country = address?.country,
-            admin1 = address?.state
+            admin1 = address?.state,
+            countryCode = address?.countryCode?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
         )
     }
 

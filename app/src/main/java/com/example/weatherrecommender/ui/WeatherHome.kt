@@ -56,8 +56,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import coil.compose.AsyncImage
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -302,6 +300,7 @@ private fun HomeFeedTabs(
 @Composable
 private fun PlaceImageCard(
     imageUrl: String?,
+    cityName: String?,
     onClick: () -> Unit,
     pressLabel: String,
     contentDescription: String? = null,
@@ -338,9 +337,7 @@ private fun PlaceImageCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            if (hasImage) {
-                PlaceCardBackdrop(imageUrl = imageUrl)
-            }
+            PlaceCardBackdrop(imageUrl = imageUrl, cityName = cityName)
             val contentColor = if (hasImage) {
                 Color.White
             } else {
@@ -353,28 +350,26 @@ private fun PlaceImageCard(
 
 /** Crops [imageUrl] and darkens it so overlay text stays readable. */
 @Composable
-private fun PlaceCardBackdrop(imageUrl: String?) {
-    AsyncImage(
-        model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
-            .data(imageUrl)
-            .crossfade(true)
-            .build(),
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
+private fun PlaceCardBackdrop(imageUrl: String?, cityName: String?) {
+    PlacePhotoBackdrop(
+        imageUrl = imageUrl,
+        cityInitial = cityName,
         modifier = Modifier.fillMaxSize()
     )
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Black.copy(alpha = 0.2f),
-                        Color.Black.copy(alpha = 0.8f)
+    if (imageUrl != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.2f),
+                            Color.Black.copy(alpha = 0.8f)
+                        )
                     )
                 )
-            )
-    )
+        )
+    }
 }
 
 /** Shimmer, empty copy, or a column of [TopPickCard]s. */
@@ -430,6 +425,7 @@ private fun TopPicksSection(
 private fun TopPickCard(pick: TopPick, onClick: () -> Unit) {
     PlaceImageCard(
         imageUrl = pick.location.imageUrl,
+        cityName = pick.location.name,
         onClick = onClick,
         pressLabel = "pick_press_scale"
     ) { contentColor, hasImage ->
@@ -544,6 +540,7 @@ private fun HistoryCard(location: Location, onClick: () -> Unit) {
     val openAgainCd = stringResource(R.string.home_history_item_cd, location.displayName)
     PlaceImageCard(
         imageUrl = location.imageUrl,
+        cityName = location.name,
         onClick = onClick,
         pressLabel = "history_press_scale",
         contentDescription = openAgainCd

@@ -1,6 +1,7 @@
 package com.example.weatherrecommender.domain.repository
 
 import com.example.weatherrecommender.domain.model.AppResult
+import com.example.weatherrecommender.domain.model.CountryPrefetchResult
 import com.example.weatherrecommender.domain.model.Location
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import kotlinx.coroutines.flow.Flow
@@ -56,6 +57,12 @@ interface WeatherRepository {
      * Best-effort: failures are swallowed so navigation of the selected city is unaffected.
      */
     suspend fun prefetchNearbyCities(origin: Location)
+
+    /**
+     * Progressively warms catalog cities for [countryCode] (capitals then majors).
+     * Skips rows already in Room with fresh weather; refreshes at most [limit] cities this call.
+     */
+    suspend fun prefetchCountryCities(countryCode: String, limit: Int): CountryPrefetchResult
 
     /**
      * Fetches a forecast for a location directly from the network without touching the cache.

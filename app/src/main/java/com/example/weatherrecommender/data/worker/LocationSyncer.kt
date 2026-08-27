@@ -13,12 +13,15 @@ import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Refreshes forecasts for every location currently stored in Room.
+ * Refreshes forecasts for locations currently stored in Room.
  * Extracted from [SyncWorker] so sync behaviour can be unit tested without WorkManager.
  *
- * Refreshes run in small concurrent chunks (not a full parallel fan-out) with a short delay
- * between batches, matching the stagger approach used by home top-picks fetching, to reduce
- * Open-Meteo rate-limit pressure when many cities are cached.
+ * Viewed cities are always eligible (TTL skip happens inside [WeatherRepository.refreshForecast]).
+ * Never-opened country-warm rows are capped per run so a 100-city cache cannot fan out ~200
+ * Open-Meteo calls every 6 hours.
+ *
+ * Refreshes run in small concurrent chunks with a short delay between batches to reduce
+ * Open-Meteo rate-limit pressure.
  */
 class LocationSyncer @Inject constructor(
     private val repository: WeatherRepository,
@@ -26,14 +29,21 @@ class LocationSyncer @Inject constructor(
 ) {
 
     /**
-     * Refreshes every cached city in chunks of [CHUNK_SIZE], staggering batches.
-     * @return true only when every city's refresh succeeded.
+     * Refreshes viewed cities plus a bounded set of oldest unviewed prefetch rows,
+     * in chunks of [CHUNK_SIZE].
+     * @return true only when every selected city's refresh succeeded.
      */
     suspend fun syncAllLocations(): Boolean {
-        val locations = weatherDao.getAllLocations()
-        if (locations.isEmpty()) {
+        val cached = weatherDao.getAllLocations()
+        if (cached.isEmpty()) {
             return true
         }
+        val viewed = cached.filter { it.lastViewedAt > 0L }
+        val unviewed = cached
+            .filter { it.lastViewedAt == 0L }
+            .sortedBy { it.lastUpdated }
+            .take(MAX_UNVIEWED_SYNC)
+        val locations = viewed + unviewed
 
         val results = mutableListOf<Result<Unit, AppError>>()
         locations.chunked(CHUNK_SIZE).forEachIndexed { batchIndex, chunk ->
@@ -53,6 +63,7 @@ class LocationSyncer @Inject constructor(
 
     private companion object {
         const val CHUNK_SIZE = 3
-        const val BATCH_STAGGER_MS = 150
+        const val BATCH_STAGGER_MS = 400
+        const val MAX_UNVIEWED_SYNC = 16
     }
 }

@@ -3,6 +3,7 @@ package com.example.weatherrecommender.integration
 import android.app.Application
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.example.weatherrecommender.data.image.PlaceImagePrefetcher
 import com.example.weatherrecommender.data.local.WeatherDatabase
 import com.example.weatherrecommender.data.local.dao.WeatherDao
 import com.example.weatherrecommender.data.mapper.toEntity
@@ -10,7 +11,7 @@ import com.example.weatherrecommender.data.remote.ForecastApi
 import com.example.weatherrecommender.data.remote.GeocodingApi
 import com.example.weatherrecommender.data.remote.MarineApi
 import com.example.weatherrecommender.data.remote.NominatimApi
-import com.example.weatherrecommender.data.remote.WikipediaApi
+import com.example.weatherrecommender.data.remote.WikipediaPlaceImageResolver
 import com.example.weatherrecommender.data.remote.dto.DailyForecastDto
 import com.example.weatherrecommender.data.remote.dto.ForecastResponse
 import com.example.weatherrecommender.data.remote.dto.GeocodingLocationDto
@@ -25,6 +26,8 @@ import com.example.weatherrecommender.domain.model.Result
 import kotlinx.coroutines.flow.first
 import com.example.weatherrecommender.domain.model.WeatherForecast
 import com.example.weatherrecommender.domain.repository.WeatherRepository
+import com.example.weatherrecommender.domain.usecase.CountryCityCatalog
+import com.example.weatherrecommender.domain.usecase.FeaturedCities
 import com.example.weatherrecommender.domain.usecase.GetRankedActivitiesUseCase
 import com.example.weatherrecommender.domain.usecase.GetTopPicksUseCase
 import com.example.weatherrecommender.domain.usecase.scorer.IndoorSightseeingScorer
@@ -80,7 +83,8 @@ class WeatherIntegrationTest {
     private val forecastApi: ForecastApi = mockk()
     private val marineApi: MarineApi = mockk()
     private val nominatimApi: NominatimApi = mockk()
-    private val wikipediaApi: WikipediaApi = mockk()
+    private val placeImageResolver: WikipediaPlaceImageResolver = mockk()
+    private val placeImagePrefetcher: PlaceImagePrefetcher = mockk(relaxed = true)
     private val getTopPicksUseCase: GetTopPicksUseCase = mockk(relaxed = true)
     private val connectivityObserver: ConnectivityObserver = mockk()
     private val deviceLocationProvider: DeviceLocationProvider = mockk(relaxed = true)
@@ -116,10 +120,20 @@ class WeatherIntegrationTest {
             .build()
         weatherDao = database.weatherDao()
 
-        repository = WeatherRepositoryImpl(geocodingApi, forecastApi, marineApi, nominatimApi, wikipediaApi, weatherDao)
+        repository = WeatherRepositoryImpl(
+            geocodingApi,
+            forecastApi,
+            marineApi,
+            nominatimApi,
+            placeImageResolver,
+            placeImagePrefetcher,
+            weatherDao,
+            FeaturedCities(),
+            CountryCityCatalog(emptyList())
+        )
         every { connectivityObserver.observe() } returns flowOf(ConnectivityStatus.Available)
         coEvery { marineApi.getMarine(any(), any()) } returns MarineResponse(51.5, -0.1, null)
-        coEvery { wikipediaApi.getPageImage(any(), any(), any(), any(), any()) } returns com.example.weatherrecommender.data.remote.dto.WikipediaResponse(null)
+        coEvery { placeImageResolver.resolve(any(), any()) } returns null
         coEvery { forecastApi.getForecast(any(), any()) } returns sevenDayForecastResponse()
         coEvery { getTopPicksUseCase(any(), any()) } returns emptyList()
     }
@@ -136,7 +150,8 @@ class WeatherIntegrationTest {
         getTopPicksUseCase,
         connectivityObserver,
         deviceLocationProvider,
-        firstRunThemeSettler
+        firstRunThemeSettler,
+        CountryCityCatalog(emptyList())
     )
 
     @Test

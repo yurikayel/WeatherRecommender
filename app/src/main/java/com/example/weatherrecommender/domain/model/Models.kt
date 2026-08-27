@@ -8,6 +8,7 @@ package com.example.weatherrecommender.domain.model
  * @property latitude Geographic coordinate.
  * @property longitude Geographic coordinate.
  * @property country Country name where the location resides.
+ * @property countryCode ISO 3166-1 alpha-2 when known (Open-Meteo, Nominatim, or catalog).
  * @property admin1 Primary administrative division (e.g., state or region).
  * @property elevation Ground elevation in meters (used to gate mountain activities like skiing).
  * @property population Number of inhabitants, when known (used to weight "top pick" suggestions).
@@ -27,7 +28,9 @@ data class Location(
     val featureCode: String? = null,
     val hasSeaAccess: Boolean = false,
     /** URL to a background image for this city, usually fetched from Wikipedia. */
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    /** Uppercase ISO 3166-1 alpha-2 when known (Open-Meteo, Nominatim, or catalog); null otherwise. */
+    val countryCode: String? = null
 ) {
     /**
      * Formats the location properties into a presentable string (e.g., "Paris, Île-de-France, France").
@@ -137,4 +140,15 @@ data class RankedActivity(
     val score: Int, // e.g. 0-100
     val reasonKey: ReasonKey,
     val reasonArgs: List<Any> = emptyList()
+)
+
+/**
+ * One country-warm prefetch pass.
+ *
+ * @property warmed How many catalog cities this call successfully refreshed.
+ * @property remaining Catalog cities still unwarmed after the pass (failed + not yet attempted).
+ */
+data class CountryPrefetchResult(
+    val warmed: Int,
+    val remaining: Int
 )

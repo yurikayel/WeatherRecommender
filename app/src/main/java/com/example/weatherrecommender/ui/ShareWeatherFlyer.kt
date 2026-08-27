@@ -21,9 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -186,13 +184,9 @@ internal fun ShareWeatherFlyer(
             )
     ) {
         if (hasImage) {
-            AsyncImage(
-                model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
-                    .data(location.imageUrl)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
+            PlacePhotoBackdrop(
+                imageUrl = location.imageUrl,
+                cityInitial = location.name,
                 modifier = Modifier.fillMaxSize()
             )
             Box(

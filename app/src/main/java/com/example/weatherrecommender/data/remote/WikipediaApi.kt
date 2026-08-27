@@ -12,7 +12,10 @@ import retrofit2.http.Query
  */
 interface WikipediaApi {
     /**
-     * Fetches the lead thumbnail for Wikipedia page [titles] (typically the English city name).
+     * Fetches the lead thumbnail (and original fallback) for Wikipedia page [titles].
+     *
+     * [redirects] `1` follows soft redirects (e.g. `La Habana` → `Havana`) so pageimages
+     * returns the target article's photo instead of an empty redirect stub.
      * [pithumbsize] is the requested pixel width of the thumbnail.
      */
     @Headers("User-Agent: WeatherRecommender/1.0 (https://github.com/yurikayel/WeatherRecommender)")
@@ -22,8 +25,23 @@ interface WikipediaApi {
         @Query("action") action: String = "query",
         @Query("prop") prop: String = "pageimages",
         @Query("format") format: String = "json",
-        @Query("piprop") piprop: String = "thumbnail",
-        @Query("pithumbsize") pithumbsize: Int = 800
+        @Query("piprop") piprop: String = "thumbnail|original",
+        @Query("pithumbsize") pithumbsize: Int = 800,
+        @Query("redirects") redirects: Int = 1
+    ): WikipediaResponse
+
+    /**
+     * Full-text search for the best English Wikipedia title matching [srsearch]
+     * (e.g. `La Habana Cuba` → `Havana`).
+     */
+    @Headers("User-Agent: WeatherRecommender/1.0 (https://github.com/yurikayel/WeatherRecommender)")
+    @GET("w/api.php")
+    suspend fun searchPages(
+        @Query("srsearch") srsearch: String,
+        @Query("action") action: String = "query",
+        @Query("list") list: String = "search",
+        @Query("format") format: String = "json",
+        @Query("srlimit") srlimit: Int = 3
     ): WikipediaResponse
 
     companion object {

@@ -106,6 +106,21 @@ interface WeatherDao {
     suspend fun getOldestLocationIds(count: Int): List<Long>
 
     /**
+     * Viewed history IDs, least-recently opened first, capped at [count].
+     * Overflow eviction uses this so a 6h weather sync does not look “newer” than a city the user
+     * opened today.
+     */
+    @Query(
+        """
+        SELECT id FROM location_entity
+        WHERE lastViewedAt > 0
+        ORDER BY lastViewedAt ASC
+        LIMIT :count
+        """
+    )
+    suspend fun getLeastRecentlyViewedIds(count: Int): List<Long>
+
+    /**
      * Streams the most recently viewed locations for the home History section.
      * Rows with [LocationEntity.lastViewedAt] == 0 were never explicitly opened by the user.
      * Callers that dedupe should request a larger [limit] so collapse still fills the UI cap.
@@ -126,6 +141,26 @@ interface WeatherDao {
      */
     @Query("UPDATE location_entity SET lastViewedAt = :timestamp WHERE id = :locationId")
     suspend fun updateLastViewedAt(locationId: Long, timestamp: Long)
+
+    /**
+     * Patches ISO [countryCode] without rewriting weather. Used when a TTL skip would otherwise
+     * leave a nearby/catalog row with a null country after Open-Meteo later supplied the code.
+     */
+    @Query("UPDATE location_entity SET countryCode = :countryCode WHERE id = :locationId")
+    suspend fun updateCountryCode(locationId: Long, countryCode: String)
+
+    /**
+     * Patches the Wikipedia postcard URL (or a confirmed miss) without rewriting daily forecasts.
+     * Emits on [getLocationFlow] so the detail hero can fill in after weather already painted.
+     */
+    @Query(
+        """
+        UPDATE location_entity
+        SET imageUrl = :imageUrl, placeMetadataUpdatedAt = :timestamp
+        WHERE id = :locationId
+        """
+    )
+    suspend fun updatePlaceImage(locationId: Long, imageUrl: String?, timestamp: Long)
 
     /**
      * Finds cached locations near a coordinate (≈ [delta] degrees ≈ a few km).

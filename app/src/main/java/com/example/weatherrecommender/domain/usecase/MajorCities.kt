@@ -53,7 +53,10 @@ object MajorCities {
         city(-140, "Osaka", 34.6937, 135.5023, "Japan", "Osaka", 2_752_412, 5.0),
         city(-141, "Sydney", -33.8688, 151.2093, "Australia", "New South Wales", 5_231_147, 58.0),
         city(-142, "Melbourne", -37.8136, 144.9631, "Australia", "Victoria", 5_078_193, 31.0),
-        city(-143, "Cape Town", -33.9249, 18.4241, "South Africa", "Western Cape", 3_433_441, 25.0)
+        city(-143, "Cape Town", -33.9249, 18.4241, "South Africa", "Western Cape", 3_433_441, 25.0),
+        city(-144, "Havana", 23.1330, -82.3830, "Cuba", "Havana", 2_163_824, 41.0),
+        city(-145, "Mexico City", 19.4326, -99.1332, "Mexico", "Mexico City", 9_209_944, 2240.0),
+        city(-146, "Miami", 25.7617, -80.1918, "United States", "Florida", 442_241, 2.0)
     )
 
     /** Builds a regional-hub [Location] with a synthetic negative [id] for prefetch identity. */
